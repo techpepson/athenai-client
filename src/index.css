@@ -191,6 +191,22 @@
   }
 }
 
+@keyframes scan-vertical {
+  0% {
+    top: 0%;
+    opacity: 0.5;
+  }
+  50% {
+    top: 95%;
+    opacity: 1;
+  }
+  100% {
+    top: 0%;
+    opacity: 0.5;
+  }
+}
+
+
 @keyframes success-ring {
   0% {
     transform: scale(0.8);

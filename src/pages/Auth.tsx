@@ -12,6 +12,7 @@ const Auth = () => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [view, setView] = useState<'login' | 'role-selection'>('login');
   const { user, login } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -47,97 +48,185 @@ const Auth = () => {
 
   return (
     <div className="min-h-screen w-full flex bg-background">
-      {/* Left Panel - Login Form */}
+      {/* Left Panel */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-8 lg:p-12 animate-fade-in">
         <div className="w-full max-w-[400px] space-y-8">
-          {/* Header & Logo */}
-          <div className="text-center space-y-2">
-            <div className="flex justify-center mb-6">
-              <img src="/comasIcon.png" alt="FaceTrack" className="w-16 h-16 object-contain" />
-            </div>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">FaceTrack</h1>
-            <p className="text-muted-foreground">Sign into your account</p>
-          </div>
+          {view === 'login' ? (
+            <>
+              {/* Login Header */}
+              <div className="text-center space-y-2">
+                <div className="flex justify-center mb-6">
+                  <img src="/comasIcon.png" alt="FaceTrack" className="w-16 h-16 object-contain" />
+                </div>
+                <h1 className="text-3xl font-bold tracking-tight text-foreground">FaceTrack</h1>
+                <p className="text-muted-foreground">Sign into your account</p>
+              </div>
 
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="email" className="text-base font-medium">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="admin@facetrack.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                disabled={isLoading}
-                className="h-12 rounded-xl border-muted-foreground/20 focus-visible:ring-primary/30"
-              />
-            </div>
+              {/* Login Form */}
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="space-y-2">
+                  <Label htmlFor="email" className="text-base font-medium">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="admin@facetrack.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    disabled={isLoading}
+                    className="h-12 rounded-xl border-muted-foreground/20 focus-visible:ring-primary/30"
+                  />
+                </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="password" className="text-base font-medium">Password</Label>
-              <div className="relative">
-                <Input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="Enter your password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
+                <div className="space-y-2">
+                  <Label htmlFor="password" className="text-base font-medium">Password</Label>
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder="Enter your password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      disabled={isLoading}
+                      className="h-12 rounded-xl border-muted-foreground/20 focus-visible:ring-primary/30 pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                  <div className="flex justify-end">
+                    <a href="#" className="text-sm text-primary hover:underline font-medium">
+                      Forgot password?
+                    </a>
+                  </div>
+                </div>
+
+                <Button
+                  type="submit"
+                  size="lg"
+                  className="w-full h-12 rounded-xl text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-300"
                   disabled={isLoading}
-                  className="h-12 rounded-xl border-muted-foreground/20 focus-visible:ring-primary/30 pr-10"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Signing in...
+                    </>
+                  ) : (
+                    'Sign In'
+                  )}
+                </Button>
+
+                <div className="text-center text-sm text-muted-foreground pt-2">
+                  Don't have an account?{' '}
+                  <button 
+                    type="button" 
+                    onClick={() => setView('role-selection')}
+                    className="text-primary hover:underline font-semibold"
+                  >
+                    Create account
+                  </button>
+                </div>
+              </form>
+            </>
+          ) : (
+            /* Role Selection View */
+            <div className="space-y-8 animate-fade-in">
+              <div className="text-center space-y-2">
+                <h1 className="text-3xl font-bold tracking-tight text-foreground">Choose your role</h1>
+                <p className="text-muted-foreground">Select how you want to join FaceTrack</p>
               </div>
-              <div className="flex justify-end">
-                <a href="#" className="text-sm text-primary hover:underline font-medium">
-                  Forgot password?
-                </a>
+
+              <div className="space-y-4">
+                <Button
+                  variant="outline"
+                  className="w-full h-20 text-lg font-semibold border-2 hover:border-primary hover:bg-primary/5 transition-all duration-300 rounded-2xl flex items-center justify-between px-6 group"
+                  onClick={() => {}} // Placeholder for future logic
+                >
+                  <span>Student</span>
+                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-graduation-cap"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+                  </div>
+                </Button>
+
+                <Button
+                  variant="outline"
+                  className="w-full h-20 text-lg font-semibold border-2 hover:border-primary hover:bg-primary/5 transition-all duration-300 rounded-2xl flex items-center justify-between px-6 group"
+                  onClick={() => {}} // Placeholder for future logic
+                >
+                  <span>Lecturer / Staff</span>
+                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-briefcase"><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/></svg>
+                  </div>
+                </Button>
+              </div>
+
+              <div className="pt-4">
+                <Button
+                  variant="ghost" 
+                  onClick={() => setView('login')}
+                  className="w-full text-muted-foreground hover:text-foreground"
+                >
+                  Back to login
+                </Button>
               </div>
             </div>
-
-            <Button
-              type="submit"
-              size="lg"
-              className="w-full h-12 rounded-xl text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-300"
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Signing in...
-                </>
-              ) : (
-                'Sign In'
-              )}
-            </Button>
-
-            <div className="text-center text-sm text-muted-foreground pt-2">
-              Don't have an account?{' '}
-              <a href="#" className="text-primary hover:underline font-semibold">
-                Create account
-              </a>
-            </div>
-          </form>
+          )}
         </div>
       </div>
 
-      {/* Right Panel - Visual Branding */}
+      {/* Right Panel */}
       <div className="hidden lg:flex w-1/2 p-4 bg-background items-center justify-center">
-        <div className="w-full h-full rounded-[2rem] relative overflow-hidden shadow-2xl">
-          <img 
-            src="/loginImage.jpg" 
-            alt="Login Visual" 
-            className="w-full h-full object-cover"
-          />
-          <div className="absolute inset-0 bg-black/20" />
+        <div className={`w-full h-full rounded-[2rem] relative overflow-hidden shadow-2xl transition-all duration-500 ${view === 'role-selection' ? 'bg-slate-950' : 'bg-muted/30'}`}>
+          {view === 'login' ? (
+            /* Login Visual */
+            <>
+              <img 
+                src="/loginImage.jpg" 
+                alt="Login Visual" 
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-black/20" />
+            </>
+          ) : (
+            /* Kiosk Motion Design Visual */
+            <div className="w-full h-full relative flex items-center justify-center p-12">
+              {/* Force Dark Background Pattern for Contrast */}
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black opacity-80" />
+              <div className="absolute inset-0 opacity-20 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] mix-blend-overlay" />
+              
+              <div className="relative w-full max-w-lg h-[75%] rounded-3xl overflow-hidden border-4 border-primary/50 animate-pulse-glow shadow-2xl bg-gradient-to-br from-secondary/20 to-transparent backdrop-blur-sm z-10">
+                
+                {/* Scanning overlay */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-64 h-64 border-2 border-primary/70 rounded-2xl relative z-10">
+                    {/* Corner markers */}
+                    <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-primary rounded-tl-lg -translate-x-0.5 -translate-y-0.5" />
+                    <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-primary rounded-tr-lg translate-x-0.5 -translate-y-0.5" />
+                    <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-primary rounded-bl-lg -translate-x-0.5 translate-y-0.5" />
+                    <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-primary rounded-br-lg translate-x-0.5 translate-y-0.5" />
+                  </div>
+                </div>
+
+                {/* Slow Scanning line */}
+                <div className="absolute inset-x-0 h-1 bg-gradient-to-r from-transparent via-primary to-transparent animate-[scan-vertical_4s_ease-in-out_infinite] z-20 shadow-[0_0_15px_rgba(59,130,246,0.5)]" />
+
+                {/* Scanned Content (App Name) */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center z-0">
+                  <div className="w-24 h-24 mb-6 rounded-3xl bg-primary/20 flex items-center justify-center backdrop-blur-md border border-primary/30 shadow-glow">
+                   <img src="/comasIcon.png" alt="FaceTrack" className="w-14 h-14 object-contain contrast-125" />
+                  </div>
+                  <h1 className="text-5xl font-bold tracking-tight text-white drop-shadow-lg">FaceTrack</h1>
+                  <p className="text-base text-slate-300 mt-3 font-medium tracking-wide">Identity Verification System</p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
