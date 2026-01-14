@@ -6,13 +6,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { StudentForm } from '@/components/StudentForm';
 
 const Auth = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [view, setView] = useState<'login' | 'role-selection'>('login');
+  const [view, setView] = useState<'login' | 'role-selection' | 'student-registration'>('login');
   const { user, login } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -135,7 +136,7 @@ const Auth = () => {
               </form>
             </>
           ) : (
-            /* Role Selection View */
+            /* Role Selection View (Shared for selection and student registration) */
             <div className="space-y-8 animate-fade-in">
               <div className="text-center space-y-2">
                 <h1 className="text-3xl font-bold tracking-tight text-foreground">Choose your role</h1>
@@ -144,12 +145,18 @@ const Auth = () => {
 
               <div className="space-y-4">
                 <Button
-                  variant="outline"
-                  className="w-full h-20 text-lg font-semibold border-2 hover:border-primary hover:bg-primary/5 transition-all duration-300 rounded-2xl flex items-center justify-between px-6 group"
-                  onClick={() => {}} // Placeholder for future logic
+                  variant={view === 'student-registration' ? 'default' : 'outline'}
+                  className={`w-full h-20 text-lg font-semibold border-2 rounded-2xl flex items-center justify-between px-6 transition-all duration-300 ${
+                    view === 'student-registration' 
+                      ? 'border-primary bg-primary text-primary-foreground' 
+                      : 'hover:border-primary hover:bg-primary/5'
+                  }`}
+                  onClick={() => setView('student-registration')}
                 >
                   <span>Student</span>
-                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
+                     view === 'student-registration' ? 'bg-white/20 text-white' : 'bg-primary/10 group-hover:bg-primary group-hover:text-primary-foreground'
+                  }`}>
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-graduation-cap"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
                   </div>
                 </Button>
@@ -157,10 +164,13 @@ const Auth = () => {
                 <Button
                   variant="outline"
                   className="w-full h-20 text-lg font-semibold border-2 hover:border-primary hover:bg-primary/5 transition-all duration-300 rounded-2xl flex items-center justify-between px-6 group"
-                  onClick={() => {}} // Placeholder for future logic
+                  onClick={() => {}} // Placeholder
+                  disabled={view === 'student-registration'}
                 >
-                  <span>Lecturer / Staff</span>
-                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                  <span className={view === 'student-registration' ? 'opacity-50' : ''}>Lecturer / Staff</span>
+                  <div className={`w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center transition-colors ${
+                      view === 'student-registration' ? 'opacity-50' : 'group-hover:bg-primary group-hover:text-primary-foreground'
+                  }`}>
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-briefcase"><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/></svg>
                   </div>
                 </Button>
@@ -182,7 +192,7 @@ const Auth = () => {
 
       {/* Right Panel */}
       <div className="hidden lg:flex w-1/2 p-4 bg-background items-center justify-center">
-        <div className={`w-full h-full rounded-[2rem] relative overflow-hidden shadow-2xl transition-all duration-500 ${view === 'role-selection' ? 'bg-slate-950' : 'bg-muted/30'}`}>
+        <div className={`w-full h-full rounded-[2rem] relative overflow-hidden shadow-2xl transition-all duration-500 ${view === 'login' ? 'bg-muted/30' : 'bg-slate-950'}`}>
           {view === 'login' ? (
             /* Login Visual */
             <>
@@ -193,8 +203,13 @@ const Auth = () => {
               />
               <div className="absolute inset-0 bg-black/20" />
             </>
-          ) : (
-            /* Kiosk Motion Design Visual */
+          ) : view === 'student-registration' ? (
+             /* Student Registration Form */
+             <div className="bg-background w-full h-full p-8 flex flex-col relative z-20">
+               <StudentForm />
+             </div>
+          ): (
+            /* Default Kiosk Visual for Role Selection */
             <div className="w-full h-full relative flex items-center justify-center p-12">
               {/* Force Dark Background Pattern for Contrast */}
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black opacity-80" />
@@ -234,3 +249,4 @@ const Auth = () => {
 };
 
 export default Auth;
+
