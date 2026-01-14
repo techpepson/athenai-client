@@ -46,22 +46,23 @@ const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary mb-4">
-            <Fingerprint className="w-8 h-8 text-primary-foreground" />
+    <div className="min-h-screen w-full flex bg-background">
+      {/* Left Panel - Login Form */}
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-8 lg:p-12 animate-fade-in">
+        <div className="w-full max-w-[400px] space-y-8">
+          {/* Header & Logo */}
+          <div className="text-center space-y-2">
+            <div className="flex justify-center mb-6">
+              <img src="/comasIcon.png" alt="FaceTrack" className="w-16 h-16 object-contain" />
+            </div>
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">FaceTrack</h1>
+            <p className="text-muted-foreground">Sign into your account</p>
           </div>
-          <h1 className="text-2xl font-bold text-foreground">FaceTrack</h1>
-          <p className="text-muted-foreground mt-1">Sign in to your account</p>
-        </div>
 
-        {/* Login Form */}
-        <div className="bg-card border border-border rounded-xl p-6 shadow-sm">
-          <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email" className="text-base font-medium">Email</Label>
               <Input
                 id="email"
                 type="email"
@@ -70,11 +71,12 @@ const Auth = () => {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 disabled={isLoading}
+                className="h-12 rounded-xl border-muted-foreground/20 focus-visible:ring-primary/30"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password" className="text-base font-medium">Password</Label>
               <div className="relative">
                 <Input
                   id="password"
@@ -84,22 +86,27 @@ const Auth = () => {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   disabled={isLoading}
-                  className="pr-10"
+                  className="h-12 rounded-xl border-muted-foreground/20 focus-visible:ring-primary/30 pr-10"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
+              </div>
+              <div className="flex justify-end">
+                <a href="#" className="text-sm text-primary hover:underline font-medium">
+                  Forgot password?
+                </a>
               </div>
             </div>
 
             <Button
               type="submit"
               size="lg"
-              className="w-full"
+              className="w-full h-12 rounded-xl text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-300"
               disabled={isLoading}
             >
               {isLoading ? (
@@ -111,15 +118,26 @@ const Auth = () => {
                 'Sign In'
               )}
             </Button>
-          </form>
 
-          {/* Demo credentials */}
-          <div className="mt-6 p-4 bg-secondary/50 rounded-lg">
-            <p className="text-xs text-muted-foreground font-medium mb-2">Demo Credentials:</p>
-            <p className="text-xs text-muted-foreground">
-              <span className="text-foreground">Super Admin:</span> admin@facetrack.com / admin123
-            </p>
-          </div>
+            <div className="text-center text-sm text-muted-foreground pt-2">
+              Don't have an account?{' '}
+              <a href="#" className="text-primary hover:underline font-semibold">
+                Create account
+              </a>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      {/* Right Panel - Visual Branding */}
+      <div className="hidden lg:flex w-1/2 p-4 bg-background items-center justify-center">
+        <div className="w-full h-full rounded-[2rem] relative overflow-hidden shadow-2xl">
+          <img 
+            src="/loginImage.jpg" 
+            alt="Login Visual" 
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 bg-black/20" />
         </div>
       </div>
     </div>
