@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
-export type UserRole = 'super_admin' | 'staff' | 'class_rep';
+export type UserRole = 'super_admin' | 'admin_staff' | 'staff' | 'class_rep' | 'student';
 
 export interface User {
   id: string;
@@ -9,6 +9,11 @@ export interface User {
   role: UserRole;
   mustChangePassword?: boolean;
   isClassRep?: boolean;
+  studentId?: string;
+  staffId?: string;
+  program?: string;
+  semester?: string;
+  department?: string;
 }
 
 interface AuthContextType {
@@ -31,7 +36,86 @@ const MOCK_USERS: (User & { password: string })[] = [
     password: 'admin123',
     mustChangePassword: false,
   },
+  // Mock admin staff user (created by IT/super_admin)
+  {
+    id: 'admin_staff_1',
+    email: 'adminstaff@facetrack.com',
+    name: 'Admin Staff',
+    role: 'admin_staff',
+    password: 'adminstaff123',
+    mustChangePassword: true, // Force password change on first login
+  },
+  // Mock student user
+  {
+    id: 'student_1',
+    email: 'student@gmail.com',
+    name: 'Emmanuel Yawson',
+    role: 'student',
+    password: 'student123',
+    mustChangePassword: false,
+    studentId: '123456',
+    program: 'cs',
+    semester: '1',
+  },
+  // Mock staff user
+  {
+    id: 'staff_1',
+    email: 'staff@gmail.com',
+    name: 'Dr Amenyaw Menu',
+    role: 'staff',
+    password: 'staff123',
+    mustChangePassword: false,
+    staffId: 'STF001',
+    department: 'cs',
+  },
 ];
+
+// Mock data for student registration form
+export const MOCK_PROGRAMS = [
+  { label: 'Computer Science', value: 'cs' },
+  { label: 'Information Technology', value: 'it' },
+  { label: 'Software Engineering', value: 'se' },
+];
+
+export const MOCK_COURSES = [
+  { label: 'Data Structures', value: 'ds' },
+  { label: 'Algorithms', value: 'alg' },
+  { label: 'Database Systems', value: 'db' },
+  { label: 'Web Development', value: 'web' },
+  { label: 'Artificial Intelligence', value: 'ai' },
+  { label: 'Operating Systems', value: 'os' },
+  { label: 'Calculus I', value: 'calc1' },
+  { label: 'Linear Algebra', value: 'lin_alg' },
+];
+
+// Mock data for staff registration form
+export const MOCK_DEPARTMENTS = [
+  { label: 'Computer Science', value: 'cs' },
+  { label: 'Electrical Engineering', value: 'ee' },
+  { label: 'Mechanical Engineering', value: 'me' },
+  { label: 'Business Administration', value: 'ba' },
+  { label: 'Mathematics', value: 'math' },
+  { label: 'Physics', value: 'phy' },
+];
+
+// Mock student database for auto-fill
+export const MOCK_STUDENT_DB: Record<string, { name: string; email: string; program?: string; semester?: string }> = {
+  '123456': { 
+    name: 'Emmanuel Yawson', 
+    email: 'student@gmail.com',
+    program: 'cs',
+    semester: '1'
+  },
+};
+
+// Mock staff database for auto-fill
+export const MOCK_STAFF_DB: Record<string, { name: string; email: string; department?: string }> = {
+  'STF001': { 
+    name: 'Dr Amenyaw Menu', 
+    email: 'staff@gmail.com',
+    department: 'cs'
+  },
+};
 
 // Helper to get users from localStorage (for persistence of added staff)
 const getStoredUsers = (): (User & { password: string })[] => {
@@ -117,6 +201,82 @@ export const deleteClassRepUser = (userId: string): boolean => {
     return true;
   }
   return false;
+};
+
+// Student management functions
+export const getStudentByStudentId = (studentId: string): { name: string; email: string; program?: string; semester?: string } | null => {
+  return MOCK_STUDENT_DB[studentId] || null;
+};
+
+export const addStudentUser = (
+  studentId: string, 
+  email: string, 
+  name: string, 
+  program: string, 
+  semester: string,
+  password: string = 'student123'
+): { success: boolean; error?: string } => {
+  const users = getStoredUsers();
+  if (users.find(u => u.email === email || u.studentId === studentId)) {
+    return { success: false, error: 'Student with this email or ID already exists' };
+  }
+  
+  const newUser: User & { password: string } = {
+    id: crypto.randomUUID(),
+    email,
+    name,
+    role: 'student',
+    password,
+    mustChangePassword: false,
+    studentId,
+    program,
+    semester,
+  };
+  
+  users.push(newUser);
+  saveUsers(users);
+  
+  // Also add to mock student DB for auto-fill
+  MOCK_STUDENT_DB[studentId] = { name, email, program, semester };
+  
+  return { success: true };
+};
+
+// Staff management functions
+export const getStaffByStaffId = (staffId: string): { name: string; email: string; department?: string } | null => {
+  return MOCK_STAFF_DB[staffId] || null;
+};
+
+export const addStaffUserComplete = (
+  staffId: string, 
+  email: string, 
+  name: string, 
+  department: string,
+  password: string = 'staff123'
+): { success: boolean; error?: string } => {
+  const users = getStoredUsers();
+  if (users.find(u => u.email === email || u.staffId === staffId)) {
+    return { success: false, error: 'Staff with this email or ID already exists' };
+  }
+  
+  const newUser: User & { password: string } = {
+    id: crypto.randomUUID(),
+    email,
+    name,
+    role: 'staff',
+    password,
+    mustChangePassword: false,
+    staffId,
+    department,
+  };
+  
+  users.push(newUser);
+  saveUsers(users);
+  
+  // Also add to mock staff DB for auto-fill
+  MOCK_STAFF_DB[staffId] = { name, email, department };
+  
+  return { success: true };
 };
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {

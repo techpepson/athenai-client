@@ -22,31 +22,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
-import { FacialRegistration } from '@/components/FacialRegistration';
+import { FacialRegistration } from './FacialRegistration';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 
-// --- Mock Data ---
-const MOCK_PROGRAMS = [
-  { label: 'Computer Science', value: 'cs' },
-  { label: 'Information Technology', value: 'it' },
-  { label: 'Software Engineering', value: 'se' },
-];
-
-const MOCK_COURSES = [
-  { label: 'Data Structures', value: 'ds' },
-  { label: 'Algorithms', value: 'alg' },
-  { label: 'Database Systems', value: 'db' },
-  { label: 'Web Development', value: 'web' },
-  { label: 'Artificial Intelligence', value: 'ai' },
-  { label: 'Operating Systems', value: 'os' },
-];
-
-// Mock lookup for auto-fill
-// Mock lookup for auto-fill
-const MOCK_STUDENT_DB: Record<string, { name: string; email: string }> = {
-  '123456': { name: 'Emmanuel Yawson', email: 'enyawon@gmail.com' },
-};
+// Import mock data from AuthContext
+import { MOCK_PROGRAMS, MOCK_COURSES, getStudentByStudentId } from '@/contexts/AuthContext';
 
 // --- Schema ---
 const formSchema = z.object({
@@ -79,20 +60,27 @@ export const StudentForm = () => {
         },
     });
 
-    // Auto-fill logic
+    // Auto-fill logic using the centralized function
     const studentId = form.watch('studentId');
     useEffect(() => {
-        if (studentId && MOCK_STUDENT_DB[studentId]) {
-            const data = MOCK_STUDENT_DB[studentId];
-            form.setValue('email', data.email);
-            form.setValue('fullName', data.name);
-            toast({
-              title: "Student Found",
-              description: `Details loaded for ${data.name}`,
-            });
+        if (studentId) {
+            const studentData = getStudentByStudentId(studentId);
+            if (studentData) {
+                form.setValue('email', studentData.email);
+                form.setValue('fullName', studentData.name);
+                if (studentData.program) {
+                    form.setValue('program', studentData.program);
+                }
+                if (studentData.semester) {
+                    form.setValue('semester', studentData.semester);
+                }
+                toast({
+                    title: "Student Found",
+                    description: `Details loaded for ${studentData.name}`,
+                });
+            }
         }
     }, [studentId, form, toast]);
-
 
     const onSubmit = async (data: FormValues) => {
         setIsLoading(true);
@@ -198,7 +186,7 @@ export const StudentForm = () => {
                               render={({ field }) => (
                                 <FormItem>
                                   <FormLabel>Program</FormLabel>
-                                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                  <Select onValueChange={field.onChange} value={field.value}>
                                     <FormControl>
                                       <SelectTrigger>
                                         <SelectValue placeholder="Select Program" />
@@ -221,7 +209,7 @@ export const StudentForm = () => {
                               render={({ field }) => (
                                 <FormItem>
                                   <FormLabel>Semester</FormLabel>
-                                   <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                   <Select onValueChange={field.onChange} value={field.value}>
                                     <FormControl>
                                       <SelectTrigger>
                                         <SelectValue placeholder="Select Semester" />
@@ -261,7 +249,7 @@ export const StudentForm = () => {
                     {/* Facial Registration Section */}
                     <div className="space-y-4">
                          <div className="flex items-center gap-2 text-primary border-b pb-2">
-                           <BookOpen className="w-5 h-5" /> {/* Just using an icon for section header */}
+                           <BookOpen className="w-5 h-5" />
                            <h3 className="font-semibold text-lg">Facial Verification</h3>
                         </div>
                          
@@ -285,7 +273,6 @@ export const StudentForm = () => {
                               )}
                             />
                     </div>
-
 
                     <Button type="submit" className="w-full h-12 text-lg" disabled={isLoading}>
                         {isLoading ? (
