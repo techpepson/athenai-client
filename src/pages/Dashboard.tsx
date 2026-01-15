@@ -5,16 +5,25 @@ import { RecentActivityItem } from '@/components/dashboard/RecentActivityItem';
 import { AttendanceChart } from '@/components/dashboard/AttendanceChart';
 import { EarlyArrivalsCard } from '@/components/dashboard/EarlyArrivalsCard';
 import { mockStats, mockSessions, mockAlerts, mockEarlyArrivals } from '@/data/mockData';
+import { useAuth } from '@/contexts/AuthContext';
 
 const Dashboard = () => {
   const activeSessions = mockSessions.filter(s => s.status === 'active' || s.status === 'scheduled');
+  const { user } = useAuth();
+  
+  const firstName = user?.name.split(' ')[0] || 'User';
+  const isPersonalView = user?.role === 'student' || user?.role === 'staff';
+  
+  const welcomeMessage = isPersonalView 
+    ? `Welcome back ${firstName}!, here's your attendance overview`
+    : `Welcome back ${firstName}, here's the attendance overview`;
 
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Page Header */}
       <div>
         <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
-        <p className="text-muted-foreground mt-1">Welcome back! Here's your attendance overview.</p>
+        <p className="text-muted-foreground mt-1">{welcomeMessage}</p>
       </div>
 
       {/* Stats Grid */}

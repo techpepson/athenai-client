@@ -15,7 +15,7 @@ const Auth = () => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [view, setView] = useState<'login' | 'role-selection' | 'student-registration' | 'staff-registration'>('login');
+  const [view, setView] = useState<'login' | 'role-selection' | 'student-registration' | 'staff-registration' | 'forgot-password'>('login');
   const { user, login } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -103,9 +103,9 @@ const Auth = () => {
                     </button>
                   </div>
                   <div className="flex justify-end">
-                    <a href="#" className="text-sm text-primary hover:underline font-medium">
+                    <button type="button" onClick={() => setView('forgot-password')} className="text-sm text-primary hover:underline font-medium">
                       Forgot password?
-                    </a>
+                    </button>
                   </div>
                 </div>
 
@@ -137,8 +137,66 @@ const Auth = () => {
                 </div>
               </form>
             </>
+          ) : view === 'forgot-password' ? (
+            /* Forgot Password View */
+            <div className="space-y-8 animate-fade-in">
+                <div className="text-center space-y-2">
+                  <div className="flex justify-center mb-6">
+                    <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
+                        <Fingerprint className="w-8 h-8 text-primary" />
+                    </div>
+                  </div>
+                  <h1 className="text-3xl font-bold tracking-tight text-foreground">Forgot password?</h1>
+                  <p className="text-muted-foreground">No worries, we'll send you reset instructions.</p>
+                </div>
+
+                <form onSubmit={(e) => {
+                    e.preventDefault();
+                    setIsLoading(true);
+                    // Simulate API call
+                    setTimeout(() => {
+                        setIsLoading(false);
+                        toast({
+                            title: "Check your email",
+                            description: "We've sent a password reset link to your email.",
+                        });
+                        setView('login');
+                    }, 1500);
+                }} className="space-y-6">
+                   <div className="space-y-2">
+                    <Label htmlFor="reset-email" className="text-base font-medium">Email</Label>
+                    <Input
+                      id="reset-email"
+                      type="email"
+                      placeholder="Enter your email address"
+                      required
+                      disabled={isLoading}
+                      className="h-12 rounded-xl border-muted-foreground/20 focus-visible:ring-primary/30"
+                    />
+                  </div>
+
+                  <Button
+                    type="submit"
+                    size="lg"
+                    className="w-full h-12 rounded-xl text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-300"
+                    disabled={isLoading}
+                  >
+                     {isLoading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Sending...</> : 'Send Reset Link'}
+                  </Button>
+
+                  <div className="text-center pt-2">
+                     <button 
+                       type="button" 
+                       onClick={() => setView('login')}
+                       className="text-sm text-muted-foreground hover:text-foreground flex items-center justify-center gap-2 mx-auto font-medium"
+                     >
+                       <ArrowLeft className="w-4 h-4" />
+                       Back to login
+                     </button>
+                  </div>
+                </form>
+            </div>
           ) : (
-            /* Role Selection View (Shared for selection and student/staff registration) */
             <div className="space-y-8 animate-fade-in">
               <div className="text-center space-y-2">
                 <h1 className="text-3xl font-bold tracking-tight text-foreground">Choose your role</h1>
@@ -200,8 +258,8 @@ const Auth = () => {
 
       {/* Right Panel */}
       <div className="hidden lg:flex w-1/2 p-4 bg-background items-center justify-center">
-        <div className={`w-full h-full rounded-[2rem] relative overflow-hidden shadow-2xl transition-all duration-500 ${view === 'login' ? 'bg-muted/30' : 'bg-slate-950'}`}>
-          {view === 'login' ? (
+        <div className={`w-full h-full rounded-[2rem] relative overflow-hidden shadow-2xl transition-all duration-500 ${view === 'login' || view === 'forgot-password' ? 'bg-muted/30' : 'bg-slate-950'}`}>
+          {view === 'login' || view === 'forgot-password' ? (
             /* Login Visual */
             <>
               <img 

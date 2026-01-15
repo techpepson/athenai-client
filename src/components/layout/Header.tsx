@@ -3,14 +3,22 @@ import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { mockAlerts } from '@/data/mockData';
+import { useAuth } from '@/contexts/AuthContext';
 
 export const Header = () => {
   const unreadCount = mockAlerts.filter(a => !a.read).length;
   const { theme, setTheme } = useTheme();
+  const { user } = useAuth();
 
   const toggleTheme = () => {
     setTheme(theme === 'dark' ? 'light' : 'dark');
   };
+
+  const formattedRole = user?.role
+    ? user.role.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+    : 'Guest';
+
+  const firstName = user?.name.split(' ')[0] || 'Guest';
 
   return (
     <header className="h-16 border-b border-border bg-card/50 backdrop-blur-xl sticky top-0 z-40">
@@ -51,8 +59,8 @@ export const Header = () => {
               <User className="w-4 h-4 text-primary-foreground" />
             </div>
             <div className="text-left">
-              <p className="text-sm font-medium">Admin User</p>
-              <p className="text-xs text-muted-foreground">Super Admin</p>
+              <p className="text-sm font-medium">{firstName}</p>
+              <p className="text-xs text-muted-foreground">{formattedRole}</p>
             </div>
           </Button>
         </div>

@@ -284,12 +284,41 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    // Sync MOCK_USERS to localStorage to ensure new dev users appear
+    const storedUsersStr = localStorage.getItem('facetrack_users');
+    let currentUsers: (User & { password: string })[] = storedUsersStr ? JSON.parse(storedUsersStr) : [];
+    
+    let hasChanges = false;
+    if (!storedUsersStr) {
+        currentUsers = [...MOCK_USERS];
+        hasChanges = true;
+    } else {
+         MOCK_USERS.forEach(mockUser => {
+            const existingIndex = currentUsers.findIndex((u) => u.id === mockUser.id);
+            if (existingIndex === -1) {
+                currentUsers.push(mockUser);
+                hasChanges = true;
+            } else {
+                // Determine if critical fields changed (like password or role)
+                const existing = currentUsers[existingIndex];
+                if (existing.password !== mockUser.password || existing.role !== mockUser.role || existing.name !== mockUser.name) {
+                     currentUsers[existingIndex] = { ...existing, ...mockUser };
+                     hasChanges = true;
+                }
+            }
+         });
+    }
+
+    if (hasChanges) {
+        localStorage.setItem('facetrack_users', JSON.stringify(currentUsers));
+    }
+
     // Check for existing session
     const storedSession = localStorage.getItem('facetrack_session');
     if (storedSession) {
       const sessionUser = JSON.parse(storedSession);
       // Verify user still exists
-      const users = getStoredUsers();
+      const users = currentUsers; // Use the potentially updated list
       const existingUser = users.find(u => u.id === sessionUser.id);
       if (existingUser) {
         const { password, ...userWithoutPassword } = existingUser;
