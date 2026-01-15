@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, UserCheck, Copy, Check, GraduationCap } from 'lucide-react';
+import { Plus, Trash2, UserCheck, Copy, Check, GraduationCap, ArrowRight, Search, BookOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,8 +20,23 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { addClassRepUser, getClassRepUsers, deleteClassRepUser, User } from '@/contexts/AuthContext';
+import { 
+  assignClassRep, 
+  removeClassRep, 
+  getClassRepUsers, 
+  getAllUsers, 
+  User, 
+  MOCK_DEPARTMENTS, 
+  MOCK_COURSES 
+} from '@/contexts/AuthContext';
 import { Badge } from '@/components/ui/badge';
 
 const ClassRepManagement = () => {
@@ -29,48 +44,60 @@ const ClassRepManagement = () => {
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedClassRep, setSelectedClassRep] = useState<User | null>(null);
-  const [newRepName, setNewRepName] = useState('');
-  const [newRepEmail, setNewRepEmail] = useState('');
-  const [generatedPassword, setGeneratedPassword] = useState('');
-  const [copied, setCopied] = useState(false);
+  
+  // Wizard State
+  const [step, setStep] = useState(1);
+  const [selectedDept, setSelectedDept] = useState('');
+  const [selectedCourse, setSelectedCourse] = useState('');
+  const [studentSearch, setStudentSearch] = useState('');
+  const [selectedStudent, setSelectedStudent] = useState<User | null>(null);
+  const [availableStudents, setAvailableStudents] = useState<User[]>([]);
+
   const { toast } = useToast();
 
   useEffect(() => {
     loadClassReps();
   }, []);
 
+  useEffect(() => {
+    if (addModalOpen) {
+       // Reset wizard
+       setStep(1);
+       setSelectedDept('');
+       setSelectedCourse('');
+       setStudentSearch('');
+       setSelectedStudent(null);
+    }
+  }, [addModalOpen]);
+
+  // Load students for search
+  useEffect(() => {
+      if (step === 3) {
+          const allUsers = getAllUsers();
+          // Filter for students. 
+          // Ideally we would filter by Department/Program too, but mapping might be loose.
+          // Let's filter by role 'student'.
+          const students = allUsers.filter(u => u.role === 'student');
+          setAvailableStudents(students);
+      }
+  }, [step]);
+
+
   const loadClassReps = () => {
     setClassRepList(getClassRepUsers());
   };
 
-  const generateTempPassword = () => {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-    let password = '';
-    for (let i = 0; i < 10; i++) {
-      password += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return password;
-  };
+  const handleAssign = () => {
+    if (!selectedStudent || !selectedCourse) return;
 
-  const handleAddClassRep = () => {
-    if (!newRepName.trim() || !newRepEmail.trim()) {
-      toast({
-        title: 'Error',
-        description: 'Please fill in all fields',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    const tempPassword = generateTempPassword();
-    const result = addClassRepUser(newRepEmail, newRepName, tempPassword);
+    const result = assignClassRep(selectedStudent.id, selectedCourse);
 
     if (result.success) {
-      setGeneratedPassword(tempPassword);
       loadClassReps();
+      setAddModalOpen(false);
       toast({
-        title: 'Class Rep added',
-        description: 'Share the temporary password with the class representative',
+        title: 'Class Rep Assigned',
+        description: `${selectedStudent.name} is now Class Rep for the selected course.`,
       });
     } else {
       toast({
@@ -81,13 +108,13 @@ const ClassRepManagement = () => {
     }
   };
 
-  const handleDeleteClassRep = () => {
+  const handleRemoveClassRep = () => {
     if (selectedClassRep) {
-      const success = deleteClassRepUser(selectedClassRep.id);
+      const success = removeClassRep(selectedClassRep.id);
       if (success) {
         loadClassReps();
         toast({
-          title: 'Class Rep removed',
+          title: 'Role Removed',
           description: `${selectedClassRep.name} has been removed from class rep role`,
         });
       }
@@ -96,18 +123,13 @@ const ClassRepManagement = () => {
     setSelectedClassRep(null);
   };
 
-  const copyPassword = () => {
-    navigator.clipboard.writeText(generatedPassword);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const closeAddModal = () => {
-    setAddModalOpen(false);
-    setNewRepName('');
-    setNewRepEmail('');
-    setGeneratedPassword('');
-  };
+  // Filtered Lists
+  const filteredCourses = MOCK_COURSES.filter(c => c.department === selectedDept);
+  
+  const filteredStudents = availableStudents.filter(s => 
+      s.name.toLowerCase().includes(studentSearch.toLowerCase()) || 
+      s.email.toLowerCase().includes(studentSearch.toLowerCase())
+  ).slice(0, 5); // Limit results
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -121,7 +143,7 @@ const ClassRepManagement = () => {
         </div>
         <Button variant="gradient" onClick={() => setAddModalOpen(true)}>
           <Plus className="w-4 h-4 mr-2" />
-          Add Class Rep
+          Assign Class Rep
         </Button>
       </div>
 
@@ -146,11 +168,11 @@ const ClassRepManagement = () => {
             <UserCheck className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-medium text-foreground mb-2">No class representatives</h3>
             <p className="text-muted-foreground mb-4">
-              Add students as class reps to help manage attendance
+              Assign students as class reps to courses to help manage attendance
             </p>
             <Button variant="outline" onClick={() => setAddModalOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
-              Add First Class Rep
+              Assign First Rep
             </Button>
           </div>
         ) : (
@@ -163,18 +185,22 @@ const ClassRepManagement = () => {
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <p className="font-medium text-foreground">{rep.name}</p>
-                      <Badge variant="secondary" className="text-xs">Class Rep</Badge>
+                       <p className="font-medium text-foreground">{rep.name}</p>
+                       <Badge variant="secondary" className="text-xs">Class Rep</Badge>
                     </div>
-                    <p className="text-sm text-muted-foreground">{rep.email}</p>
+                    
+                    <div className="flex items-center gap-2 mt-1">
+                        <Badge variant="outline" className="text-[10px] font-normal gap-1">
+                             <BookOpen className="w-3 h-3" />
+                             {rep.classRepData?.courseName || 'Assigned Course'}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">• {rep.classRepData?.department?.toUpperCase()}</span>
+                    </div>
+
+                    <p className="text-xs text-muted-foreground mt-1">{rep.email}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {rep.mustChangePassword && (
-                    <span className="text-xs bg-warning/10 text-warning px-2 py-1 rounded-full">
-                      Password change required
-                    </span>
-                  )}
                   <Button
                     variant="ghost"
                     size="icon"
@@ -193,61 +219,123 @@ const ClassRepManagement = () => {
         )}
       </div>
 
-      {/* Add Class Rep Modal */}
-      <Dialog open={addModalOpen} onOpenChange={closeAddModal}>
+      {/* Add Class Rep Wizard Modal */}
+      <Dialog open={addModalOpen} onOpenChange={setAddModalOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Add Class Representative</DialogTitle>
+            <DialogTitle>Assign Class Representative (Step {step}/3)</DialogTitle>
           </DialogHeader>
           
-          {!generatedPassword ? (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Student Name</Label>
-                <Input
-                  id="name"
-                  placeholder="Enter student name"
-                  value={newRepName}
-                  onChange={(e) => setNewRepName(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="student@school.com"
-                  value={newRepEmail}
-                  onChange={(e) => setNewRepEmail(e.target.value)}
-                />
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={closeAddModal}>Cancel</Button>
-                <Button variant="gradient" onClick={handleAddClassRep}>Add Class Rep</Button>
-              </DialogFooter>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="p-4 bg-success/10 border border-success/20 rounded-lg">
-                <p className="text-sm text-success font-medium mb-2">Class representative added!</p>
-                <p className="text-sm text-muted-foreground">
-                  Share this temporary password with {newRepName}. They will be required to change it on first login.
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label>Temporary Password</Label>
-                <div className="flex gap-2">
-                  <Input value={generatedPassword} readOnly className="font-mono" />
-                  <Button variant="outline" size="icon" onClick={copyPassword}>
-                    {copied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
-                  </Button>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="gradient" onClick={closeAddModal}>Done</Button>
-              </DialogFooter>
-            </div>
-          )}
+          <div className="py-4">
+             {/* Step 1: Select Department */}
+             {step === 1 && (
+                 <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
+                     <Label>Select Department</Label>
+                     <Select value={selectedDept} onValueChange={setSelectedDept}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Choose department..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {MOCK_DEPARTMENTS.map(dept => (
+                                <SelectItem key={dept.value} value={dept.value}>{dept.label}</SelectItem>
+                            ))}
+                        </SelectContent>
+                     </Select>
+                 </div>
+             )}
+
+             {/* Step 2: Select Course */}
+             {step === 2 && (
+                 <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
+                     <Label>Select Course in {MOCK_DEPARTMENTS.find(d => d.value === selectedDept)?.label}</Label>
+                     <Select value={selectedCourse} onValueChange={setSelectedCourse}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Choose course..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {filteredCourses.length > 0 ? (
+                                filteredCourses.map(course => (
+                                    <SelectItem key={course.id} value={course.id}>{course.name}</SelectItem>
+                                ))
+                            ) : (
+                                <div className="p-2 text-sm text-muted-foreground text-center">No courses found</div>
+                            )}
+                        </SelectContent>
+                     </Select>
+                 </div>
+             )}
+
+             {/* Step 3: Select Student */}
+             {step === 3 && (
+                 <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
+                     <Label>Search Student</Label>
+                     <div className="relative">
+                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Search by name or email..."
+                            className="pl-9"
+                            value={studentSearch}
+                            onChange={(e) => {
+                                setStudentSearch(e.target.value);
+                                setSelectedStudent(null); 
+                            }}
+                        />
+                     </div>
+                     
+                     {studentSearch.length > 0 && (
+                         <div className="border rounded-md mt-2 max-h-[200px] overflow-y-auto">
+                            {filteredStudents.length > 0 ? (
+                                filteredStudents.map(student => (
+                                    <div 
+                                        key={student.id} 
+                                        className={`p-3 text-sm cursor-pointer hover:bg-muted ${selectedStudent?.id === student.id ? 'bg-primary/10' : ''}`}
+                                        onClick={() => setSelectedStudent(student)}
+                                    >
+                                        <div className="font-medium">{student.name}</div>
+                                        <div className="text-xs text-muted-foreground">{student.email}</div>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="p-3 text-sm text-muted-foreground text-center">No students match</div>
+                            )}
+                         </div>
+                     )}
+
+                     {selectedStudent && (
+                         <div className="p-3 bg-primary/10 border border-primary/20 rounded-md">
+                             <p className="text-sm font-medium">Selected: {selectedStudent.name}</p>
+                             <p className="text-xs text-muted-foreground">Will be assigned to: {MOCK_COURSES.find(c => c.id === selectedCourse)?.name}</p>
+                         </div>
+                     )}
+                 </div>
+             )}
+          </div>
+
+          <DialogFooter className="flex justify-between sm:justify-between">
+            {step > 1 ? (
+                <Button variant="outline" onClick={() => setStep(step - 1)}>Back</Button>
+            ) : (
+                <Button variant="outline" onClick={() => setAddModalOpen(false)}>Cancel</Button>
+            )}
+
+            {step < 3 ? (
+                <Button 
+                    variant="gradient" 
+                    onClick={() => setStep(step + 1)} 
+                    disabled={(step === 1 && !selectedDept) || (step === 2 && !selectedCourse)}
+                >
+                    Next <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
+            ) : (
+                <Button 
+                    variant="gradient" 
+                    onClick={handleAssign}
+                    disabled={!selectedStudent}
+                >
+                    Assign <Check className="w-4 h-4 ml-2" />
+                </Button>
+            )}
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -257,16 +345,16 @@ const ClassRepManagement = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Remove Class Representative?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will remove {selectedClassRep?.name} from the class rep role. They will no longer be able to create sessions or manage attendance.
+              This will remove {selectedClassRep?.name} from the class rep role for {selectedClassRep?.classRepData?.courseName}.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleDeleteClassRep}
+              onClick={handleRemoveClassRep}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Remove
+              Remove Role
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

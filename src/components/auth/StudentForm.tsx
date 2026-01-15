@@ -234,7 +234,7 @@ export const StudentForm = () => {
                                   <FormLabel>Courses Registered</FormLabel>
                                   <FormControl>
                                      <MultiSelect
-                                        options={MOCK_COURSES}
+                                        options={MOCK_COURSES.map(c => ({ label: c.name, value: c.id }))}
                                         selected={field.value}
                                         onChange={field.onChange}
                                         placeholder="Select courses..."

@@ -17,7 +17,8 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Camera, Upload, User } from 'lucide-react';
-import { toast } from 'sonner';
+import { useToast } from '@/hooks/use-toast';
+import { addStudentUser, addStaffUserComplete } from '@/contexts/AuthContext';
 
 interface AddMemberModalProps {
   open: boolean;
@@ -27,11 +28,47 @@ interface AddMemberModalProps {
 export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
   const [isMinor, setIsMinor] = useState(false);
   const [captureMode, setCaptureMode] = useState(false);
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState<'student' | 'staff'>('student');
+  const [department, setDepartment] = useState('');
+  const [idNumber, setIdNumber] = useState('');
+  const { toast } = useToast();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    toast.success('Member added successfully!');
-    onOpenChange(false);
+    
+    let result;
+    if (role === 'student') {
+        // For mock purposes, using 'cs' as program if dept not set correctly for student schema
+        result = addStudentUser(idNumber, email, name, department || 'cs', '1');
+    } else {
+        result = addStaffUserComplete(idNumber, email, name, department || 'cs');
+    }
+
+    if (result.success) {
+        toast({
+            title: 'Member Added',
+            description: `${name} has been added successfully.`,
+        });
+        resetForm();
+        onOpenChange(false);
+    } else {
+        toast({
+            title: 'Error',
+            description: result.error,
+            variant: 'destructive',
+        });
+    }
+  };
+
+  const resetForm = () => {
+    setName('');
+    setEmail('');
+    setRole('student');
+    setDepartment('');
+    setIdNumber('');
+    setIsMinor(false);
   };
 
   return (
@@ -69,28 +106,40 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="name">Full Name</Label>
-              <Input id="name" placeholder="Enter full name" required />
+              <Input 
+                id="name" 
+                placeholder="Enter full name" 
+                required 
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" placeholder="email@example.com" required />
+              <Input 
+                id="email" 
+                type="email" 
+                placeholder="email@example.com" 
+                required 
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="role">Role</Label>
-              <Select defaultValue="student">
+              <Select value={role} onValueChange={(v: 'student' | 'staff') => setRole(v)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select role" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="student">Student</SelectItem>
                   <SelectItem value="staff">Staff</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="department">Department</Label>
-              <Select>
+              <Select value={department} onValueChange={setDepartment}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select department" />
                 </SelectTrigger>
@@ -105,7 +154,13 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
             </div>
             <div className="space-y-2">
               <Label htmlFor="studentId">ID Number</Label>
-              <Input id="studentId" placeholder="e.g., CS2024001" />
+              <Input 
+                id="studentId" 
+                placeholder="e.g., CS2024001" 
+                required
+                value={idNumber}
+                onChange={(e) => setIdNumber(e.target.value)}
+              />
             </div>
           </div>
 

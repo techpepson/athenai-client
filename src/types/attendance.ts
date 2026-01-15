@@ -2,8 +2,8 @@ export interface Member {
   id: string;
   name: string;
   email: string;
-  role: 'student' | 'staff' | 'admin';
-  department: string;
+  role: 'super_admin' | 'admin_staff' | 'staff' | 'class_rep' | 'student';
+  department?: string;
   studentId?: string;
   photoUrl?: string;
   parentContact?: {

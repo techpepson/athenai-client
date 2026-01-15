@@ -59,7 +59,7 @@ export const Sidebar = () => {
   };
 
   const isSuperAdmin = user?.role === 'super_admin';
-  const canManageClassReps = user?.role === 'super_admin' || user?.role === 'staff';
+  const canManageClassReps = user?.role === 'super_admin' || user?.role === 'staff' || user?.role === 'admin_staff';
 
   return (
     <>
@@ -92,9 +92,15 @@ export const Sidebar = () => {
           <NavItem to="/kiosk" icon={<Camera className="w-5 h-5" />} label="Kiosk Mode" collapsed={collapsed} />
           <NavItem to="/analytics" icon={<BarChart3 className="w-5 h-5" />} label="Analytics" collapsed={collapsed} />
           <NavItem to="/notifications" icon={<Bell className="w-5 h-5" />} label="Notifications" collapsed={collapsed} />
+          
           {isSuperAdmin && (
+            <NavItem to="/admins" icon={<Shield className="w-5 h-5" />} label="Admins" collapsed={collapsed} />
+          )}
+          
+          {(isSuperAdmin || user?.role === 'admin_staff') && (
             <NavItem to="/staff" icon={<UserCog className="w-5 h-5" />} label="Staff Management" collapsed={collapsed} />
           )}
+
           {canManageClassReps && (
             <NavItem to="/class-reps" icon={<GraduationCap className="w-5 h-5" />} label="Class Reps" collapsed={collapsed} />
           )}

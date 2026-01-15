@@ -21,9 +21,9 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
-import { addStaffUser, deleteStaffUser, getAllUsers, User } from '@/contexts/AuthContext';
+import { addAdminStaffUser, deleteAdminStaffUser, getAllUsers, User } from '@/contexts/AuthContext';
 
-const StaffManagement = () => {
+const AdminManagement = () => {
   const [staffList, setStaffList] = useState<User[]>([]);
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -39,9 +39,9 @@ const StaffManagement = () => {
   }, []);
 
   const loadStaff = () => {
-    // Filter showing regular Staff
+    // Filter showing only Admin Staff
     const allUsers = getAllUsers();
-    setStaffList(allUsers.filter(u => u.role === 'staff'));
+    setStaffList(allUsers.filter(u => u.role === 'admin_staff'));
   };
 
   const generateTempPassword = () => {
@@ -64,14 +64,14 @@ const StaffManagement = () => {
     }
 
     const tempPassword = generateTempPassword();
-    const result = addStaffUser(newStaffEmail, newStaffName, tempPassword);
+    const result = addAdminStaffUser(newStaffEmail, newStaffName, tempPassword);
 
     if (result.success) {
       setGeneratedPassword(tempPassword);
       loadStaff();
       toast({
-        title: 'Staff added',
-        description: 'Share the temporary password with the new staff member',
+        title: 'Admin Created',
+        description: 'Share the temporary password with the new admin',
       });
     } else {
       toast({
@@ -84,11 +84,11 @@ const StaffManagement = () => {
 
   const handleDeleteStaff = () => {
     if (selectedStaff) {
-      const success = deleteStaffUser(selectedStaff.id);
+      const success = deleteAdminStaffUser(selectedStaff.id);
       if (success) {
         loadStaff();
         toast({
-          title: 'Staff removed',
+          title: 'Admin removed',
           description: `${selectedStaff.name} has been removed`,
         });
       }
@@ -115,14 +115,14 @@ const StaffManagement = () => {
       {/* Page Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Staff Management</h1>
+          <h1 className="text-2xl font-bold text-foreground">Admin Management</h1>
           <p className="text-muted-foreground mt-1">
-            Add and manage staff accounts
+            Create and manage system administrators (Admin Staff)
           </p>
         </div>
         <Button variant="gradient" onClick={() => setAddModalOpen(true)}>
           <Plus className="w-4 h-4 mr-2" />
-          Add Staff
+          Add Admin
         </Button>
       </div>
 
@@ -131,13 +131,13 @@ const StaffManagement = () => {
         {staffList.length === 0 ? (
           <div className="p-12 text-center">
             <UserCog className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-foreground mb-2">No staff members</h3>
+            <h3 className="text-lg font-medium text-foreground mb-2">No admin staff found</h3>
             <p className="text-muted-foreground mb-4">
-              Add staff members to help manage attendance
+              Add admin staff members to help manage the system
             </p>
             <Button variant="outline" onClick={() => setAddModalOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
-              Add First Staff
+              Add First Admin
             </Button>
           </div>
         ) : (
@@ -156,8 +156,8 @@ const StaffManagement = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded-full font-medium">
-                    Staff
+                  <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full font-medium">
+                    Admin Staff
                   </span>
                   {staff.mustChangePassword && (
                     <span className="text-xs bg-warning/10 text-warning px-2 py-1 rounded-full">
@@ -186,7 +186,7 @@ const StaffManagement = () => {
       <Dialog open={addModalOpen} onOpenChange={closeAddModal}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Add Staff Member</DialogTitle>
+            <DialogTitle>Add Admin Staff</DialogTitle>
           </DialogHeader>
           
           {!generatedPassword ? (
@@ -195,7 +195,7 @@ const StaffManagement = () => {
                 <Label htmlFor="name">Full Name</Label>
                 <Input
                   id="name"
-                  placeholder="Enter staff name"
+                  placeholder="Enter name"
                   value={newStaffName}
                   onChange={(e) => setNewStaffName(e.target.value)}
                 />
@@ -205,22 +205,22 @@ const StaffManagement = () => {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="staff@facetrack.com"
+                  placeholder="admin@facetrack.com"
                   value={newStaffEmail}
                   onChange={(e) => setNewStaffEmail(e.target.value)}
                 />
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={closeAddModal}>Cancel</Button>
-                <Button variant="gradient" onClick={handleAddStaff}>Add Staff</Button>
+                <Button variant="gradient" onClick={handleAddStaff}>Create Admin</Button>
               </DialogFooter>
             </div>
           ) : (
             <div className="space-y-4">
               <div className="p-4 bg-success/10 border border-success/20 rounded-lg">
-                <p className="text-sm text-success font-medium mb-2">Staff member created!</p>
+                <p className="text-sm text-success font-medium mb-2">Admin account created!</p>
                 <p className="text-sm text-muted-foreground">
-                  Share this temporary password with {newStaffName}. They will be required to change it on first login.
+                  Share this temporary password. They must change it on login.
                 </p>
               </div>
               <div className="space-y-2">
@@ -244,9 +244,9 @@ const StaffManagement = () => {
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove Staff Member?</AlertDialogTitle>
+            <AlertDialogTitle>Remove Admin?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently remove {selectedStaff?.name} from the system. They will no longer be able to log in.
+              This will permanently remove {selectedStaff?.name} from the system.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -264,4 +264,4 @@ const StaffManagement = () => {
   );
 };
 
-export default StaffManagement;
+export default AdminManagement;

@@ -14,6 +14,17 @@ export interface User {
   program?: string;
   semester?: string;
   department?: string;
+  classRepData?: {
+    courseId: string;
+    courseName: string;
+    department: string;
+  };
+}
+
+export interface Course {
+  id: string;
+  name: string;
+  department: string;
 }
 
 interface AuthContextType {
@@ -23,6 +34,11 @@ interface AuthContextType {
   logout: () => void;
   changePassword: (oldPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
 }
+
+export const getAllUsers = (): User[] => {
+  const users = getStoredUsers();
+  return users.map(({ password, ...user }) => user);
+};
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -77,15 +93,19 @@ export const MOCK_PROGRAMS = [
   { label: 'Software Engineering', value: 'se' },
 ];
 
-export const MOCK_COURSES = [
-  { label: 'Data Structures', value: 'ds' },
-  { label: 'Algorithms', value: 'alg' },
-  { label: 'Database Systems', value: 'db' },
-  { label: 'Web Development', value: 'web' },
-  { label: 'Artificial Intelligence', value: 'ai' },
-  { label: 'Operating Systems', value: 'os' },
-  { label: 'Calculus I', value: 'calc1' },
-  { label: 'Linear Algebra', value: 'lin_alg' },
+export const MOCK_COURSES: Course[] = [
+  { id: 'ds', name: 'Data Structures', department: 'cs' },
+  { id: 'alg', name: 'Algorithms', department: 'cs' },
+  { id: 'db', name: 'Database Systems', department: 'cs' },
+  { id: 'web', name: 'Web Development', department: 'cs' },
+  { id: 'ai', name: 'Artificial Intelligence', department: 'cs' },
+  { id: 'os', name: 'Operating Systems', department: 'cs' },
+  { id: 'calc1', name: 'Calculus I', department: 'math' },
+  { id: 'lin_alg', name: 'Linear Algebra', department: 'math' },
+  { id: 'phy1', name: 'Physics I', department: 'phy' },
+  { id: 'circuits', name: 'Circuit Theory', department: 'ee' },
+  { id: 'thermo', name: 'Thermodynamics', department: 'me' },
+  { id: 'mgt101', name: 'Management 101', department: 'ba' },
 ];
 
 // Mock data for staff registration form
@@ -167,41 +187,73 @@ export const deleteStaffUser = (userId: string): boolean => {
 };
 
 // Class Rep management
-export const addClassRepUser = (email: string, name: string, tempPassword: string): { success: boolean; error?: string } => {
+// Class Rep management
+export const assignClassRep = (studentId: string, courseId: string): { success: boolean; error?: string } => {
   const users = getStoredUsers();
-  if (users.find(u => u.email === email)) {
-    return { success: false, error: 'User with this email already exists' };
-  }
+  const studentIndex = users.findIndex(u => u.id === studentId);
   
-  const newUser: User & { password: string } = {
-    id: crypto.randomUUID(),
-    email,
-    name,
+  if (studentIndex === -1) {
+    return { success: false, error: 'Student not found' };
+  }
+
+  const course = MOCK_COURSES.find(c => c.id === courseId);
+  if (!course) {
+    return { success: false, error: 'Course not found' };
+  }
+
+  // Check if someone else is already rep for this course? 
+  // For now we allow multiple, or maybe we should restrict?
+  // Let's restrict: Check if course already has a rep
+  const existingRep = users.find(u => u.classRepData?.courseId === courseId);
+  if (existingRep && existingRep.id !== studentId) {
+    return { success: false, error: `Course already has a Class Rep: ${existingRep.name}` };
+  }
+
+  const user = users[studentIndex];
+  
+  // Update user role and data
+  users[studentIndex] = {
+    ...user,
     role: 'class_rep',
-    password: tempPassword,
-    mustChangePassword: true,
     isClassRep: true,
+    classRepData: {
+      courseId: course.id,
+      courseName: course.name,
+      department: course.department
+    }
   };
   
-  users.push(newUser);
   saveUsers(users);
   return { success: true };
 };
 
+export const removeClassRep = (userId: string): boolean => {
+  const users = getStoredUsers();
+  const userIndex = users.findIndex(u => u.id === userId);
+  
+  if (userIndex === -1) return false;
+
+  const user = users[userIndex];
+  
+  // Demote back to student
+  users[userIndex] = {
+    ...user,
+    role: 'student',
+    isClassRep: false,
+    classRepData: undefined
+  };
+  
+  saveUsers(users);
+  return true;
+};
+
+// Deprecated or Helpers
 export const getClassRepUsers = (): User[] => {
   const users = getStoredUsers();
   return users.filter(u => u.role === 'class_rep').map(({ password, ...user }) => user);
 };
 
-export const deleteClassRepUser = (userId: string): boolean => {
-  const users = getStoredUsers();
-  const filtered = users.filter(u => u.id !== userId || u.role !== 'class_rep');
-  if (filtered.length !== users.length) {
-    saveUsers(filtered);
-    return true;
-  }
-  return false;
-};
+
 
 // Student management functions
 export const getStudentByStudentId = (studentId: string): { name: string; email: string; program?: string; semester?: string } | null => {
@@ -277,6 +329,55 @@ export const addStaffUserComplete = (
   MOCK_STAFF_DB[staffId] = { name, email, department };
   
   return { success: true };
+};
+
+// Admin Staff management
+export const addAdminStaffUser = (email: string, name: string, tempPassword: string): { success: boolean; error?: string } => {
+  const users = getStoredUsers();
+  if (users.find(u => u.email === email)) {
+    return { success: false, error: 'User with this email already exists' };
+  }
+  
+  const newUser: User & { password: string } = {
+    id: crypto.randomUUID(),
+    email,
+    name,
+    role: 'admin_staff',
+    password: tempPassword,
+    mustChangePassword: true,
+  };
+  
+  users.push(newUser);
+  saveUsers(users);
+  return { success: true };
+};
+
+export const deleteAdminStaffUser = (userId: string): boolean => {
+  const users = getStoredUsers();
+  const filtered = users.filter(u => u.id !== userId || u.role !== 'admin_staff');
+  if (filtered.length !== users.length) {
+    saveUsers(filtered);
+    return true;
+  }
+  return false;
+};
+
+export const deleteStudentUser = (userId: string): boolean => {
+  const users = getStoredUsers();
+  const userToDelete = users.find(u => u.id === userId);
+  
+  const filtered = users.filter(u => u.id !== userId || u.role !== 'student');
+  if (filtered.length !== users.length) {
+    saveUsers(filtered);
+    
+    // Also remove from mock DB if exists
+    if (userToDelete?.studentId && MOCK_STUDENT_DB[userToDelete.studentId]) {
+        delete MOCK_STUDENT_DB[userToDelete.studentId];
+    }
+    
+    return true;
+  }
+  return false;
 };
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {

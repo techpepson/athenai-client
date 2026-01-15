@@ -202,7 +202,7 @@ export const StaffForm = () => {
                                   <FormLabel>Courses Taught</FormLabel>
                                   <FormControl>
                                      <MultiSelect
-                                        options={MOCK_COURSES}
+                                        options={MOCK_COURSES.map(c => ({ label: c.name, value: c.id }))}
                                         selected={field.value}
                                         onChange={field.onChange}
                                         placeholder="Select courses..."
@@ -231,4 +231,4 @@ export const StaffForm = () => {
             </Form>
         </div>
     );
-};
+}

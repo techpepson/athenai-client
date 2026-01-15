@@ -16,6 +16,7 @@ import Analytics from "./pages/Analytics";
 import Notifications from "./pages/Notifications";
 import Settings from "./pages/Settings";
 import StaffManagement from "./pages/StaffManagement";
+import AdminManagement from "./pages/AdminManagement";
 import ClassRepManagement from "./pages/ClassRepManagement";
 import NotFound from "./pages/NotFound";
 
@@ -43,13 +44,18 @@ const App = () => (
                 <Route path="/analytics" element={<Analytics />} />
                 <Route path="/notifications" element={<Notifications />} />
                 <Route path="/settings" element={<Settings />} />
-                <Route path="/staff" element={
+                <Route path="/admins" element={
                   <ProtectedRoute allowedRoles={['super_admin']}>
+                    <AdminManagement />
+                  </ProtectedRoute>
+                } />
+                <Route path="/staff" element={
+                  <ProtectedRoute allowedRoles={['super_admin', 'admin_staff']}>
                     <StaffManagement />
                   </ProtectedRoute>
                 } />
                 <Route path="/class-reps" element={
-                  <ProtectedRoute allowedRoles={['super_admin', 'staff']}>
+                  <ProtectedRoute allowedRoles={['super_admin', 'staff', 'admin_staff']}>
                     <ClassRepManagement />
                   </ProtectedRoute>
                 } />
