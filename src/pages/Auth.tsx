@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { StudentForm } from '@/components/auth/StudentForm';
 import { StaffForm } from '@/components/auth/StaffForm';
+import { KioskScanner } from '@/components/ui/kiosk-scanner';
 
 const Auth = () => {
   const [email, setEmail] = useState('');
@@ -221,36 +222,16 @@ const Auth = () => {
               </div>
           ) : (
             /* Default Kiosk Visual for Role Selection */
-            <div className="w-full h-full relative flex items-center justify-center p-12">
-              {/* Force Dark Background Pattern for Contrast */}
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black opacity-80" />
-              <div className="absolute inset-0 opacity-20 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] mix-blend-overlay" />
-              
-              <div className="relative w-full max-w-lg h-[75%] rounded-3xl overflow-hidden border-4 border-primary/50 animate-pulse-glow shadow-2xl bg-gradient-to-br from-secondary/20 to-transparent backdrop-blur-sm z-10">
-                
-                {/* Scanning overlay */}
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="w-64 h-64 border-2 border-primary/70 rounded-2xl relative z-10">
-                    {/* Corner markers */}
-                    <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-primary rounded-tl-lg -translate-x-0.5 -translate-y-0.5" />
-                    <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-primary rounded-tr-lg translate-x-0.5 -translate-y-0.5" />
-                    <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-primary rounded-bl-lg -translate-x-0.5 translate-y-0.5" />
-                    <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-primary rounded-br-lg translate-x-0.5 translate-y-0.5" />
-                  </div>
-                </div>
-
-                {/* Slow Scanning line */}
-                <div className="absolute inset-x-0 h-1 bg-gradient-to-r from-transparent via-primary to-transparent animate-[scan-vertical_4s_ease-in-out_infinite] z-20 shadow-[0_0_15px_rgba(59,130,246,0.5)]" />
-
-                {/* Scanned Content (App Name) */}
-                <div className="absolute inset-0 flex flex-col items-center justify-center z-0">
-                  <div className="w-24 h-24 mb-6 rounded-3xl bg-primary/20 flex items-center justify-center backdrop-blur-md border border-primary/30 shadow-glow">
-                   <img src="/comasIcon.png" alt="FaceTrack" className="w-14 h-14 object-contain contrast-125" />
-                  </div>
-                  <h1 className="text-5xl font-bold tracking-tight text-white drop-shadow-lg">FaceTrack</h1>
-                  <p className="text-base text-slate-300 mt-3 font-medium tracking-wide">Identity Verification System</p>
-                </div>
-              </div>
+            <div className="w-full h-full flex items-center justify-center">
+                 <KioskScanner isScanning={true} status="scanning" className="p-0">
+                    <div className="flex flex-col items-center justify-center text-center p-6">
+                        <div className="w-24 h-24 mb-6 rounded-3xl bg-primary/20 flex items-center justify-center backdrop-blur-md border border-primary/30 shadow-glow">
+                           <img src="/comasIcon.png" alt="FaceTrack" className="w-14 h-14 object-contain contrast-125" />
+                        </div>
+                        <h1 className="text-5xl font-bold tracking-tight text-white drop-shadow-lg">FaceTrack</h1>
+                        <p className="text-base text-slate-300 mt-3 font-medium tracking-wide">Identity Verification System</p>
+                    </div>
+                 </KioskScanner>
             </div>
           )}
         </div>
