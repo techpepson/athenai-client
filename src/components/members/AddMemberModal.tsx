@@ -18,19 +18,26 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { Camera, Upload, User } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { addStudentUser, addStaffUserComplete } from '@/contexts/AuthContext';
+import { addStudentUser, addStaffUserComplete, MOCK_DEPARTMENTS } from '@/contexts/AuthContext';
 
 interface AddMemberModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
+// Role options
+const ROLE_OPTIONS = [
+  { label: 'Student', value: 'student' },
+  { label: 'Staff', value: 'staff' },
+  { label: 'Admin Staff', value: 'admin_staff' },
+] as const;
+
 export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
   const [isMinor, setIsMinor] = useState(false);
   const [captureMode, setCaptureMode] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState<'student' | 'staff'>('student');
+  const [role, setRole] = useState<'student' | 'staff' | 'admin_staff'>('student');
   const [department, setDepartment] = useState('');
   const [idNumber, setIdNumber] = useState('');
   const { toast } = useToast();
@@ -42,18 +49,26 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
     if (role === 'student') {
         // For mock purposes, using 'cs' as program if dept not set correctly for student schema
         result = addStudentUser(idNumber, email, name, department || 'cs', '1');
-    } else {
+    } else if (role === 'staff') {
         result = addStaffUserComplete(idNumber, email, name, department || 'cs');
+    } else if (role === 'admin_staff') {
+        // Add admin staff logic here (you'll need to create this function in AuthContext)
+        toast({
+            title: 'Info',
+            description: 'Admin staff creation requires super admin privileges.',
+            variant: 'default',
+        });
+        return;
     }
 
-    if (result.success) {
+    if (result && result.success) {
         toast({
             title: 'Member Added',
             description: `${name} has been added successfully.`,
         });
         resetForm();
         onOpenChange(false);
-    } else {
+    } else if (result) {
         toast({
             title: 'Error',
             description: result.error,
@@ -127,28 +142,31 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
             </div>
             <div className="space-y-2">
               <Label htmlFor="role">Role</Label>
-              <Select value={role} onValueChange={(v: 'student' | 'staff') => setRole(v)}>
+              <Select value={role} onValueChange={(v: typeof role) => setRole(v)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select role" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="student">Student</SelectItem>
-                  <SelectItem value="staff">Staff</SelectItem>
+                  {ROLE_OPTIONS.map(option => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="department">Department</Label>
+              <Label htmlFor="department">Department/Program</Label>
               <Select value={department} onValueChange={setDepartment}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select department" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="cs">Computer Science</SelectItem>
-                  <SelectItem value="eng">Engineering</SelectItem>
-                  <SelectItem value="bus">Business</SelectItem>
-                  <SelectItem value="med">Medicine</SelectItem>
-                  <SelectItem value="arts">Arts</SelectItem>
+                  {MOCK_DEPARTMENTS.map(dept => (
+                    <SelectItem key={dept.value} value={dept.value}>
+                      {dept.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -156,43 +174,13 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
               <Label htmlFor="studentId">ID Number</Label>
               <Input 
                 id="studentId" 
-                placeholder="e.g., CS2024001" 
+                placeholder={role === 'student' ? 'e.g., 123456' : 'e.g., STF001'} 
                 required
                 value={idNumber}
                 onChange={(e) => setIdNumber(e.target.value)}
               />
             </div>
           </div>
-
-          {/* Minor Toggle */}
-          {/* <div className="flex items-center justify-between p-4 bg-secondary/50 rounded-lg">
-            <div>
-              <p className="font-medium text-sm text-foreground">Is this member a minor?</p>
-              <p className="text-xs text-muted-foreground">Parent/guardian contact will be required</p>
-            </div>
-            <Switch checked={isMinor} onCheckedChange={setIsMinor} />
-          </div>
-
-          Guardian Info
-          {isMinor && (
-            <div className="space-y-4 p-4 bg-warning/5 border border-warning/20 rounded-lg animate-fade-in">
-              <p className="font-medium text-sm text-foreground">Parent/Guardian Information</p>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="guardianName">Guardian Name</Label>
-                  <Input id="guardianName" placeholder="Enter name" required={isMinor} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="guardianEmail">Guardian Email</Label>
-                  <Input id="guardianEmail" type="email" placeholder="email@example.com" required={isMinor} />
-                </div>
-                <div className="space-y-2 col-span-2">
-                  <Label htmlFor="guardianPhone">Guardian Phone</Label>
-                  <Input id="guardianPhone" type="tel" placeholder="+1 555-0100" required={isMinor} />
-                </div>
-              </div>
-            </div>
-          )} */}
 
           {/* Actions */}
           <div className="flex justify-end gap-3 pt-4">

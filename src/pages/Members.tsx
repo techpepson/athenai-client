@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Filter, Upload, Download } from 'lucide-react';
+import { Plus, Search, Filter, Upload, Download, Building2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -15,7 +15,14 @@ import { ViewAttendanceModal } from '@/components/members/ViewAttendanceModal';
 import { EditMemberModal } from '@/components/members/EditMemberModal';
 import { DeleteMemberDialog } from '@/components/members/DeleteMemberDialog';
 import { Member } from '@/types/attendance';
-import { useAuth, getAllUsers, deleteStudentUser, deleteStaffUser, deleteAdminStaffUser } from '@/contexts/AuthContext';
+import { 
+  useAuth, 
+  getAllUsers, 
+  deleteStudentUser, 
+  deleteStaffUser, 
+  deleteAdminStaffUser,
+  MOCK_DEPARTMENTS 
+} from '@/contexts/AuthContext';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,10 +35,20 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 
+// Role filter options
+const ROLE_FILTER_OPTIONS = [
+  { label: 'All Roles', value: 'all' },
+  { label: 'Students', value: 'student' },
+  { label: 'Staff', value: 'staff' },
+  { label: 'Admin Staff', value: 'admin_staff' },
+  { label: 'Class Reps', value: 'class_rep' },
+];
+
 const Members = () => {
   const [members, setMembers] = useState<Member[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
+  const [departmentFilter, setDepartmentFilter] = useState<string>('all');
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [viewAttendanceOpen, setViewAttendanceOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -118,7 +135,10 @@ const Members = () => {
     // Exact match for role filter or 'all'
     const matchesRole = roleFilter === 'all' || member.role === roleFilter;
     
-    return matchesSearch && matchesRole;
+    // Match department filter
+    const matchesDepartment = departmentFilter === 'all' || member.department === departmentFilter;
+    
+    return matchesSearch && matchesRole && matchesDepartment;
   });
 
   return (
@@ -162,20 +182,40 @@ const Members = () => {
             className="pl-10"
           />
         </div>
+        
+        {/* Role Filter */}
         <Select value={roleFilter} onValueChange={setRoleFilter}>
           <SelectTrigger className="w-40">
             <Filter className="w-4 h-4 mr-2" />
             <SelectValue placeholder="Filter by role" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Roles</SelectItem>
-            <SelectItem value="student">Students</SelectItem>
-            <SelectItem value="staff">Staff</SelectItem>
-            <SelectItem value="admin_staff">Admins</SelectItem>
+            {ROLE_FILTER_OPTIONS.map(option => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
-        <div className="text-sm text-muted-foreground">
-          {filteredMembers.length} members
+
+        {/* Department Filter */}
+        <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
+          <SelectTrigger className="w-52">
+            <Building2 className="w-4 h-4 mr-2" />
+            <SelectValue placeholder="Filter by department" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Departments</SelectItem>
+            {MOCK_DEPARTMENTS.map(dept => (
+              <SelectItem key={dept.value} value={dept.value}>
+                {dept.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <div className="text-sm text-muted-foreground whitespace-nowrap">
+          {filteredMembers.length} member{filteredMembers.length !== 1 ? 's' : ''}
         </div>
       </div>
 
@@ -196,6 +236,11 @@ const Members = () => {
       {filteredMembers.length === 0 && (
         <div className="text-center py-12">
           <p className="text-muted-foreground">No members found matching your criteria.</p>
+          {(searchQuery || roleFilter !== 'all' || departmentFilter !== 'all') && (
+            <p className="text-sm text-muted-foreground mt-2">
+              Try adjusting your filters or search terms.
+            </p>
+          )}
         </div>
       )}
 
