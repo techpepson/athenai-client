@@ -165,7 +165,7 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
           </div>
 
           {/* Minor Toggle */}
-          <div className="flex items-center justify-between p-4 bg-secondary/50 rounded-lg">
+          {/* <div className="flex items-center justify-between p-4 bg-secondary/50 rounded-lg">
             <div>
               <p className="font-medium text-sm text-foreground">Is this member a minor?</p>
               <p className="text-xs text-muted-foreground">Parent/guardian contact will be required</p>
@@ -173,7 +173,7 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
             <Switch checked={isMinor} onCheckedChange={setIsMinor} />
           </div>
 
-          {/* Guardian Info */}
+          Guardian Info
           {isMinor && (
             <div className="space-y-4 p-4 bg-warning/5 border border-warning/20 rounded-lg animate-fade-in">
               <p className="font-medium text-sm text-foreground">Parent/Guardian Information</p>
@@ -192,7 +192,7 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
                 </div>
               </div>
             </div>
-          )}
+          )} */}
 
           {/* Actions */}
           <div className="flex justify-end gap-3 pt-4">

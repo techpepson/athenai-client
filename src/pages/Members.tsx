@@ -2,6 +2,13 @@ import { useState, useEffect } from 'react';
 import { Plus, Search, Filter, Upload, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { MemberCard } from '@/components/members/MemberCard';
 import { AddMemberModal } from '@/components/members/AddMemberModal';
 import { ViewAttendanceModal } from '@/components/members/ViewAttendanceModal';
