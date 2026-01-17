@@ -11,17 +11,25 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
-import { addStaffUser, deleteStaffUser, getAllUsers, User } from '@/contexts/AuthContext';
+import { addStaffUser, deleteStaffUser, getAllUsers, User, MOCK_DEPARTMENTS, MOCK_COURSES } from '@/contexts/AuthContext';
+import { MultiSelect } from '@/components/ui/multi-select';
 
 const StaffManagement = () => {
   const [staffList, setStaffList] = useState<User[]>([]);
@@ -30,6 +38,9 @@ const StaffManagement = () => {
   const [selectedStaff, setSelectedStaff] = useState<User | null>(null);
   const [newStaffName, setNewStaffName] = useState('');
   const [newStaffEmail, setNewStaffEmail] = useState('');
+  const [selectedDept, setSelectedDept] = useState('');
+  const [selectedCourses, setSelectedCourses] = useState<string[]>([]);
+  
   const [generatedPassword, setGeneratedPassword] = useState('');
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
@@ -54,17 +65,17 @@ const StaffManagement = () => {
   };
 
   const handleAddStaff = () => {
-    if (!newStaffName.trim() || !newStaffEmail.trim()) {
+    if (!newStaffName.trim() || !newStaffEmail.trim() || !selectedDept) {
       toast({
         title: 'Error',
-        description: 'Please fill in all fields',
+        description: 'Please fill in all fields (Name, Email, Department)',
         variant: 'destructive',
       });
       return;
     }
 
     const tempPassword = generateTempPassword();
-    const result = addStaffUser(newStaffEmail, newStaffName, tempPassword);
+    const result = addStaffUser(newStaffEmail, newStaffName, tempPassword, selectedDept, selectedCourses);
 
     if (result.success) {
       setGeneratedPassword(tempPassword);
@@ -107,8 +118,21 @@ const StaffManagement = () => {
     setAddModalOpen(false);
     setNewStaffName('');
     setNewStaffEmail('');
+    setSelectedDept('');
+    setSelectedCourses([]);
     setGeneratedPassword('');
   };
+
+  // Filter courses by selected department
+  const filteredCourses = selectedDept 
+    ? MOCK_COURSES.filter(c => c.department === selectedDept)
+    : [];
+    
+  // Map courses to options for MultiSelect
+  const courseOptions = filteredCourses.map(c => ({
+      label: c.name,
+      value: c.id
+  }));
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -153,6 +177,11 @@ const StaffManagement = () => {
                   <div>
                     <p className="font-medium text-foreground">{staff.name}</p>
                     <p className="text-sm text-muted-foreground">{staff.email}</p>
+                    {staff.department && (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                            {MOCK_DEPARTMENTS.find(d => d.value === staff.department)?.label}
+                        </p>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -210,6 +239,35 @@ const StaffManagement = () => {
                   onChange={(e) => setNewStaffEmail(e.target.value)}
                 />
               </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="department">Department</Label>
+                <Select value={selectedDept} onValueChange={(val) => {
+                    setSelectedDept(val);
+                    setSelectedCourses([]); // Reset courses when dept changes
+                }}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select Department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MOCK_DEPARTMENTS.map(dept => (
+                        <SelectItem key={dept.value} value={dept.value}>{dept.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+             <div className="space-y-2">
+                <Label htmlFor="courses">Courses Taught</Label>
+                <MultiSelect
+                  options={courseOptions}
+                  selected={selectedCourses}
+                  onChange={setSelectedCourses}
+                  placeholder={selectedDept ? "Select courses..." : "Select Department first"}
+                  className="w-full"
+                />
+             </div>
+
               <DialogFooter>
                 <Button variant="outline" onClick={closeAddModal}>Cancel</Button>
                 <Button variant="gradient" onClick={handleAddStaff}>Add Staff</Button>

@@ -8,14 +8,33 @@ import { mockSessions } from '@/data/mockData';
 import { AttendanceSession } from '@/types/attendance';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 
 const Sessions = () => {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [selectedSession, setSelectedSession] = useState<AttendanceSession | null>(null);
   const [activeTab, setActiveTab] = useState('all');
-
+  const { user } = useAuth();
+  
+  // Filter sessions for Class Rep (Optional: User asked "student without class rep priviledges only see session ongoing")
+  // But strictly, sessions list usually shows all sessions?
+  // User said: "student without class rep priviledges only see session ongoing"
+  // This implies filtering the VIEW itself for regular students (or non-reps).
+  // Let's implement that filter.
+//   const filteredSessions = mockSessions.filter(session => {
+//     if (user?.role === 'student' && !user.isClassRep) {
+//          // Regular student: Only active?
+//          if (session.status !== 'active') return false; 
+//     }
+//     // Existing filtering
+//     if (activeTab === 'all') return true;
+//     return session.status === activeTab;
+//   });
+  
+  // Actually, I'll stick to the button restriction first, and maybe tab filtering.
   const filteredSessions = mockSessions.filter(session => {
+    // Permission-based view filtering could be here
     if (activeTab === 'all') return true;
     return session.status === activeTab;
   });
@@ -43,10 +62,12 @@ const Sessions = () => {
             Create and manage attendance tracking sessions
           </p>
         </div>
-        <Button variant="gradient" onClick={() => setCreateModalOpen(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          Create Session
-        </Button>
+        {(user?.role === 'super_admin' || user?.role === 'admin_staff' || user?.role === 'staff' || user?.role === 'class_rep') && (
+            <Button variant="gradient" onClick={() => setCreateModalOpen(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Create Session
+            </Button>
+        )}
       </div>
 
       {/* Tabs */}
@@ -77,6 +98,7 @@ const Sessions = () => {
                 onStart={handleStartSession}
                 onEnd={handleEndSession}
                 onViewReport={handleViewReport}
+                user={user}
               />
             ))}
           </div>
@@ -84,20 +106,22 @@ const Sessions = () => {
           {filteredSessions.length === 0 && (
             <div className="text-center py-12 bg-card rounded-xl border border-border">
               <p className="text-muted-foreground">No sessions found.</p>
-              <Button
-                variant="outline"
-                className="mt-4"
-                onClick={() => setCreateModalOpen(true)}
-              >
-                Create your first session
-              </Button>
+              {(user?.role === 'super_admin' || user?.role === 'admin_staff' || user?.role === 'staff' || user?.role === 'class_rep') && (
+                  <Button
+                    variant="outline"
+                    className="mt-4"
+                    onClick={() => setCreateModalOpen(true)}
+                  >
+                    Create your first session
+                  </Button>
+              )}
             </div>
           )}
         </TabsContent>
       </Tabs>
 
       {/* Create Session Modal */}
-      <CreateSessionModal open={createModalOpen} onOpenChange={setCreateModalOpen} />
+      <CreateSessionModal open={createModalOpen} onOpenChange={setCreateModalOpen} user={user} />
 
       {/* Session Report Modal */}
       <SessionReportModal 

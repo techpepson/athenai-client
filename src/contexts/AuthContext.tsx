@@ -19,6 +19,7 @@ export interface User {
     courseName: string;
     department: string;
   };
+  coursesTaught?: string[];
 }
 
 export interface Course {
@@ -151,7 +152,13 @@ const saveUsers = (users: (User & { password: string })[]) => {
   localStorage.setItem('facetrack_users', JSON.stringify(users));
 };
 
-export const addStaffUser = (email: string, name: string, tempPassword: string): { success: boolean; error?: string } => {
+export const addStaffUser = (
+    email: string, 
+    name: string, 
+    tempPassword: string,
+    department: string,
+    coursesTaught: string[]
+): { success: boolean; error?: string } => {
   const users = getStoredUsers();
   if (users.find(u => u.email === email)) {
     return { success: false, error: 'User with this email already exists' };
@@ -164,6 +171,8 @@ export const addStaffUser = (email: string, name: string, tempPassword: string):
     role: 'staff',
     password: tempPassword,
     mustChangePassword: true,
+    department,
+    coursesTaught,
   };
   
   users.push(newUser);

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -18,20 +18,40 @@ import {
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { toast } from 'sonner';
 import { LogIn, LogOut } from 'lucide-react';
+import { User, MOCK_COURSES, MOCK_DEPARTMENTS } from '@/contexts/AuthContext';
 
 interface CreateSessionModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  user: User | null;
 }
 
-export const CreateSessionModal = ({ open, onOpenChange }: CreateSessionModalProps) => {
+export const CreateSessionModal = ({ open, onOpenChange, user }: CreateSessionModalProps) => {
   const [attendanceType, setAttendanceType] = useState<'checkin' | 'checkout'>('checkin');
+  const [selectedDept, setSelectedDept] = useState('');
+  const [selectedCourse, setSelectedCourse] = useState('');
+  
+  // Pre-fill for Class Rep
+  useEffect(() => {
+    if (open && user?.isClassRep && user?.classRepData) {
+        setSelectedDept(user.classRepData.department);
+        setSelectedCourse(user.classRepData.courseId);
+    }
+  }, [open, user]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    // Logic would go here to actually create the session with selectedCourse/Dept
     toast.success(`${attendanceType === 'checkin' ? 'Check-in' : 'Check-out'} session created successfully!`);
     onOpenChange(false);
   };
+  
+  const isClassRep = user?.isClassRep;
+
+  // Filter courses based on department
+  const filteredCourses = selectedDept 
+      ? MOCK_COURSES.filter(c => c.department === selectedDept)
+      : MOCK_COURSES;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -96,19 +116,41 @@ export const CreateSessionModal = ({ open, onOpenChange }: CreateSessionModalPro
             </div>
             <div className="space-y-2">
               <Label htmlFor="department">Department</Label>
-              <Select>
+              <Select 
+                value={selectedDept} 
+                onValueChange={setSelectedDept}
+                disabled={isClassRep}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select department" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Departments</SelectItem>
-                  <SelectItem value="cs">Computer Science</SelectItem>
-                  <SelectItem value="eng">Engineering</SelectItem>
-                  <SelectItem value="bus">Business</SelectItem>
-                  <SelectItem value="med">Medicine</SelectItem>
+                  {MOCK_DEPARTMENTS.map(dept => (
+                      <SelectItem key={dept.value} value={dept.value}>{dept.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
+          </div>
+          
+          {/* New Course Selection */}
+          <div className="space-y-2">
+              <Label htmlFor="course">Course</Label>
+              <Select 
+                value={selectedCourse} 
+                onValueChange={setSelectedCourse}
+                disabled={isClassRep}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select course" />
+                </SelectTrigger>
+                <SelectContent>
+                   {filteredCourses.map(course => (
+                       <SelectItem key={course.id} value={course.id}>{course.name}</SelectItem>
+                   ))}
+                </SelectContent>
+              </Select>
           </div>
 
           <div className="space-y-2">

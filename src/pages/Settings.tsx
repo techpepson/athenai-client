@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,12 +11,24 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Building, Bell, Shield, Monitor, Clock, Save, Phone, Upload, ImageIcon } from 'lucide-react';
+import {
+    Accordion,
+    AccordionContent,
+    AccordionItem,
+    AccordionTrigger,
+} from "@/components/ui/accordion";
+import { Building, Bell, Shield, Monitor, Clock, Save, Phone, Upload, ImageIcon, BookOpen, Users } from 'lucide-react';
 import { toast } from 'sonner';
+import { MOCK_DEPARTMENTS, MOCK_COURSES, getAllUsers, User } from '@/contexts/AuthContext';
 
 const Settings = () => {
   const [adminPhoneNumber, setAdminPhoneNumber] = useState('');
   const [organizationLogo, setOrganizationLogo] = useState<string | null>(null);
+  const [staffList, setStaffList] = useState<User[]>([]);
+
+  useEffect(() => {
+    setStaffList(getAllUsers().filter(u => u.role === 'staff'));
+  }, []);
 
   const handleSave = () => {
     // In a real app, save these to localStorage or backend
@@ -40,6 +52,11 @@ const Settings = () => {
 
   const removeLogo = () => {
     setOrganizationLogo(null);
+  };
+  
+  // Helper to get staff for a course
+  const getStaffForCourse = (courseId: string) => {
+      return staffList.filter(s => s.coursesTaught?.includes(courseId));
   };
 
   return (
@@ -136,15 +153,70 @@ const Settings = () => {
             </div>
 
             <div className="border-t border-border pt-6">
-              <h3 className="text-lg font-semibold text-foreground mb-4">Departments</h3>
-              <div className="flex flex-wrap gap-2">
-                {['Computer Science', 'Engineering', 'Business', 'Medicine', 'Arts'].map(dept => (
-                  <span key={dept} className="px-3 py-1 bg-secondary rounded-full text-sm text-secondary-foreground">
-                    {dept}
-                  </span>
-                ))}
-                <Button variant="outline" size="sm">+ Add Department</Button>
+              <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-foreground">Departments & Courses</h3>
+                  <div className="flex gap-2">
+                      <Button variant="outline" size="sm">+ Add Department</Button>
+                      <Button variant="outline" size="sm">+ Add Course</Button>
+                  </div>
               </div>
+              
+              <Accordion type="single" collapsible className="w-full">
+                {MOCK_DEPARTMENTS.map(dept => {
+                    const deptCourses = MOCK_COURSES.filter(c => c.department === dept.value);
+                    return (
+                        <AccordionItem key={dept.value} value={dept.value}>
+                            <AccordionTrigger className="hover:no-underline">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-primary/10 rounded-lg text-primary">
+                                        <Building className="w-4 h-4" />
+                                    </div>
+                                    <span className="font-medium text-base">{dept.label}</span>
+                                    <span className="text-xs text-muted-foreground font-normal ml-2">
+                                        {deptCourses.length} Courses
+                                    </span>
+                                </div>
+                            </AccordionTrigger>
+                            <AccordionContent className="pl-4">
+                                <div className="space-y-3 pt-2">
+                                    {deptCourses.map(course => {
+                                        const lecturers = getStaffForCourse(course.id);
+                                        return (
+                                            <div key={course.id} className="border border-border rounded-lg p-3 bg-secondary/10">
+                                                <div className="flex items-start justify-between">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <BookOpen className="w-4 h-4 text-muted-foreground" />
+                                                        <span className="font-medium">{course.name}</span>
+                                                    </div>
+                                                </div>
+                                                <div className="pl-6">
+                                                     <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                                                        <Users className="w-3 h-3" /> Assigned Lecturers:
+                                                     </p>
+                                                     {lecturers.length > 0 ? (
+                                                         <div className="flex flex-wrap gap-2">
+                                                             {lecturers.map(l => (
+                                                                 <span key={l.id} className="text-xs bg-background border border-border px-2 py-0.5 rounded-full">
+                                                                     {l.name}
+                                                                 </span>
+                                                             ))}
+                                                         </div>
+                                                     ) : (
+                                                         <span className="text-xs text-muted-foreground italic">No lecturers assigned</span>
+                                                     )}
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
+                                    {deptCourses.length === 0 && (
+                                        <p className="text-sm text-muted-foreground italic pl-4">No courses available.</p>
+                                    )}
+                                </div>
+                            </AccordionContent>
+                        </AccordionItem>
+                    );
+                })}
+              </Accordion>
             </div>
           </div>
         </TabsContent>

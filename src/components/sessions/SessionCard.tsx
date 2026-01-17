@@ -3,15 +3,17 @@ import { cn } from '@/lib/utils';
 import { Clock, MapPin, Users, Play, Pause, CheckCircle, LogIn, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { User } from '@/contexts/AuthContext';
 
 interface SessionCardProps {
   session: AttendanceSession;
   onStart?: (session: AttendanceSession) => void;
   onEnd?: (session: AttendanceSession) => void;
   onViewReport?: (session: AttendanceSession) => void;
+  user: User | null;
 }
 
-export const SessionCard = ({ session, onStart, onEnd, onViewReport }: SessionCardProps) => {
+export const SessionCard = ({ session, onStart, onEnd, onViewReport, user }: SessionCardProps) => {
   const progress = (session.presentCount / session.expectedCount) * 100;
 
   const typeColors = {
@@ -103,14 +105,24 @@ export const SessionCard = ({ session, onStart, onEnd, onViewReport }: SessionCa
       {/* Actions */}
       <div className="flex gap-2">
         {session.status === 'scheduled' && (
-          <Button className="flex-1" variant="gradient" onClick={() => onStart?.(session)}>
+          <Button 
+            className="flex-1" 
+            variant="gradient" 
+            onClick={() => onStart?.(session)}
+            disabled={user?.role === 'student' || (user?.role === 'class_rep' && session.courseId !== user?.classRepData?.courseId)}
+          >
             <Play className="w-4 h-4 mr-2" />
             Start Session
           </Button>
         )}
         {session.status === 'active' && (
           <>
-            <Button className="flex-1" variant="outline" onClick={() => onEnd?.(session)}>
+            <Button 
+                className="flex-1" 
+                variant="outline" 
+                onClick={() => onEnd?.(session)}
+                disabled={user?.role === 'student' || (user?.role === 'class_rep' && session.courseId !== user?.classRepData?.courseId)}
+            >
               <Pause className="w-4 h-4 mr-2" />
               End Session
             </Button>

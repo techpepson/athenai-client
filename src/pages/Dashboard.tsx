@@ -1,4 +1,4 @@
-import { Users, CalendarClock, CheckCircle2, AlertTriangle, Clock, UserX } from 'lucide-react';
+import { Users, CalendarClock, CheckCircle2, AlertTriangle, Clock, UserX, GraduationCap } from 'lucide-react';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { ActiveSessionCard } from '@/components/dashboard/ActiveSessionCard';
 import { RecentActivityItem } from '@/components/dashboard/RecentActivityItem';
@@ -6,6 +6,7 @@ import { AttendanceChart } from '@/components/dashboard/AttendanceChart';
 import { EarlyArrivalsCard } from '@/components/dashboard/EarlyArrivalsCard';
 import { mockStats, mockSessions, mockAlerts, mockEarlyArrivals } from '@/data/mockData';
 import { useAuth } from '@/contexts/AuthContext';
+import { Badge } from '@/components/ui/badge';
 
 const Dashboard = () => {
   const activeSessions = mockSessions.filter(s => s.status === 'active' || s.status === 'scheduled');
@@ -22,8 +23,21 @@ const Dashboard = () => {
     <div className="space-y-6 animate-fade-in">
       {/* Page Header */}
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+        <div className="flex items-center gap-3">
+             <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+             {user?.isClassRep && (
+                <Badge variant="secondary" className="gap-1">
+                    <GraduationCap className="w-3 h-3" />
+                    Class Representative
+                </Badge>
+             )}
+        </div>
         <p className="text-muted-foreground mt-1">{welcomeMessage}</p>
+        {user?.isClassRep && (
+             <p className="text-xs text-primary mt-1">
+                Course: {user?.classRepData?.courseName} ({user?.classRepData?.department?.toUpperCase()})
+             </p>
+        )}
       </div>
 
       {/* Stats Grid */}

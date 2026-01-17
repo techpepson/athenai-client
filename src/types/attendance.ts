@@ -28,6 +28,8 @@ export interface AttendanceSession {
   location?: string;
   expectedCount: number;
   presentCount: number;
+  courseId?: string;
+  courseName?: string;
 }
 
 export interface AttendanceRecord {
