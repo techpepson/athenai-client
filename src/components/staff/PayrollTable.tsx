@@ -113,39 +113,50 @@ const StaffListTable = ({
   <table className="w-full">
     <thead className="bg-muted/50">
       <tr>
-        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider min-w-[250px]">
           Staff Member
         </th>
-        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider min-w-[180px]">
           Modules
         </th>
-        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider min-w-[100px]">
           Hours Worked
         </th>
-        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider min-w-[120px]">
           Total Earnings
         </th>
-        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider min-w-[100px]">
           Status
         </th>
-        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider min-w-[100px]">
           Actions
         </th>
       </tr>
     </thead>
     <tbody className="divide-y divide-border">
-      {Object.entries(groupedSessions).map(
-        ([staffId, staffSessions]: [string, Session[]]) => (
-          <StaffRowWithExpansion
-            key={staffId}
-            staffId={staffId}
-            staffSessions={staffSessions}
-            isExpanded={expandedStaff.has(staffId)}
-            onToggleExpansion={onToggleExpansion}
-            onPayStaff={onPayStaff}
-            onSelectStaff={onSelectStaff}
-          />
-        ),
+      {Object.entries(groupedSessions).length > 0 ? (
+        Object.entries(groupedSessions).map(
+          ([staffId, staffSessions]: [string, Session[]]) => (
+            <StaffRowWithExpansion
+              key={staffId}
+              staffId={staffId}
+              staffSessions={staffSessions}
+              isExpanded={expandedStaff.has(staffId)}
+              onToggleExpansion={onToggleExpansion}
+              onPayStaff={onPayStaff}
+              onSelectStaff={onSelectStaff}
+            />
+          ),
+        )
+      ) : (
+        <tr>
+          <td
+            colSpan={6}
+            className="px-6 py-8 text-center text-muted-foreground"
+          >
+            No staff data available
+          </td>
+        </tr>
       )}
     </tbody>
   </table>
@@ -247,11 +258,11 @@ const StaffRowWithExpansion = ({
   return (
     <>
       <tr className="hover:bg-muted/30 transition-colors">
-        <td className="px-6 py-4">
+        <td className="px-6 py-4 min-w-[250px]">
           <div className="flex items-center gap-3">
             <button
               onClick={() => onToggleExpansion(staffId)}
-              className="p-1 hover:bg-muted rounded transition-colors"
+              className="p-1 hover:bg-muted rounded transition-colors flex-shrink-0"
             >
               {isExpanded ? (
                 <ChevronDown className="w-4 h-4 text-muted-foreground" />
@@ -259,61 +270,61 @@ const StaffRowWithExpansion = ({
                 <ChevronRight className="w-4 h-4 text-muted-foreground" />
               )}
             </button>
-            <div className="w-10 h-10 rounded-full bg-cyan-500/10 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-full bg-cyan-500/10 flex items-center justify-center flex-shrink-0">
               <span className="text-sm font-medium text-cyan-500">
                 {staff.staffName.charAt(0)}
               </span>
             </div>
-            <div>
-              <div className="font-medium text-foreground">
+            <div className="min-w-0 flex-1">
+              <div className="font-medium text-foreground truncate">
                 {staff.staffName}
               </div>
-              <div className="text-sm text-muted-foreground">
+              <div className="text-sm text-muted-foreground truncate">
                 {staff.staffName.toLowerCase().replace(" ", "")}@facetrack.com
               </div>
             </div>
           </div>
         </td>
-        <td className="px-6 py-4">
+        <td className="px-6 py-4 min-w-[180px]">
           <div className="flex flex-wrap gap-2">
             {uniqueCourses.slice(0, 2).map((course, idx) => (
               <span
                 key={idx}
-                className="px-3 py-1 bg-primary/10 text-primary text-xs rounded-full font-medium"
+                className="px-3 py-1 bg-primary/10 text-primary text-xs rounded-full font-medium whitespace-nowrap"
               >
                 {course}
               </span>
             ))}
             {uniqueCourses.length > 2 && (
-              <span className="text-xs text-muted-foreground">
+              <span className="text-xs text-muted-foreground whitespace-nowrap">
                 +{uniqueCourses.length - 2} more
               </span>
             )}
           </div>
         </td>
-        <td className="px-6 py-4 whitespace-nowrap">
+        <td className="px-6 py-4 min-w-[100px]">
           <div className="flex items-center gap-2 text-sm text-foreground">
-            <Clock className="w-4 h-4 text-muted-foreground" />
+            <Clock className="w-4 h-4 text-muted-foreground flex-shrink-0" />
             {totalHours.toFixed(1)}h
           </div>
         </td>
-        <td className="px-6 py-4 whitespace-nowrap">
+        <td className="px-6 py-4 min-w-[120px]">
           <div className="text-sm font-semibold text-emerald-600">
             ${totalEarnings.toFixed(2)}
           </div>
         </td>
-        <td className="px-6 py-4 whitespace-nowrap">
+        <td className="px-6 py-4 min-w-[100px]">
           {hasPending ? (
-            <span className="px-3 py-1 bg-amber-500/10 text-amber-600 text-xs rounded-full font-medium">
+            <span className="px-3 py-1 bg-amber-500/10 text-amber-600 text-xs rounded-full font-medium inline-block">
               Pending
             </span>
           ) : (
-            <span className="px-3 py-1 bg-emerald-500/10 text-emerald-600 text-xs rounded-full font-medium">
+            <span className="px-3 py-1 bg-emerald-500/10 text-emerald-600 text-xs rounded-full font-medium inline-block">
               No Earnings
             </span>
           )}
         </td>
-        <td className="px-6 py-4 whitespace-nowrap">
+        <td className="px-6 py-4 min-w-[100px]">
           <Button
             size="sm"
             variant="outline"
