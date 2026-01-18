@@ -1,6 +1,17 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  ReactNode,
+} from "react";
 
-export type UserRole = 'super_admin' | 'admin_staff' | 'staff' | 'class_rep' | 'student';
+export type UserRole =
+  | "super_admin"
+  | "admin_staff"
+  | "staff"
+  | "class_rep"
+  | "student";
 
 export interface User {
   id: string;
@@ -31,9 +42,15 @@ export interface Course {
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  login: (
+    email: string,
+    password: string,
+  ) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
-  changePassword: (oldPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
+  changePassword: (
+    oldPassword: string,
+    newPassword: string,
+  ) => Promise<{ success: boolean; error?: string }>;
 }
 
 export const getAllUsers = (): User[] => {
@@ -46,144 +63,199 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 // Mock users database - in production, this would be in a real database
 const MOCK_USERS: (User & { password: string })[] = [
   {
-    id: '1',
-    email: 'admin@facetrack.com',
-    name: 'Super Admin',
-    role: 'super_admin',
-    password: 'admin123',
+    id: "1",
+    email: "admin@facetrack.com",
+    name: "Super Admin",
+    role: "super_admin",
+    password: "admin123",
     mustChangePassword: false,
   },
   // Mock admin staff user (created by IT/super_admin)
   {
-    id: 'admin_staff_1',
-    email: 'adminstaff@facetrack.com',
-    name: 'Admin Staff',
-    role: 'admin_staff',
-    password: 'adminstaff123',
+    id: "admin_staff_1",
+    email: "adminstaff@facetrack.com",
+    name: "Admin Staff",
+    role: "admin_staff",
+    password: "adminstaff123",
     mustChangePassword: true, // Force password change on first login
   },
   // Mock student user
   {
-    id: 'student_1',
-    email: 'student@gmail.com',
-    name: 'Emmanuel Yawson',
-    role: 'student',
-    password: 'student123',
+    id: "student_1",
+    email: "student@gmail.com",
+    name: "Emmanuel Yawson",
+    role: "student",
+    password: "student123",
     mustChangePassword: false,
-    studentId: '123456',
-    program: 'cs',
-    semester: '1',
+    studentId: "123456",
+    program: "cs",
+    semester: "1",
   },
   // Mock staff user
   {
-    id: 'staff_1',
-    email: 'staff@gmail.com',
-    name: 'Dr Amenyaw Menu',
-    role: 'staff',
-    password: 'staff123',
+    id: "staff_1",
+    email: "staff@gmail.com",
+    name: "Dr Amenyaw Menu",
+    role: "staff",
+    password: "staff123",
     mustChangePassword: false,
-    staffId: 'STF001',
-    department: 'cs',
+    staffId: "STF001",
+    department: "cs",
   },
 ];
 
 // Mock data for student registration form
 export const MOCK_PROGRAMS = [
-  { label: 'Computer Science', value: 'cs' },
-  { label: 'Information Technology', value: 'it' },
-  { label: 'Software Engineering', value: 'se' },
+  { label: "Computer Science", value: "cs" },
+  { label: "Information Technology", value: "it" },
+  { label: "Software Engineering", value: "se" },
 ];
 
 export const MOCK_COURSES: Course[] = [
-  { id: 'ds', name: 'Data Structures', department: 'cs' },
-  { id: 'alg', name: 'Algorithms', department: 'cs' },
-  { id: 'db', name: 'Database Systems', department: 'cs' },
-  { id: 'web', name: 'Web Development', department: 'cs' },
-  { id: 'ai', name: 'Artificial Intelligence', department: 'cs' },
-  { id: 'os', name: 'Operating Systems', department: 'cs' },
-  { id: 'calc1', name: 'Calculus I', department: 'math' },
-  { id: 'lin_alg', name: 'Linear Algebra', department: 'math' },
-  { id: 'phy1', name: 'Physics I', department: 'phy' },
-  { id: 'circuits', name: 'Circuit Theory', department: 'ee' },
-  { id: 'thermo', name: 'Thermodynamics', department: 'me' },
-  { id: 'mgt101', name: 'Management 101', department: 'ba' },
+  { id: "ds", name: "Data Structures", department: "cs" },
+  { id: "alg", name: "Algorithms", department: "cs" },
+  { id: "db", name: "Database Systems", department: "cs" },
+  { id: "web", name: "Web Development", department: "cs" },
+  { id: "ai", name: "Artificial Intelligence", department: "cs" },
+  { id: "os", name: "Operating Systems", department: "cs" },
+  { id: "calc1", name: "Calculus I", department: "math" },
+  { id: "lin_alg", name: "Linear Algebra", department: "math" },
+  { id: "phy1", name: "Physics I", department: "phy" },
+  { id: "circuits", name: "Circuit Theory", department: "ee" },
+  { id: "thermo", name: "Thermodynamics", department: "me" },
+  { id: "mgt101", name: "Management 101", department: "ba" },
 ];
 
 // Mock data for staff registration form
 export const MOCK_DEPARTMENTS = [
-  { label: 'Computer Science', value: 'cs' },
-  { label: 'Electrical Engineering', value: 'ee' },
-  { label: 'Mechanical Engineering', value: 'me' },
-  { label: 'Business Administration', value: 'ba' },
-  { label: 'Mathematics', value: 'math' },
-  { label: 'Physics', value: 'phy' },
+  { label: "Computer Science", value: "cs" },
+  { label: "Electrical Engineering", value: "ee" },
+  { label: "Mechanical Engineering", value: "me" },
+  { label: "Business Administration", value: "ba" },
+  { label: "Mathematics", value: "math" },
+  { label: "Physics", value: "phy" },
 ];
 
 // Mock student database for auto-fill
-export const MOCK_STUDENT_DB: Record<string, { name: string; email: string; program?: string; semester?: string }> = {
-  '123456': { 
-    name: 'Emmanuel Yawson', 
-    email: 'student@gmail.com',
-    program: 'cs',
-    semester: '1'
+export const MOCK_STUDENT_DB: Record<
+  string,
+  { name: string; email: string; program?: string; semester?: string }
+> = {
+  "123456": {
+    name: "Emmanuel Yawson",
+    email: "student@gmail.com",
+    program: "cs",
+    semester: "1",
   },
 };
 
 // Role filter options for UI components
 export const ROLE_FILTER_OPTIONS = [
-  { label: 'All Roles', value: 'all' },
-  { label: 'Students', value: 'student' },
-  { label: 'Staff', value: 'staff' },
-  { label: 'Admin Staff', value: 'admin_staff' },
-  { label: 'Class Reps', value: 'class_rep' },
+  { label: "All Roles", value: "all" },
+  { label: "Students", value: "student" },
+  { label: "Staff", value: "staff" },
+  { label: "Admin Staff", value: "admin_staff" },
+  { label: "Class Reps", value: "class_rep" },
 ];
 
 // Mock staff database for auto-fill
-export const MOCK_STAFF_DB: Record<string, { name: string; email: string; department?: string }> = {
-  'STF001': { 
-    name: 'Dr Amenyaw Menu', 
-    email: 'staff@gmail.com',
-    department: 'cs'
+export const MOCK_STAFF_DB: Record<
+  string,
+  { name: string; email: string; department?: string }
+> = {
+  STF001: {
+    name: "Dr Amenyaw Menu",
+    email: "staff@gmail.com",
+    department: "cs",
   },
 };
 
+// Mock session data for payroll
+export const MOCK_SESSIONS = [
+  {
+    id: "ses1",
+    staffId: "staff_1",
+    staffName: "Dr Amenyaw Menu",
+    department: "cs",
+    courseId: "ds",
+    courseName: "Data Structures",
+    date: "2026-01-15",
+    clockIn: "08:00",
+    clockOut: "10:00",
+    hoursWorked: 2,
+    hourlyRate: 50,
+    earnings: 100,
+    paymentStatus: "pending" as const,
+  },
+  {
+    id: "ses2",
+    staffId: "staff_1",
+    staffName: "Dr Amenyaw Menu",
+    department: "cs",
+    courseId: "alg",
+    courseName: "Algorithms",
+    date: "2026-01-16",
+    clockIn: "14:00",
+    clockOut: "18:30",
+    hoursWorked: 4.5,
+    hourlyRate: 50,
+    earnings: 225,
+    paymentStatus: "pending" as const,
+  },
+  {
+    id: "ses3",
+    staffId: "staff_1",
+    staffName: "Dr Amenyaw Menu",
+    department: "cs",
+    courseId: "ds",
+    courseName: "Data Structures",
+    date: "2026-01-10",
+    clockIn: "09:00",
+    clockOut: "11:00",
+    hoursWorked: 2,
+    hourlyRate: 50,
+    earnings: 100,
+    paymentStatus: "paid" as const,
+  },
+];
+
 // Helper to get users from localStorage (for persistence of added staff)
 const getStoredUsers = (): (User & { password: string })[] => {
-  const stored = localStorage.getItem('facetrack_users');
+  const stored = localStorage.getItem("facetrack_users");
   if (stored) {
     return JSON.parse(stored);
   }
-  localStorage.setItem('facetrack_users', JSON.stringify(MOCK_USERS));
+  localStorage.setItem("facetrack_users", JSON.stringify(MOCK_USERS));
   return MOCK_USERS;
 };
 
 const saveUsers = (users: (User & { password: string })[]) => {
-  localStorage.setItem('facetrack_users', JSON.stringify(users));
+  localStorage.setItem("facetrack_users", JSON.stringify(users));
 };
 
 export const addStaffUser = (
-    email: string, 
-    name: string, 
-    tempPassword: string,
-    department: string,
-    coursesTaught: string[]
+  email: string,
+  name: string,
+  tempPassword: string,
+  department: string,
+  coursesTaught: string[],
 ): { success: boolean; error?: string } => {
   const users = getStoredUsers();
-  if (users.find(u => u.email === email)) {
-    return { success: false, error: 'User with this email already exists' };
+  if (users.find((u) => u.email === email)) {
+    return { success: false, error: "User with this email already exists" };
   }
-  
+
   const newUser: User & { password: string } = {
     id: crypto.randomUUID(),
     email,
     name,
-    role: 'staff',
+    role: "staff",
     password: tempPassword,
     mustChangePassword: true,
     department,
     coursesTaught,
   };
-  
+
   users.push(newUser);
   saveUsers(users);
   return { success: true };
@@ -191,12 +263,16 @@ export const addStaffUser = (
 
 export const getStaffUsers = (): User[] => {
   const users = getStoredUsers();
-  return users.filter(u => u.role === 'staff').map(({ password, ...user }) => user);
+  return users
+    .filter((u) => u.role === "staff")
+    .map(({ password, ...user }) => user);
 };
 
 export const deleteStaffUser = (userId: string): boolean => {
   const users = getStoredUsers();
-  const filtered = users.filter(u => u.id !== userId || u.role === 'super_admin');
+  const filtered = users.filter(
+    (u) => u.id !== userId || u.role === "super_admin",
+  );
   if (filtered.length !== users.length) {
     saveUsers(filtered);
     return true;
@@ -206,61 +282,67 @@ export const deleteStaffUser = (userId: string): boolean => {
 
 // Class Rep management
 // Class Rep management
-export const assignClassRep = (studentId: string, courseId: string): { success: boolean; error?: string } => {
+export const assignClassRep = (
+  studentId: string,
+  courseId: string,
+): { success: boolean; error?: string } => {
   const users = getStoredUsers();
-  const studentIndex = users.findIndex(u => u.id === studentId);
-  
+  const studentIndex = users.findIndex((u) => u.id === studentId);
+
   if (studentIndex === -1) {
-    return { success: false, error: 'Student not found' };
+    return { success: false, error: "Student not found" };
   }
 
-  const course = MOCK_COURSES.find(c => c.id === courseId);
+  const course = MOCK_COURSES.find((c) => c.id === courseId);
   if (!course) {
-    return { success: false, error: 'Course not found' };
+    return { success: false, error: "Course not found" };
   }
 
-  // Check if someone else is already rep for this course? 
+  // Check if someone else is already rep for this course?
   // For now we allow multiple, or maybe we should restrict?
   // Let's restrict: Check if course already has a rep
-  const existingRep = users.find(u => u.classRepData?.courseId === courseId);
+  const existingRep = users.find((u) => u.classRepData?.courseId === courseId);
   if (existingRep && existingRep.id !== studentId) {
-    return { success: false, error: `Course already has a Class Rep: ${existingRep.name}` };
+    return {
+      success: false,
+      error: `Course already has a Class Rep: ${existingRep.name}`,
+    };
   }
 
   const user = users[studentIndex];
-  
+
   // Update user role and data
   users[studentIndex] = {
     ...user,
-    role: 'class_rep',
+    role: "class_rep",
     isClassRep: true,
     classRepData: {
       courseId: course.id,
       courseName: course.name,
-      department: course.department
-    }
+      department: course.department,
+    },
   };
-  
+
   saveUsers(users);
   return { success: true };
 };
 
 export const removeClassRep = (userId: string): boolean => {
   const users = getStoredUsers();
-  const userIndex = users.findIndex(u => u.id === userId);
-  
+  const userIndex = users.findIndex((u) => u.id === userId);
+
   if (userIndex === -1) return false;
 
   const user = users[userIndex];
-  
+
   // Demote back to student
   users[userIndex] = {
     ...user,
-    role: 'student',
+    role: "student",
     isClassRep: false,
-    classRepData: undefined
+    classRepData: undefined,
   };
-  
+
   saveUsers(users);
   return true;
 };
@@ -268,103 +350,124 @@ export const removeClassRep = (userId: string): boolean => {
 // Deprecated or Helpers
 export const getClassRepUsers = (): User[] => {
   const users = getStoredUsers();
-  return users.filter(u => u.role === 'class_rep').map(({ password, ...user }) => user);
+  return users
+    .filter((u) => u.role === "class_rep")
+    .map(({ password, ...user }) => user);
 };
 
-
-
 // Student management functions
-export const getStudentByStudentId = (studentId: string): { name: string; email: string; program?: string; semester?: string } | null => {
+export const getStudentByStudentId = (
+  studentId: string,
+): {
+  name: string;
+  email: string;
+  program?: string;
+  semester?: string;
+} | null => {
   return MOCK_STUDENT_DB[studentId] || null;
 };
 
 export const addStudentUser = (
-  studentId: string, 
-  email: string, 
-  name: string, 
-  program: string, 
+  studentId: string,
+  email: string,
+  name: string,
+  program: string,
   semester: string,
-  password: string = 'student123'
+  password: string = "student123",
 ): { success: boolean; error?: string } => {
   const users = getStoredUsers();
-  if (users.find(u => u.email === email || u.studentId === studentId)) {
-    return { success: false, error: 'Student with this email or ID already exists' };
+  if (users.find((u) => u.email === email || u.studentId === studentId)) {
+    return {
+      success: false,
+      error: "Student with this email or ID already exists",
+    };
   }
-  
+
   const newUser: User & { password: string } = {
     id: crypto.randomUUID(),
     email,
     name,
-    role: 'student',
+    role: "student",
     password,
     mustChangePassword: false,
     studentId,
     program,
     semester,
   };
-  
+
   users.push(newUser);
   saveUsers(users);
-  
+
   // Also add to mock student DB for auto-fill
   MOCK_STUDENT_DB[studentId] = { name, email, program, semester };
-  
+
   return { success: true };
 };
 
 // Staff management functions
-export const getStaffByStaffId = (staffId: string): { name: string; email: string; department?: string } | null => {
+export const getStaffByStaffId = (
+  staffId: string,
+): { name: string; email: string; department?: string } | null => {
   return MOCK_STAFF_DB[staffId] || null;
 };
 
 export const addStaffUserComplete = (
-  staffId: string, 
-  email: string, 
-  name: string, 
+  staffId: string,
+  email: string,
+  name: string,
   department: string,
-  password: string = 'staff123'
+  coursesTaught: string[] = [],
+  password: string = "staff123",
 ): { success: boolean; error?: string } => {
   const users = getStoredUsers();
-  if (users.find(u => u.email === email || u.staffId === staffId)) {
-    return { success: false, error: 'Staff with this email or ID already exists' };
+  if (users.find((u) => u.email === email || u.staffId === staffId)) {
+    return {
+      success: false,
+      error: "Staff with this email or ID already exists",
+    };
   }
-  
+
   const newUser: User & { password: string } = {
     id: crypto.randomUUID(),
     email,
     name,
-    role: 'staff',
+    role: "staff",
     password,
     mustChangePassword: false,
     staffId,
     department,
+    coursesTaught,
   };
-  
+
   users.push(newUser);
   saveUsers(users);
-  
+
   // Also add to mock staff DB for auto-fill
   MOCK_STAFF_DB[staffId] = { name, email, department };
-  
+
   return { success: true };
 };
 
 // Admin Staff management
-export const addAdminStaffUser = (email: string, name: string, tempPassword: string): { success: boolean; error?: string } => {
+export const addAdminStaffUser = (
+  email: string,
+  name: string,
+  tempPassword: string,
+): { success: boolean; error?: string } => {
   const users = getStoredUsers();
-  if (users.find(u => u.email === email)) {
-    return { success: false, error: 'User with this email already exists' };
+  if (users.find((u) => u.email === email)) {
+    return { success: false, error: "User with this email already exists" };
   }
-  
+
   const newUser: User & { password: string } = {
     id: crypto.randomUUID(),
     email,
     name,
-    role: 'admin_staff',
+    role: "admin_staff",
     password: tempPassword,
     mustChangePassword: true,
   };
-  
+
   users.push(newUser);
   saveUsers(users);
   return { success: true };
@@ -372,7 +475,9 @@ export const addAdminStaffUser = (email: string, name: string, tempPassword: str
 
 export const deleteAdminStaffUser = (userId: string): boolean => {
   const users = getStoredUsers();
-  const filtered = users.filter(u => u.id !== userId || u.role !== 'admin_staff');
+  const filtered = users.filter(
+    (u) => u.id !== userId || u.role !== "admin_staff",
+  );
   if (filtered.length !== users.length) {
     saveUsers(filtered);
     return true;
@@ -382,17 +487,17 @@ export const deleteAdminStaffUser = (userId: string): boolean => {
 
 export const deleteStudentUser = (userId: string): boolean => {
   const users = getStoredUsers();
-  const userToDelete = users.find(u => u.id === userId);
-  
-  const filtered = users.filter(u => u.id !== userId || u.role !== 'student');
+  const userToDelete = users.find((u) => u.id === userId);
+
+  const filtered = users.filter((u) => u.id !== userId || u.role !== "student");
   if (filtered.length !== users.length) {
     saveUsers(filtered);
-    
+
     // Also remove from mock DB if exists
     if (userToDelete?.studentId && MOCK_STUDENT_DB[userToDelete.studentId]) {
-        delete MOCK_STUDENT_DB[userToDelete.studentId];
+      delete MOCK_STUDENT_DB[userToDelete.studentId];
     }
-    
+
     return true;
   }
   return false;
@@ -404,93 +509,115 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     // Sync MOCK_USERS to localStorage to ensure new dev users appear
-    const storedUsersStr = localStorage.getItem('facetrack_users');
-    let currentUsers: (User & { password: string })[] = storedUsersStr ? JSON.parse(storedUsersStr) : [];
-    
+    const storedUsersStr = localStorage.getItem("facetrack_users");
+    let currentUsers: (User & { password: string })[] = storedUsersStr
+      ? JSON.parse(storedUsersStr)
+      : [];
+
     let hasChanges = false;
     if (!storedUsersStr) {
-        currentUsers = [...MOCK_USERS];
-        hasChanges = true;
+      currentUsers = [...MOCK_USERS];
+      hasChanges = true;
     } else {
-         MOCK_USERS.forEach(mockUser => {
-            const existingIndex = currentUsers.findIndex((u) => u.id === mockUser.id);
-            if (existingIndex === -1) {
-                currentUsers.push(mockUser);
-                hasChanges = true;
-            } else {
-                // Determine if critical fields changed (like password or role)
-                const existing = currentUsers[existingIndex];
-                if (existing.password !== mockUser.password || existing.role !== mockUser.role || existing.name !== mockUser.name) {
-                     currentUsers[existingIndex] = { ...existing, ...mockUser };
-                     hasChanges = true;
-                }
-            }
-         });
+      MOCK_USERS.forEach((mockUser) => {
+        const existingIndex = currentUsers.findIndex(
+          (u) => u.id === mockUser.id,
+        );
+        if (existingIndex === -1) {
+          currentUsers.push(mockUser);
+          hasChanges = true;
+        } else {
+          // Determine if critical fields changed (like password or role)
+          const existing = currentUsers[existingIndex];
+          if (
+            existing.password !== mockUser.password ||
+            existing.role !== mockUser.role ||
+            existing.name !== mockUser.name
+          ) {
+            currentUsers[existingIndex] = { ...existing, ...mockUser };
+            hasChanges = true;
+          }
+        }
+      });
     }
 
     if (hasChanges) {
-        localStorage.setItem('facetrack_users', JSON.stringify(currentUsers));
+      localStorage.setItem("facetrack_users", JSON.stringify(currentUsers));
     }
 
     // Check for existing session
-    const storedSession = localStorage.getItem('facetrack_session');
+    const storedSession = localStorage.getItem("facetrack_session");
     if (storedSession) {
       const sessionUser = JSON.parse(storedSession);
       // Verify user still exists
       const users = currentUsers; // Use the potentially updated list
-      const existingUser = users.find(u => u.id === sessionUser.id);
+      const existingUser = users.find((u) => u.id === sessionUser.id);
       if (existingUser) {
         const { password, ...userWithoutPassword } = existingUser;
         setUser(userWithoutPassword);
       } else {
-        localStorage.removeItem('facetrack_session');
+        localStorage.removeItem("facetrack_session");
       }
     }
     setIsLoading(false);
   }, []);
 
-  const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+  const login = async (
+    email: string,
+    password: string,
+  ): Promise<{ success: boolean; error?: string }> => {
     const users = getStoredUsers();
-    const foundUser = users.find(u => u.email === email && u.password === password);
-    
+    const foundUser = users.find(
+      (u) => u.email === email && u.password === password,
+    );
+
     if (!foundUser) {
-      return { success: false, error: 'Invalid email or password' };
+      return { success: false, error: "Invalid email or password" };
     }
-    
+
     const { password: _, ...userWithoutPassword } = foundUser;
     setUser(userWithoutPassword);
-    localStorage.setItem('facetrack_session', JSON.stringify(userWithoutPassword));
-    
+    localStorage.setItem(
+      "facetrack_session",
+      JSON.stringify(userWithoutPassword),
+    );
+
     return { success: true };
   };
 
   const logout = () => {
     setUser(null);
-    localStorage.removeItem('facetrack_session');
+    localStorage.removeItem("facetrack_session");
   };
 
-  const changePassword = async (oldPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> => {
-    if (!user) return { success: false, error: 'Not logged in' };
-    
+  const changePassword = async (
+    oldPassword: string,
+    newPassword: string,
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!user) return { success: false, error: "Not logged in" };
+
     const users = getStoredUsers();
-    const userIndex = users.findIndex(u => u.id === user.id);
-    
-    if (userIndex === -1) return { success: false, error: 'User not found' };
-    if (users[userIndex].password !== oldPassword) return { success: false, error: 'Current password is incorrect' };
-    
+    const userIndex = users.findIndex((u) => u.id === user.id);
+
+    if (userIndex === -1) return { success: false, error: "User not found" };
+    if (users[userIndex].password !== oldPassword)
+      return { success: false, error: "Current password is incorrect" };
+
     users[userIndex].password = newPassword;
     users[userIndex].mustChangePassword = false;
     saveUsers(users);
-    
+
     const { password: _, ...updatedUser } = users[userIndex];
     setUser(updatedUser);
-    localStorage.setItem('facetrack_session', JSON.stringify(updatedUser));
-    
+    localStorage.setItem("facetrack_session", JSON.stringify(updatedUser));
+
     return { success: true };
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout, changePassword }}>
+    <AuthContext.Provider
+      value={{ user, isLoading, login, logout, changePassword }}
+    >
       {children}
     </AuthContext.Provider>
   );
@@ -499,7 +626,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 };

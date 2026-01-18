@@ -227,7 +227,9 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
                 }))}
                 selected={coursesTaught}
                 onChange={setCoursesTaught}
-                placeholder={department ? "Select courses..." : "Select Department first"}
+                placeholder={
+                  department ? "Select courses..." : "Select Department first"
+                }
                 className="w-full"
               />
               <p className="text-xs text-muted-foreground">
