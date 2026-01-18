@@ -193,7 +193,7 @@ export const EditMemberModal = ({ open, onOpenChange, member, onSave }: EditMemb
             </div>
           </div>
 
-          <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+          {/* <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
             <div>
               <Label htmlFor="isMinor">Minor Status</Label>
               <p className="text-xs text-muted-foreground">Member is under 18 years old</p>
@@ -203,9 +203,9 @@ export const EditMemberModal = ({ open, onOpenChange, member, onSave }: EditMemb
               checked={formData.isMinor}
               onCheckedChange={(checked) => setFormData({ ...formData, isMinor: checked })}
             />
-          </div>
+          </div> */}
 
-          {formData.isMinor && (
+          {/* {formData.isMinor && (
             <div className="space-y-4 p-4 bg-warning/10 border border-warning/30 rounded-lg">
               <h4 className="font-medium text-foreground text-sm">Parent/Guardian Information</h4>
               <div className="space-y-2">
@@ -239,7 +239,7 @@ export const EditMemberModal = ({ open, onOpenChange, member, onSave }: EditMemb
                 </div>
               </div>
             </div>
-          )}
+          )} */}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

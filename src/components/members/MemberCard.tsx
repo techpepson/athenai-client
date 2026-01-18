@@ -70,7 +70,7 @@ export const MemberCard = ({ member, onEdit, onDelete, onViewAttendance }: Membe
         {/* Actions */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100 transition-opacity">
+            <Button variant="secondary" size="icon" className="opacity-0 group-hover:opacity-100 transition-opacity">
               <MoreVertical className="w-4 h-4" />
             </Button>
           </DropdownMenuTrigger>

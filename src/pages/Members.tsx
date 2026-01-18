@@ -21,7 +21,8 @@ import {
   deleteStudentUser, 
   deleteStaffUser, 
   deleteAdminStaffUser,
-  MOCK_DEPARTMENTS 
+  MOCK_DEPARTMENTS,
+  ROLE_FILTER_OPTIONS,
 } from '@/contexts/AuthContext';
 import {
   AlertDialog,
@@ -34,15 +35,6 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
-
-// Role filter options
-const ROLE_FILTER_OPTIONS = [
-  { label: 'All Roles', value: 'all' },
-  { label: 'Students', value: 'student' },
-  { label: 'Staff', value: 'staff' },
-  { label: 'Admin Staff', value: 'admin_staff' },
-  { label: 'Class Reps', value: 'class_rep' },
-];
 
 const Members = () => {
   const [members, setMembers] = useState<Member[]>([]);

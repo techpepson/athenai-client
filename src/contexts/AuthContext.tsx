@@ -129,6 +129,15 @@ export const MOCK_STUDENT_DB: Record<string, { name: string; email: string; prog
   },
 };
 
+// Role filter options for UI components
+export const ROLE_FILTER_OPTIONS = [
+  { label: 'All Roles', value: 'all' },
+  { label: 'Students', value: 'student' },
+  { label: 'Staff', value: 'staff' },
+  { label: 'Admin Staff', value: 'admin_staff' },
+  { label: 'Class Reps', value: 'class_rep' },
+];
+
 // Mock staff database for auto-fill
 export const MOCK_STAFF_DB: Record<string, { name: string; email: string; department?: string }> = {
   'STF001': { 
