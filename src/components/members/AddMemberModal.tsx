@@ -1,24 +1,30 @@
-import { useState } from 'react';
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
-import { Camera, Upload, User } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
-import { addStudentUser, addStaffUserComplete, MOCK_DEPARTMENTS } from '@/contexts/AuthContext';
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Camera, Upload, User } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { MultiSelect } from "@/components/ui/multi-select";
+import {
+  addStudentUser,
+  addStaffUserComplete,
+  MOCK_DEPARTMENTS,
+  MOCK_COURSES,
+} from "@/contexts/AuthContext";
 
 interface AddMemberModalProps {
   open: boolean;
@@ -27,70 +33,82 @@ interface AddMemberModalProps {
 
 // Role options
 const ROLE_OPTIONS = [
-  { label: 'Student', value: 'student' },
-  { label: 'Staff', value: 'staff' },
-  { label: 'Admin Staff', value: 'admin_staff' },
+  { label: "Student", value: "student" },
+  { label: "Staff", value: "staff" },
+  { label: "Admin Staff", value: "admin_staff" },
 ] as const;
 
 export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
   const [isMinor, setIsMinor] = useState(false);
   const [captureMode, setCaptureMode] = useState(false);
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [role, setRole] = useState<'student' | 'staff' | 'admin_staff'>('student');
-  const [department, setDepartment] = useState('');
-  const [idNumber, setIdNumber] = useState('');
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState<"student" | "staff" | "admin_staff">(
+    "student",
+  );
+  const [department, setDepartment] = useState("");
+  const [idNumber, setIdNumber] = useState("");
+  const [coursesTaught, setCoursesTaught] = useState<string[]>([]);
   const { toast } = useToast();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     let result;
-    if (role === 'student') {
-        // For mock purposes, using 'cs' as program if dept not set correctly for student schema
-        result = addStudentUser(idNumber, email, name, department || 'cs', '1');
-    } else if (role === 'staff') {
-        result = addStaffUserComplete(idNumber, email, name, department || 'cs');
-    } else if (role === 'admin_staff') {
-        // Add admin staff logic here (you'll need to create this function in AuthContext)
-        toast({
-            title: 'Info',
-            description: 'Admin staff creation requires super admin privileges.',
-            variant: 'default',
-        });
-        return;
+    if (role === "student") {
+      // For mock purposes, using 'cs' as program if dept not set correctly for student schema
+      result = addStudentUser(idNumber, email, name, department || "cs", "1");
+    } else if (role === "staff") {
+      result = addStaffUserComplete(
+        idNumber,
+        email,
+        name,
+        department || "cs",
+        coursesTaught,
+      );
+    } else if (role === "admin_staff") {
+      // Add admin staff logic here (you'll need to create this function in AuthContext)
+      toast({
+        title: "Info",
+        description: "Admin staff creation requires super admin privileges.",
+        variant: "default",
+      });
+      return;
     }
 
     if (result && result.success) {
-        toast({
-            title: 'Member Added',
-            description: `${name} has been added successfully.`,
-        });
-        resetForm();
-        onOpenChange(false);
+      toast({
+        title: "Member Added",
+        description: `${name} has been added successfully.`,
+      });
+      resetForm();
+      onOpenChange(false);
     } else if (result) {
-        toast({
-            title: 'Error',
-            description: result.error,
-            variant: 'destructive',
-        });
+      toast({
+        title: "Error",
+        description: result.error,
+        variant: "destructive",
+      });
     }
   };
 
   const resetForm = () => {
-    setName('');
-    setEmail('');
-    setRole('student');
-    setDepartment('');
-    setIdNumber('');
+    setName("");
+    setEmail("");
+    setRole("student");
+    setDepartment("");
+    setIdNumber("");
     setIsMinor(false);
+    setCoursesTaught([]);
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px] bg-card border-border">
         <DialogHeader>
-          <DialogTitle className="text-xl font-bold">Add New Member</DialogTitle>
+          <DialogTitle className="text-xl font-bold">
+            Add New Member
+          </DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -102,10 +120,19 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
               </div>
             </div>
             <div className="space-y-2">
-              <p className="text-sm font-medium text-foreground">Profile Photo</p>
-              <p className="text-xs text-muted-foreground">Add a photo for facial recognition</p>
+              <p className="text-sm font-medium text-foreground">
+                Profile Photo
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Add a photo for facial recognition
+              </p>
               <div className="flex gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={() => setCaptureMode(true)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCaptureMode(true)}
+                >
                   <Camera className="w-4 h-4 mr-2" />
                   Capture
                 </Button>
@@ -121,33 +148,36 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="name">Full Name</Label>
-              <Input 
-                id="name" 
-                placeholder="Enter full name" 
-                required 
+              <Input
+                id="name"
+                placeholder="Enter full name"
+                required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input 
-                id="email" 
-                type="email" 
-                placeholder="email@example.com" 
-                required 
+              <Input
+                id="email"
+                type="email"
+                placeholder="email@example.com"
+                required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="role">Role</Label>
-              <Select value={role} onValueChange={(v: typeof role) => setRole(v)}>
+              <Select
+                value={role}
+                onValueChange={(v: typeof role) => setRole(v)}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select role" />
                 </SelectTrigger>
                 <SelectContent>
-                  {ROLE_OPTIONS.map(option => (
+                  {ROLE_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
                     </SelectItem>
@@ -162,7 +192,7 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
                   <SelectValue placeholder="Select department" />
                 </SelectTrigger>
                 <SelectContent>
-                  {MOCK_DEPARTMENTS.map(dept => (
+                  {MOCK_DEPARTMENTS.map((dept) => (
                     <SelectItem key={dept.value} value={dept.value}>
                       {dept.label}
                     </SelectItem>
@@ -172,9 +202,11 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
             </div>
             <div className="space-y-2">
               <Label htmlFor="studentId">ID Number</Label>
-              <Input 
-                id="studentId" 
-                placeholder={role === 'student' ? 'e.g., 123456' : 'e.g., STF001'} 
+              <Input
+                id="studentId"
+                placeholder={
+                  role === "student" ? "e.g., 123456" : "e.g., STF001"
+                }
                 required
                 value={idNumber}
                 onChange={(e) => setIdNumber(e.target.value)}
@@ -182,9 +214,35 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
             </div>
           </div>
 
+          {/* Courses for Staff/Admin Staff */}
+          {(role === "staff" || role === "admin_staff") && (
+            <div className="space-y-2">
+              <Label htmlFor="courses">Courses to Teach</Label>
+              <MultiSelect
+                options={MOCK_COURSES.filter(
+                  (course) => !department || course.department === department,
+                ).map((course) => ({
+                  label: course.name,
+                  value: course.id,
+                }))}
+                selected={coursesTaught}
+                onChange={setCoursesTaught}
+                placeholder={department ? "Select courses..." : "Select Department first"}
+                className="w-full"
+              />
+              <p className="text-xs text-muted-foreground">
+                Select courses this staff member will teach
+              </p>
+            </div>
+          )}
+
           {/* Actions */}
           <div className="flex justify-end gap-3 pt-4">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
               Cancel
             </Button>
             <Button type="submit" variant="gradient">
