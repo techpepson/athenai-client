@@ -130,9 +130,14 @@ export const Sidebar = () => {
             collapsed={collapsed}
           />
 
-          {/* {isSuperAdmin && (
-            <NavItem to="/admins" icon={<Shield className="w-5 h-5" />} label="Admins" collapsed={collapsed} />
-          )} */}
+          {isSuperAdmin && (
+            <NavItem
+              to="/admins"
+              icon={<Shield className="w-5 h-5" />}
+              label="Admins"
+              collapsed={collapsed}
+            />
+          )}
 
           {(isSuperAdmin || user?.role === "admin_staff") && (
             <NavItem
