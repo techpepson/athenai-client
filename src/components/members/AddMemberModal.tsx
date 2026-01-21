@@ -50,6 +50,7 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
   );
   const [department, setDepartment] = useState("");
   const [idNumber, setIdNumber] = useState("");
+  const [hourlyRate, setHourlyRate] = useState("");
   const [coursesTaught, setCoursesTaught] = useState<string[]>([]);
   const [coursesTaken, setCoursesTaken] = useState<string[]>([]);
   const { toast } = useToast();
@@ -116,6 +117,7 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
     setRole("student");
     setDepartment("");
     setIdNumber("");
+    setHourlyRate("");
     setIsMinor(false);
     setCoursesTaught([]);
     setCoursesTaken([]);
@@ -231,6 +233,19 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
                 onChange={(e) => setIdNumber(e.target.value)}
               />
             </div>
+            {role === "lecturer" && (
+              <div className="space-y-2">
+                <Label htmlFor="hourlyRate">Hourly Rate</Label>
+                <Input
+                  id="hourlyRate"
+                  type="number"
+                  placeholder="e.g., 50"
+                  required
+                  value={hourlyRate}
+                  onChange={(e) => setHourlyRate(e.target.value)}
+                />
+              </div>
+            )}
           </div>
 
           {/* Courses for Student and Lecturer */}
