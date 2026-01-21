@@ -22,6 +22,7 @@ import { MultiSelect } from "@/components/ui/multi-select";
 import {
   addStudentUser,
   addStaffUserComplete,
+  addLecturerUserComplete,
   MOCK_DEPARTMENTS,
   MOCK_COURSES,
 } from "@/contexts/AuthContext";
@@ -35,7 +36,8 @@ interface AddMemberModalProps {
 const ROLE_OPTIONS = [
   { label: "Student", value: "student" },
   { label: "Staff", value: "staff" },
-  { label: "Admin Staff", value: "admin_staff" },
+  { label: "Lecturer", value: "lecturer" },
+  { label: "Admin", value: "admin" },
 ] as const;
 
 export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
@@ -43,12 +45,13 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
   const [captureMode, setCaptureMode] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<"student" | "staff" | "admin_staff">(
+  const [role, setRole] = useState<"student" | "staff" | "lecturer" | "admin">(
     "student",
   );
   const [department, setDepartment] = useState("");
   const [idNumber, setIdNumber] = useState("");
   const [coursesTaught, setCoursesTaught] = useState<string[]>([]);
+  const [coursesTaken, setCoursesTaken] = useState<string[]>([]);
   const { toast } = useToast();
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -57,7 +60,14 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
     let result;
     if (role === "student") {
       // For mock purposes, using 'cs' as program if dept not set correctly for student schema
-      result = addStudentUser(idNumber, email, name, department || "cs", "1");
+      result = addStudentUser(
+        idNumber,
+        email,
+        name,
+        department || "cs",
+        "1",
+        coursesTaken,
+      );
     } else if (role === "staff") {
       result = addStaffUserComplete(
         idNumber,
@@ -66,11 +76,19 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
         department || "cs",
         coursesTaught,
       );
-    } else if (role === "admin_staff") {
+    } else if (role === "lecturer") {
+      result = addLecturerUserComplete(
+        idNumber,
+        email,
+        name,
+        department || "cs",
+        coursesTaught,
+      );
+    } else if (role === "admin") {
       // Add admin staff logic here (you'll need to create this function in AuthContext)
       toast({
         title: "Info",
-        description: "Admin staff creation requires super admin privileges.",
+        description: "Admin creation requires super admin privileges.",
         variant: "default",
       });
       return;
@@ -100,6 +118,7 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
     setIdNumber("");
     setIsMinor(false);
     setCoursesTaught([]);
+    setCoursesTaken([]);
   };
 
   return (
@@ -214,10 +233,16 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
             </div>
           </div>
 
-          {/* Courses for Staff/Admin Staff */}
-          {(role === "staff" || role === "admin_staff") && (
+          {/* Courses for Student and Lecturer */}
+          {(role === "lecturer" || role === "student") && (
             <div className="space-y-2">
-              <Label htmlFor="courses">Courses to Teach</Label>
+              {role === "student" && (
+                <Label htmlFor="courses">Courses to Learn</Label>
+              )}
+              {role === "lecturer" && (
+                <Label htmlFor="courses">Courses to Teach</Label>
+              )}
+
               <MultiSelect
                 options={MOCK_COURSES.filter(
                   (course) => !department || course.department === department,
@@ -225,15 +250,19 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
                   label: course.name,
                   value: course.id,
                 }))}
-                selected={coursesTaught}
-                onChange={setCoursesTaught}
+                selected={role === "student" ? coursesTaken : coursesTaught}
+                onChange={
+                  role === "student" ? setCoursesTaken : setCoursesTaught
+                }
                 placeholder={
                   department ? "Select courses..." : "Select Department first"
                 }
                 className="w-full"
               />
               <p className="text-xs text-muted-foreground">
-                Select courses this staff member will teach
+                {role === "student"
+                  ? "Select courses this student will take"
+                  : "Select courses this lecturer will teach"}
               </p>
             </div>
           )}

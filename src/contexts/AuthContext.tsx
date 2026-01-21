@@ -8,8 +8,9 @@ import {
 
 export type UserRole =
   | "super_admin"
-  | "admin_staff"
+  | "admin"
   | "staff"
+  | "lecturer"
   | "class_rep"
   | "student";
 
@@ -75,7 +76,7 @@ const MOCK_USERS: (User & { password: string })[] = [
     id: "admin_staff_1",
     email: "adminstaff@facetrack.com",
     name: "Admin Staff",
-    role: "admin_staff",
+    role: "admin",
     password: "adminstaff123",
     mustChangePassword: true, // Force password change on first login
   },
@@ -154,7 +155,8 @@ export const ROLE_FILTER_OPTIONS = [
   { label: "All Roles", value: "all" },
   { label: "Students", value: "student" },
   { label: "Staff", value: "staff" },
-  { label: "Admin Staff", value: "admin_staff" },
+  { label: "Admin", value: "admin" },
+  { label: "Lecturers", value: "lecturer" },
   { label: "Class Reps", value: "class_rep" },
 ];
 
@@ -463,7 +465,7 @@ export const addAdminStaffUser = (
     id: crypto.randomUUID(),
     email,
     name,
-    role: "admin_staff",
+    role: "admin",
     password: tempPassword,
     mustChangePassword: true,
   };
@@ -475,14 +477,50 @@ export const addAdminStaffUser = (
 
 export const deleteAdminStaffUser = (userId: string): boolean => {
   const users = getStoredUsers();
-  const filtered = users.filter(
-    (u) => u.id !== userId || u.role !== "admin_staff",
-  );
+  const filtered = users.filter((u) => u.id !== userId || u.role !== "admin");
   if (filtered.length !== users.length) {
     saveUsers(filtered);
     return true;
   }
   return false;
+};
+
+// Lecturer management functions (similar to Staff)
+export const addLecturerUserComplete = (
+  staffId: string,
+  email: string,
+  name: string,
+  department: string,
+  coursesTaught: string[] = [],
+  password: string = "lecturer123",
+): { success: boolean; error?: string } => {
+  const users = getStoredUsers();
+  if (users.find((u) => u.email === email || u.staffId === staffId)) {
+    return {
+      success: false,
+      error: "Lecturer with this email or ID already exists",
+    };
+  }
+
+  const newUser: User & { password: string } = {
+    id: crypto.randomUUID(),
+    email,
+    name,
+    role: "lecturer",
+    password,
+    mustChangePassword: false,
+    staffId,
+    department,
+    coursesTaught,
+  };
+
+  users.push(newUser);
+  saveUsers(users);
+
+  // Also add to mock staff DB for auto-fill
+  MOCK_STAFF_DB[staffId] = { name, email, department };
+
+  return { success: true };
 };
 
 export const deleteStudentUser = (userId: string): boolean => {

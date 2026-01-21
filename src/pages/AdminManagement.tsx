@@ -1,15 +1,15 @@
-import { useState, useEffect } from 'react';
-import { Plus, Trash2, UserCog, Copy, Check } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { useState, useEffect } from "react";
+import { Plus, Trash2, UserCog, Copy, Check } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from '@/components/ui/dialog';
+} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,18 +19,23 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { useToast } from '@/hooks/use-toast';
-import { addAdminStaffUser, deleteAdminStaffUser, getAllUsers, User } from '@/contexts/AuthContext';
+} from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
+import {
+  addAdminStaffUser,
+  deleteAdminStaffUser,
+  getAllUsers,
+  User,
+} from "@/contexts/AuthContext";
 
 const AdminManagement = () => {
   const [staffList, setStaffList] = useState<User[]>([]);
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedStaff, setSelectedStaff] = useState<User | null>(null);
-  const [newStaffName, setNewStaffName] = useState('');
-  const [newStaffEmail, setNewStaffEmail] = useState('');
-  const [generatedPassword, setGeneratedPassword] = useState('');
+  const [newStaffName, setNewStaffName] = useState("");
+  const [newStaffEmail, setNewStaffEmail] = useState("");
+  const [generatedPassword, setGeneratedPassword] = useState("");
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
 
@@ -39,14 +44,14 @@ const AdminManagement = () => {
   }, []);
 
   const loadStaff = () => {
-    // Filter showing only Admin Staff
+    // Filter showing only Admins
     const allUsers = getAllUsers();
-    setStaffList(allUsers.filter(u => u.role === 'admin_staff'));
+    setStaffList(allUsers.filter((u) => u.role === "admin"));
   };
 
   const generateTempPassword = () => {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-    let password = '';
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+    let password = "";
     for (let i = 0; i < 10; i++) {
       password += chars.charAt(Math.floor(Math.random() * chars.length));
     }
@@ -56,9 +61,9 @@ const AdminManagement = () => {
   const handleAddStaff = () => {
     if (!newStaffName.trim() || !newStaffEmail.trim()) {
       toast({
-        title: 'Error',
-        description: 'Please fill in all fields',
-        variant: 'destructive',
+        title: "Error",
+        description: "Please fill in all fields",
+        variant: "destructive",
       });
       return;
     }
@@ -70,14 +75,14 @@ const AdminManagement = () => {
       setGeneratedPassword(tempPassword);
       loadStaff();
       toast({
-        title: 'Admin Created',
-        description: 'Share the temporary password with the new admin',
+        title: "Admin Created",
+        description: "Share the temporary password with the new admin",
       });
     } else {
       toast({
-        title: 'Error',
+        title: "Error",
         description: result.error,
-        variant: 'destructive',
+        variant: "destructive",
       });
     }
   };
@@ -88,7 +93,7 @@ const AdminManagement = () => {
       if (success) {
         loadStaff();
         toast({
-          title: 'Admin removed',
+          title: "Admin removed",
           description: `${selectedStaff.name} has been removed`,
         });
       }
@@ -105,9 +110,9 @@ const AdminManagement = () => {
 
   const closeAddModal = () => {
     setAddModalOpen(false);
-    setNewStaffName('');
-    setNewStaffEmail('');
-    setGeneratedPassword('');
+    setNewStaffName("");
+    setNewStaffEmail("");
+    setGeneratedPassword("");
   };
 
   return (
@@ -115,9 +120,11 @@ const AdminManagement = () => {
       {/* Page Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Admin Management</h1>
+          <h1 className="text-2xl font-bold text-foreground">
+            Admin Management
+          </h1>
           <p className="text-muted-foreground mt-1">
-            Create and manage system administrators (Admin Staff)
+            Create and manage system administrators (Admin)
           </p>
         </div>
         <Button variant="gradient" onClick={() => setAddModalOpen(true)}>
@@ -131,9 +138,11 @@ const AdminManagement = () => {
         {staffList.length === 0 ? (
           <div className="p-12 text-center">
             <UserCog className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-foreground mb-2">No admin staff found</h3>
+            <h3 className="text-lg font-medium text-foreground mb-2">
+              No admins found
+            </h3>
             <p className="text-muted-foreground mb-4">
-              Add admin staff members to help manage the system
+              Add admin members to help manage the system
             </p>
             <Button variant="outline" onClick={() => setAddModalOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
@@ -143,7 +152,10 @@ const AdminManagement = () => {
         ) : (
           <div className="divide-y divide-border">
             {staffList.map((staff) => (
-              <div key={staff.id} className="p-4 flex items-center justify-between">
+              <div
+                key={staff.id}
+                className="p-4 flex items-center justify-between"
+              >
                 <div className="flex items-center gap-4">
                   <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center">
                     <span className="text-sm font-medium text-foreground">
@@ -152,12 +164,14 @@ const AdminManagement = () => {
                   </div>
                   <div>
                     <p className="font-medium text-foreground">{staff.name}</p>
-                    <p className="text-sm text-muted-foreground">{staff.email}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {staff.email}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full font-medium">
-                    Admin Staff
+                    Admin
                   </span>
                   {staff.mustChangePassword && (
                     <span className="text-xs bg-warning/10 text-warning px-2 py-1 rounded-full">
@@ -186,9 +200,9 @@ const AdminManagement = () => {
       <Dialog open={addModalOpen} onOpenChange={closeAddModal}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Add Admin Staff</DialogTitle>
+            <DialogTitle>Add Admin</DialogTitle>
           </DialogHeader>
-          
+
           {!generatedPassword ? (
             <div className="space-y-4">
               <div className="space-y-2">
@@ -211,14 +225,20 @@ const AdminManagement = () => {
                 />
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={closeAddModal}>Cancel</Button>
-                <Button variant="gradient" onClick={handleAddStaff}>Create Admin</Button>
+                <Button variant="outline" onClick={closeAddModal}>
+                  Cancel
+                </Button>
+                <Button variant="gradient" onClick={handleAddStaff}>
+                  Create Admin
+                </Button>
               </DialogFooter>
             </div>
           ) : (
             <div className="space-y-4">
               <div className="p-4 bg-success/10 border border-success/20 rounded-lg">
-                <p className="text-sm text-success font-medium mb-2">Admin account created!</p>
+                <p className="text-sm text-success font-medium mb-2">
+                  Admin account created!
+                </p>
                 <p className="text-sm text-muted-foreground">
                   Share this temporary password. They must change it on login.
                 </p>
@@ -226,14 +246,24 @@ const AdminManagement = () => {
               <div className="space-y-2">
                 <Label>Temporary Password</Label>
                 <div className="flex gap-2">
-                  <Input value={generatedPassword} readOnly className="font-mono" />
+                  <Input
+                    value={generatedPassword}
+                    readOnly
+                    className="font-mono"
+                  />
                   <Button variant="outline" size="icon" onClick={copyPassword}>
-                    {copied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
+                    {copied ? (
+                      <Check className="w-4 h-4 text-success" />
+                    ) : (
+                      <Copy className="w-4 h-4" />
+                    )}
                   </Button>
                 </div>
               </div>
               <DialogFooter>
-                <Button variant="gradient" onClick={closeAddModal}>Done</Button>
+                <Button variant="gradient" onClick={closeAddModal}>
+                  Done
+                </Button>
               </DialogFooter>
             </div>
           )}
@@ -246,7 +276,8 @@ const AdminManagement = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Remove Admin?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently remove {selectedStaff?.name} from the system.
+              This will permanently remove {selectedStaff?.name} from the
+              system.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

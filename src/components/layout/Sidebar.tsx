@@ -62,7 +62,7 @@ export const Sidebar = () => {
   const canManageClassReps =
     user?.role === "super_admin" ||
     user?.role === "staff" ||
-    user?.role === "admin_staff";
+    user?.role === "admin";
 
   return (
     <>
@@ -139,7 +139,7 @@ export const Sidebar = () => {
             />
           )}
 
-          {(isSuperAdmin || user?.role === "admin_staff") && (
+          {(isSuperAdmin || user?.role === "admin") && (
             <NavItem
               to="/staff"
               icon={<UserCog className="w-5 h-5" />}

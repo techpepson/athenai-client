@@ -33,32 +33,45 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="/auth" element={<Auth />} />
-              <Route element={
-                <ProtectedRoute>
-                  <MainLayout />
-                </ProtectedRoute>
-              }>
+              <Route
+                element={
+                  <ProtectedRoute>
+                    <MainLayout />
+                  </ProtectedRoute>
+                }
+              >
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/members" element={<Members />} />
                 <Route path="/sessions" element={<Sessions />} />
                 <Route path="/analytics" element={<Analytics />} />
                 <Route path="/notifications" element={<Notifications />} />
                 <Route path="/settings" element={<Settings />} />
-                <Route path="/admins" element={
-                  <ProtectedRoute allowedRoles={['super_admin']}>
-                    <AdminManagement />
-                  </ProtectedRoute>
-                } />
-                <Route path="/staff" element={
-                  <ProtectedRoute allowedRoles={['super_admin', 'admin_staff']}>
-                    <StaffManagement />
-                  </ProtectedRoute>
-                } />
-                <Route path="/class-reps" element={
-                  <ProtectedRoute allowedRoles={['super_admin', 'staff', 'admin_staff']}>
-                    <ClassRepManagement />
-                  </ProtectedRoute>
-                } />
+                <Route
+                  path="/admins"
+                  element={
+                    <ProtectedRoute allowedRoles={["super_admin"]}>
+                      <AdminManagement />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/staff"
+                  element={
+                    <ProtectedRoute allowedRoles={["super_admin", "admin"]}>
+                      <StaffManagement />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/class-reps"
+                  element={
+                    <ProtectedRoute
+                      allowedRoles={["super_admin", "staff", "admin"]}
+                    >
+                      <ClassRepManagement />
+                    </ProtectedRoute>
+                  }
+                />
               </Route>
               <Route path="/kiosk" element={<Kiosk />} />
               <Route path="*" element={<NotFound />} />
