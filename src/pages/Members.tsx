@@ -29,6 +29,7 @@ import {
   deleteStaffUser,
   deleteAdminStaffUser,
   MOCK_DEPARTMENTS,
+  MOCK_COURSES,
   ROLE_FILTER_OPTIONS,
 } from "@/contexts/AuthContext";
 import {
@@ -47,7 +48,7 @@ const Members = () => {
   const [members, setMembers] = useState<Member[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
-  const [departmentFilter, setDepartmentFilter] = useState<string>("all");
+  const [courseFilter, setCourseFilter] = useState<string>("all");
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [viewAttendanceOpen, setViewAttendanceOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -136,11 +137,26 @@ const Members = () => {
     // Exact match for role filter or 'all'
     const matchesRole = roleFilter === "all" || member.role === roleFilter;
 
-    // Match department filter
-    const matchesDepartment =
-      departmentFilter === "all" || member.department === departmentFilter;
+    // Match course filter - check if member has this course
+    const matchesCourse =
+      courseFilter === "all" ||
+      (() => {
+        const users = getAllUsers();
+        const fullUser = users.find((u) => u.id === member.id);
+        if (!fullUser) return false;
 
-    return matchesSearch && matchesRole && matchesDepartment;
+        // Check coursesTaught for staff/lecturer
+        if (fullUser.coursesTaught) {
+          return fullUser.coursesTaught.includes(courseFilter);
+        }
+        // Check coursesTaken for students
+        if (fullUser.coursesTaken) {
+          return fullUser.coursesTaken.split(",").includes(courseFilter);
+        }
+        return false;
+      })();
+
+    return matchesSearch && matchesRole && matchesCourse;
   });
 
   return (
@@ -202,17 +218,17 @@ const Members = () => {
           </SelectContent>
         </Select>
 
-        {/* Department Filter */}
-        <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
+        {/* Course Filter */}
+        <Select value={courseFilter} onValueChange={setCourseFilter}>
           <SelectTrigger className="w-52">
             <Building2 className="w-4 h-4 mr-2" />
-            <SelectValue placeholder="Filter by department" />
+            <SelectValue placeholder="Filter by course" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Departments</SelectItem>
-            {MOCK_DEPARTMENTS.map((dept) => (
-              <SelectItem key={dept.value} value={dept.value}>
-                {dept.label}
+            <SelectItem value="all">All Courses</SelectItem>
+            {MOCK_COURSES.map((course) => (
+              <SelectItem key={course.id} value={course.id}>
+                {course.name}
               </SelectItem>
             ))}
           </SelectContent>
@@ -243,9 +259,7 @@ const Members = () => {
           <p className="text-muted-foreground">
             No members found matching your criteria.
           </p>
-          {(searchQuery ||
-            roleFilter !== "all" ||
-            departmentFilter !== "all") && (
+          {(searchQuery || roleFilter !== "all" || courseFilter !== "all") && (
             <p className="text-sm text-muted-foreground mt-2">
               Try adjusting your filters or search terms.
             </p>
