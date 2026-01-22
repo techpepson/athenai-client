@@ -26,6 +26,8 @@ export const MemberCard = ({
     student: "bg-primary/20 text-primary",
     staff: "bg-success/20 text-success",
     admin: "bg-warning/20 text-warning",
+    course_rep: "bg-primary/20 text-primary border-primary/40",
+    lecturer: "bg-success/20 text-success",
   };
 
   return (

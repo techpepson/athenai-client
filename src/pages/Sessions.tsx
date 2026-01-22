@@ -18,13 +18,13 @@ const Sessions = () => {
   const [activeTab, setActiveTab] = useState("all");
   const { user } = useAuth();
 
-  // Filter sessions for Class Rep (Optional: User asked "student without class rep priviledges only see session ongoing")
+  // Filter sessions for Course Rep (Optional: User asked "student without course rep priviledges only see session ongoing")
   // But strictly, sessions list usually shows all sessions?
-  // User said: "student without class rep priviledges only see session ongoing"
+  // User said: "student without course rep priviledges only see session ongoing"
   // This implies filtering the VIEW itself for regular students (or non-reps).
   // Let's implement that filter.
   //   const filteredSessions = mockSessions.filter(session => {
-  //     if (user?.role === 'student' && !user.isClassRep) {
+  //     if (user?.role === 'student' && !user.isCourseRep) {
   //          // Regular student: Only active?
   //          if (session.status !== 'active') return false;
   //     }
@@ -68,7 +68,7 @@ const Sessions = () => {
         {(user?.role === "super_admin" ||
           user?.role === "admin" ||
           user?.role === "staff" ||
-          user?.role === "class_rep") && (
+          user?.role === "course_rep") && (
           <Button variant="gradient" onClick={() => setCreateModalOpen(true)}>
             <Plus className="w-4 h-4 mr-2" />
             Create Session
@@ -116,7 +116,7 @@ const Sessions = () => {
               {(user?.role === "super_admin" ||
                 user?.role === "admin" ||
                 user?.role === "staff" ||
-                user?.role === "class_rep") && (
+                user?.role === "course_rep") && (
                 <Button
                   variant="outline"
                   className="mt-4"

@@ -2,7 +2,7 @@ export interface Member {
   id: string;
   name: string;
   email: string;
-  role: 'super_admin' | 'admin' | 'staff' | 'lecturer' | 'class_rep' | 'student';
+  role: 'super_admin' | 'admin' | 'staff' | 'lecturer' | 'course_rep' | 'student';
   department?: string;
   studentId?: string;
   photoUrl?: string;

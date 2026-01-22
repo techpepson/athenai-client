@@ -31,11 +31,12 @@ export const CreateSessionModal = ({ open, onOpenChange, user }: CreateSessionMo
   const [selectedDept, setSelectedDept] = useState('');
   const [selectedCourse, setSelectedCourse] = useState('');
   
-  // Pre-fill for Class Rep
+  // Pre-fill for Course Rep
   useEffect(() => {
-    if (open && user?.isClassRep && user?.classRepData) {
-        setSelectedDept(user.classRepData.department);
-        setSelectedCourse(user.classRepData.courseId);
+    if (open && user?.isCourseRep && user?.courseRepData && user.courseRepData.length > 0) {
+        // Default to the first course assigned
+        setSelectedDept(user.courseRepData[0].department);
+        setSelectedCourse(user.courseRepData[0].courseId);
     }
   }, [open, user]);
 
@@ -46,7 +47,7 @@ export const CreateSessionModal = ({ open, onOpenChange, user }: CreateSessionMo
     onOpenChange(false);
   };
   
-  const isClassRep = user?.isClassRep;
+  const isCourseRep = user?.isCourseRep;
 
   // Filter courses based on department
   const filteredCourses = selectedDept 
@@ -119,7 +120,7 @@ export const CreateSessionModal = ({ open, onOpenChange, user }: CreateSessionMo
               <Select 
                 value={selectedDept} 
                 onValueChange={setSelectedDept}
-                disabled={isClassRep}
+                disabled={isCourseRep}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select department" />
@@ -140,7 +141,7 @@ export const CreateSessionModal = ({ open, onOpenChange, user }: CreateSessionMo
               <Select 
                 value={selectedCourse} 
                 onValueChange={setSelectedCourse}
-                disabled={isClassRep}
+                disabled={isCourseRep}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select course" />

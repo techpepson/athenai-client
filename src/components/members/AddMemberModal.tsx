@@ -25,6 +25,7 @@ import {
   addLecturerUserComplete,
   MOCK_DEPARTMENTS,
   MOCK_COURSES,
+  MEMBER_ROLES,
 } from "@/contexts/AuthContext";
 
 interface AddMemberModalProps {
@@ -32,13 +33,7 @@ interface AddMemberModalProps {
   onOpenChange: (open: boolean) => void;
 }
 
-// Role options
-const ROLE_OPTIONS = [
-  { label: "Student", value: "student" },
-  { label: "Staff", value: "staff" },
-  { label: "Lecturer", value: "lecturer" },
-  { label: "Admin", value: "admin" },
-] as const;
+// Role options imported from AuthContext
 
 export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
   const [isMinor, setIsMinor] = useState(false);
@@ -198,7 +193,7 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
                   <SelectValue placeholder="Select role" />
                 </SelectTrigger>
                 <SelectContent>
-                  {ROLE_OPTIONS.map((option) => (
+                  {MEMBER_ROLES.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
                     </SelectItem>

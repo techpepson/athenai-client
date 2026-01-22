@@ -59,7 +59,7 @@ export const Sidebar = () => {
   };
 
   const isSuperAdmin = user?.role === "super_admin";
-  const canManageClassReps =
+  const canManageCourseReps =
     user?.role === "super_admin" ||
     user?.role === "staff" ||
     user?.role === "admin";
@@ -148,11 +148,11 @@ export const Sidebar = () => {
             />
           )}
 
-          {canManageClassReps && (
+          {canManageCourseReps && (
             <NavItem
-              to="/class-reps"
+              to="/course-reps"
               icon={<GraduationCap className="w-5 h-5" />}
-              label="Class Reps"
+              label="Course Reps"
               collapsed={collapsed}
             />
           )}

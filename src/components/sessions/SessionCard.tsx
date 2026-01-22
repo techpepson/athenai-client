@@ -158,8 +158,8 @@ export const SessionCard = ({
             onClick={() => onStart?.(session)}
             disabled={
               user?.role === "student" ||
-              (user?.role === "class_rep" &&
-                session.courseId !== user?.classRepData?.courseId)
+              (user?.role === "course_rep" &&
+                !user?.courseRepData?.some((c) => c.courseId === session.courseId))
             }
           >
             <Play className="w-4 h-4 mr-2" />
@@ -173,8 +173,8 @@ export const SessionCard = ({
             onClick={() => onEnd?.(session)}
             disabled={
               user?.role === "student" ||
-              (user?.role === "class_rep" &&
-                session.courseId !== user?.classRepData?.courseId)
+              (user?.role === "course_rep" &&
+                !user?.courseRepData?.some((c) => c.courseId === session.courseId))
             }
           >
             <Pause className="w-4 h-4 mr-2" />

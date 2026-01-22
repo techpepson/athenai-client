@@ -59,7 +59,7 @@ const Members = () => {
 
   useEffect(() => {
     loadMembers();
-  }, [addModalOpen, deleteDialogOpen]);
+  }, [addModalOpen, deleteDialogOpen, editModalOpen]);
 
   const loadMembers = () => {
     const users = getAllUsers();
@@ -114,9 +114,15 @@ const Members = () => {
     if (!selectedMember) return;
 
     let success = false;
-    if (selectedMember.role === "student") {
+    if (
+      selectedMember.role === "student" ||
+      selectedMember.role === "course_rep"
+    ) {
       success = deleteStudentUser(selectedMember.id);
-    } else if (selectedMember.role === "staff") {
+    } else if (
+      selectedMember.role === "staff" ||
+      selectedMember.role === "lecturer"
+    ) {
       success = deleteStaffUser(selectedMember.id);
     } else if (selectedMember.role === "admin") {
       // If viewing admin staff (e.g. by super admin), allow delete
@@ -150,8 +156,12 @@ const Members = () => {
       (member.studentId &&
         member.studentId.toLowerCase().includes(searchQuery.toLowerCase()));
 
-    // Exact match for role filter or 'all'
-    const matchesRole = roleFilter === "all" || member.role === roleFilter;
+    // Match role filter: "student" includes both plain students and course reps.
+    const matchesRole =
+      roleFilter === "all" ||
+      (roleFilter === "student"
+        ? member.role === "student" || member.role === "course_rep"
+        : member.role === roleFilter);
 
     // Match course filter - check if member has this course
     const matchesCourse =
@@ -231,8 +241,8 @@ const Members = () => {
           </SelectTrigger>
           <SelectContent>
             {ROLE_FILTER_OPTIONS.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
+              <SelectItem key={option.label} value={option.value}>
+                {option.value.charAt(0).toUpperCase() + option.value.slice(1)}
               </SelectItem>
             ))}
           </SelectContent>

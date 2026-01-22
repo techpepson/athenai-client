@@ -17,7 +17,7 @@ import Notifications from "./pages/Notifications";
 import Settings from "./pages/Settings";
 import StaffManagement from "./pages/StaffManagement";
 import AdminManagement from "./pages/AdminManagement";
-import ClassRepManagement from "./pages/ClassRepManagement";
+import CourseRepManagement from "./pages/CourseRepManagement";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -63,12 +63,12 @@ const App = () => (
                   }
                 />
                 <Route
-                  path="/class-reps"
+                  path="/course-reps"
                   element={
                     <ProtectedRoute
                       allowedRoles={["super_admin", "staff", "admin"]}
                     >
-                      <ClassRepManagement />
+                      <CourseRepManagement />
                     </ProtectedRoute>
                   }
                 />

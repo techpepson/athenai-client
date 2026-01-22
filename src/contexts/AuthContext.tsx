@@ -11,7 +11,7 @@ export type UserRole =
   | "admin"
   | "staff"
   | "lecturer"
-  | "class_rep"
+  | "course_rep"
   | "student";
 
 export interface User {
@@ -20,17 +20,17 @@ export interface User {
   name: string;
   role: UserRole;
   mustChangePassword?: boolean;
-  isClassRep?: boolean;
+  isCourseRep?: boolean;
   studentId?: string;
   staffId?: string;
   program?: string;
   semester?: string;
   department?: string;
-  classRepData?: {
+  courseRepData?: {
     courseId: string;
     courseName: string;
     department: string;
-  };
+  }[];
   coursesTaught?: string[];
   coursesTaken?: string | string[];
 }
@@ -158,8 +158,16 @@ export const ROLE_FILTER_OPTIONS = [
   { label: "Staff", value: "staff" },
   { label: "Admin", value: "admin" },
   { label: "Lecturers", value: "lecturer" },
-  { label: "Class Reps", value: "class_rep" },
+  { label: "Course Reps", value: "course_rep" },
 ];
+
+// Roles available for adding new members
+export const MEMBER_ROLES = [
+  { label: "Student", value: "student" },
+  { label: "Staff", value: "staff" },
+  { label: "Lecturer", value: "lecturer" },
+  { label: "Admin", value: "admin" },
+] as const;
 
 // Mock staff database for auto-fill
 export const MOCK_STAFF_DB: Record<
@@ -273,19 +281,27 @@ export const getStaffUsers = (): User[] => {
 
 export const deleteStaffUser = (userId: string): boolean => {
   const users = getStoredUsers();
+  const userToDelete = users.find((u) => u.id === userId);
+  
   const filtered = users.filter(
     (u) => u.id !== userId || u.role === "super_admin",
   );
   if (filtered.length !== users.length) {
     saveUsers(filtered);
+    
+    // Also remove from mock DB if exists
+    if (userToDelete?.staffId && MOCK_STAFF_DB[userToDelete.staffId]) {
+      delete MOCK_STAFF_DB[userToDelete.staffId];
+    }
+    
     return true;
   }
   return false;
 };
 
-// Class Rep management
-// Class Rep management
-export const assignClassRep = (
+// Course Rep management
+
+export const assignCourseRep = (
   studentId: string,
   courseId: string,
 ): { success: boolean; error?: string } => {
@@ -304,33 +320,40 @@ export const assignClassRep = (
   // Check if someone else is already rep for this course?
   // For now we allow multiple, or maybe we should restrict?
   // Let's restrict: Check if course already has a rep
-  const existingRep = users.find((u) => u.classRepData?.courseId === courseId);
+  // Check if someone else is already rep for this course
+  const existingRep = users.find((u) => u.courseRepData?.some((c) => c.courseId === courseId));
   if (existingRep && existingRep.id !== studentId) {
     return {
       success: false,
-      error: `Course already has a Class Rep: ${existingRep.name}`,
+      error: `Course already has a Course Rep: ${existingRep.name}`,
     };
   }
 
   const user = users[studentIndex];
+  
+  const currentData = user.courseRepData || [];
+  // Add if not already present
+  if (!currentData.some(c => c.courseId === course.id)) {
+      currentData.push({
+          courseId: course.id,
+          courseName: course.name,
+          department: course.department,
+      });
+  }
 
   // Update user role and data
   users[studentIndex] = {
     ...user,
-    role: "class_rep",
-    isClassRep: true,
-    classRepData: {
-      courseId: course.id,
-      courseName: course.name,
-      department: course.department,
-    },
+    role: "course_rep",
+    isCourseRep: true,
+    courseRepData: currentData,
   };
 
   saveUsers(users);
   return { success: true };
 };
 
-export const removeClassRep = (userId: string): boolean => {
+export const removeCourseRep = (userId: string): boolean => {
   const users = getStoredUsers();
   const userIndex = users.findIndex((u) => u.id === userId);
 
@@ -342,19 +365,52 @@ export const removeClassRep = (userId: string): boolean => {
   users[userIndex] = {
     ...user,
     role: "student",
-    isClassRep: false,
-    classRepData: undefined,
+    isCourseRep: false,
+    courseRepData: undefined,
   };
 
   saveUsers(users);
   return true;
 };
 
+export const updateUser = (
+  userId: string,
+  updates: Partial<User & { coursesTaught?: string[]; coursesTaken?: string[] | string }>,
+): { success: boolean; error?: string } => {
+  const users = getStoredUsers();
+  const userIndex = users.findIndex((u) => u.id === userId);
+
+  if (userIndex === -1) return { success: false, error: "User not found" };
+
+  const existing = users[userIndex];
+  const nextRole = updates.role ?? existing.role;
+
+  // Apply updates while keeping password and other fields intact.
+  let updatedUser: User & { password: string } = {
+    ...existing,
+    ...updates,
+  };
+
+  // If demoting from course rep, clear associated flags and metadata.
+  if (existing.role === "course_rep" && nextRole !== "course_rep") {
+    updatedUser = {
+      ...updatedUser,
+      role: nextRole,
+      isCourseRep: false,
+      courseRepData: undefined,
+    };
+  }
+
+  users[userIndex] = updatedUser;
+  saveUsers(users);
+  return { success: true };
+};
+
 // Deprecated or Helpers
-export const getClassRepUsers = (): User[] => {
+export const getCourseRepUsers = (): User[] => {
   const users = getStoredUsers();
   return users
-    .filter((u) => u.role === "class_rep")
+    .filter((u) => u.role === "course_rep")
     .map(({ password, ...user }) => user);
 };
 
@@ -530,7 +586,13 @@ export const deleteStudentUser = (userId: string): boolean => {
   const users = getStoredUsers();
   const userToDelete = users.find((u) => u.id === userId);
 
-  const filtered = users.filter((u) => u.id !== userId || u.role !== "student");
+  // Allow deleting students, course reps, and legacy class reps
+  const filtered = users.filter(
+    (u) =>
+      u.id !== userId ||
+      (u.role !== "student" &&
+        u.role !== "course_rep"),
+  );
   if (filtered.length !== users.length) {
     saveUsers(filtered);
 

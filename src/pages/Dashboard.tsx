@@ -1,21 +1,36 @@
-import { Users, CalendarClock, CheckCircle2, AlertTriangle, Clock, UserX, GraduationCap } from 'lucide-react';
-import { StatCard } from '@/components/dashboard/StatCard';
-import { ActiveSessionCard } from '@/components/dashboard/ActiveSessionCard';
-import { RecentActivityItem } from '@/components/dashboard/RecentActivityItem';
-import { AttendanceChart } from '@/components/dashboard/AttendanceChart';
-import { EarlyArrivalsCard } from '@/components/dashboard/EarlyArrivalsCard';
-import { mockStats, mockSessions, mockAlerts, mockEarlyArrivals } from '@/data/mockData';
-import { useAuth } from '@/contexts/AuthContext';
-import { Badge } from '@/components/ui/badge';
+import {
+  Users,
+  CalendarClock,
+  CheckCircle2,
+  AlertTriangle,
+  Clock,
+  UserX,
+  GraduationCap,
+} from "lucide-react";
+import { StatCard } from "@/components/dashboard/StatCard";
+import { ActiveSessionCard } from "@/components/dashboard/ActiveSessionCard";
+import { RecentActivityItem } from "@/components/dashboard/RecentActivityItem";
+import { AttendanceChart } from "@/components/dashboard/AttendanceChart";
+import { EarlyArrivalsCard } from "@/components/dashboard/EarlyArrivalsCard";
+import {
+  mockStats,
+  mockSessions,
+  mockAlerts,
+  mockEarlyArrivals,
+} from "@/data/mockData";
+import { useAuth } from "@/contexts/AuthContext";
+import { Badge } from "@/components/ui/badge";
 
 const Dashboard = () => {
-  const activeSessions = mockSessions.filter(s => s.status === 'active' || s.status === 'scheduled');
+  const activeSessions = mockSessions.filter(
+    (s) => s.status === "active" || s.status === "scheduled",
+  );
   const { user } = useAuth();
-  
-  const firstName = user?.name.split(' ')[0] || 'User';
-  const isPersonalView = user?.role === 'student' || user?.role === 'staff';
-  
-  const welcomeMessage = isPersonalView 
+
+  const firstName = user?.name.split(" ")[0] || "User";
+  const isPersonalView = user?.role === "student" || user?.role === "staff";
+
+  const welcomeMessage = isPersonalView
     ? `Welcome back ${firstName}!, here's your attendance overview`
     : `Welcome back ${firstName}, here's the attendance overview`;
 
@@ -24,19 +39,20 @@ const Dashboard = () => {
       {/* Page Header */}
       <div>
         <div className="flex items-center gap-3">
-             <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
-             {user?.isClassRep && (
-                <Badge variant="secondary" className="gap-1">
-                    <GraduationCap className="w-3 h-3" />
-                    Class Representative
-                </Badge>
-             )}
+          <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+          {user?.isCourseRep && (
+            <Badge variant="secondary" className="gap-1">
+              <GraduationCap className="w-3 h-3" />
+              Course Representative
+            </Badge>
+          )}
         </div>
         <p className="text-muted-foreground mt-1">{welcomeMessage}</p>
-        {user?.isClassRep && (
-             <p className="text-xs text-primary mt-1">
-                Course: {user?.classRepData?.courseName} ({user?.classRepData?.department?.toUpperCase()})
-             </p>
+        {user?.isCourseRep && (
+          <p className="text-xs text-primary mt-1">
+            Course: {user?.courseRepData?.courseName} (
+            {user?.courseRepData?.department?.toUpperCase()})
+          </p>
         )}
       </div>
 
@@ -86,8 +102,12 @@ const Dashboard = () => {
         <div className="lg:col-span-2 bg-card rounded-xl border border-border p-6">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h2 className="text-lg font-semibold text-foreground">Weekly Attendance</h2>
-              <p className="text-sm text-muted-foreground">Attendance trends for this week</p>
+              <h2 className="text-lg font-semibold text-foreground">
+                Weekly Attendance
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Attendance trends for this week
+              </p>
             </div>
             <div className="flex items-center gap-4 text-sm">
               <div className="flex items-center gap-2">
@@ -106,11 +126,13 @@ const Dashboard = () => {
         {/* Recent Activity */}
         <div className="bg-card rounded-xl border border-border p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-foreground">Recent Activity</h2>
+            <h2 className="text-lg font-semibold text-foreground">
+              Recent Activity
+            </h2>
             <span className="text-xs text-muted-foreground">Live updates</span>
           </div>
           <div className="space-y-2 max-h-[360px] overflow-y-auto scrollbar-hide">
-            {mockAlerts.map(alert => (
+            {mockAlerts.map((alert) => (
               <RecentActivityItem key={alert.id} alert={alert} />
             ))}
           </div>
@@ -124,12 +146,16 @@ const Dashboard = () => {
       <div>
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="text-lg font-semibold text-foreground">Active & Upcoming Sessions</h2>
-            <p className="text-sm text-muted-foreground">{activeSessions.length} sessions currently running or scheduled</p>
+            <h2 className="text-lg font-semibold text-foreground">
+              Active & Upcoming Sessions
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              {activeSessions.length} sessions currently running or scheduled
+            </p>
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {activeSessions.map(session => (
+          {activeSessions.map((session) => (
             <ActiveSessionCard key={session.id} session={session} />
           ))}
         </div>
