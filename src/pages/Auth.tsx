@@ -22,7 +22,19 @@ const Auth = () => {
 
   useEffect(() => {
     if (user) {
-      navigate('/dashboard', { replace: true });
+      const rolePrefix =
+        user.role === "super_admin"
+          ? "super_admin"
+          : user.role === "admin"
+            ? "admin"
+            : user.role === "lecturer"
+              ? "lecturer"
+              : user.role === "course_rep"
+                ? "course_rep"
+                : user.role === "staff"
+                  ? "staff"
+                  : "student";
+      navigate(`/${rolePrefix}/dashboard`, { replace: true });
     }
   }, [user, navigate]);
 
@@ -33,11 +45,25 @@ const Auth = () => {
     const result = await login(email, password);
     
     if (result.success) {
+      const userRole = result.user?.role || "student";
+      const rolePrefix =
+        userRole === "super_admin"
+          ? "super_admin"
+          : userRole === "admin"
+            ? "admin"
+            : userRole === "lecturer"
+              ? "lecturer"
+              : userRole === "course_rep"
+                ? "course_rep"
+                : userRole === "staff"
+                  ? "staff"
+                  : "student";
+
       toast({
         title: 'Welcome back!',
         description: 'You have been logged in successfully.',
       });
-      navigate('/dashboard', { replace: true });
+      navigate(`/${rolePrefix}/dashboard`, { replace: true });
     } else {
       toast({
         title: 'Login failed',

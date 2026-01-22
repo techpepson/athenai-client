@@ -64,7 +64,56 @@ const Members = () => {
   const loadMembers = () => {
     const users = getAllUsers();
     // Map User to Member
-    const mappedMembers: Member[] = users.map((u) => {
+    const mappedMembers: Member[] = users
+      .filter((u) => {
+        // Filter members based on logged-in user role
+        if (!user) return false;
+
+        if (user.role === "lecturer") {
+            // Lecturer can only see students registered to their courses
+            // And fellow staff? "members-limited to only student registered to his or her courses"
+            // So we exclude admin/staff/lecturer from the list? Requirement says "only student".
+            if (u.role !== "student" && u.role !== "course_rep") return false;
+
+            // Check if student takes any of the lecturer's courses
+            const studentCourses = Array.isArray(u.coursesTaken)
+                ? u.coursesTaken
+                : typeof u.coursesTaken === "string"
+                    ? u.coursesTaken.split(",").map(c => c.trim())
+                    : [];
+            
+            const lecturerCourses = user.coursesTaught || [];
+            return studentCourses.some(c => lecturerCourses.includes(c));
+        }
+
+        if (user.role === "course_rep" || user.role === "student") {
+             // Students/Reps see peers in their relevant courses
+             if (u.role !== "student" && u.role !== "course_rep") return false;
+             
+             // For Course Reps: Courses they rep. For Students: Courses they take.
+             let relevantCourseIds: string[] = [];
+             
+             if (user.role === "course_rep") {
+                 relevantCourseIds = user.courseRepData?.map(c => c.courseId) || [];
+             } else {
+                 relevantCourseIds = Array.isArray(user.coursesTaken)
+                    ? user.coursesTaken
+                    : typeof user.coursesTaken === "string"
+                        ? user.coursesTaken.split(",").map(c => c.trim())
+                        : [];
+             }
+
+             const studentCourses = Array.isArray(u.coursesTaken)
+                ? u.coursesTaken
+                : typeof u.coursesTaken === "string"
+                    ? u.coursesTaken.split(",").map(c => c.trim())
+                    : [];
+             return studentCourses.some(c => relevantCourseIds.includes(c));
+        }
+
+        return true; // Admin/SuperAdmin/Staff see all (Staff visibility unclear but leaving as all for now per typical extensive access)
+      })
+      .map((u) => {
       // Determine status: only students with registered courses are active
       let status: "active" | "inactive" = "inactive";
       if (u.role === "student") {

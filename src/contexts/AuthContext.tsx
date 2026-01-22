@@ -47,7 +47,7 @@ interface AuthContextType {
   login: (
     email: string,
     password: string,
-  ) => Promise<{ success: boolean; error?: string }>;
+  ) => Promise<{ success: boolean; error?: string; user?: User }>;
   logout: () => void;
   changePassword: (
     oldPassword: string,
@@ -668,7 +668,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const login = async (
     email: string,
     password: string,
-  ): Promise<{ success: boolean; error?: string }> => {
+  ): Promise<{ success: boolean; error?: string; user?: User }> => {
     const users = getStoredUsers();
     const foundUser = users.find(
       (u) => u.email === email && u.password === password,
@@ -685,7 +685,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       JSON.stringify(userWithoutPassword),
     );
 
-    return { success: true };
+    return { success: true, user: userWithoutPassword };
   };
 
   const logout = () => {

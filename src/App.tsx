@@ -31,7 +31,7 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
             <Routes>
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/" element={<Navigate to="/auth" replace />} />
               <Route path="/auth" element={<Auth />} />
               <Route
                 element={
@@ -40,38 +40,41 @@ const App = () => (
                   </ProtectedRoute>
                 }
               >
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/members" element={<Members />} />
-                <Route path="/sessions" element={<Sessions />} />
-                <Route path="/analytics" element={<Analytics />} />
-                <Route path="/notifications" element={<Notifications />} />
-                <Route path="/settings" element={<Settings />} />
-                <Route
-                  path="/admins"
-                  element={
-                    <ProtectedRoute allowedRoles={["super_admin"]}>
-                      <AdminManagement />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/staff"
-                  element={
-                    <ProtectedRoute allowedRoles={["super_admin", "admin"]}>
-                      <StaffManagement />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/course-reps"
-                  element={
-                    <ProtectedRoute
-                      allowedRoles={["super_admin", "staff", "admin"]}
-                    >
-                      <CourseRepManagement />
-                    </ProtectedRoute>
-                  }
-                />
+                {/* Dynamic Role-Based Routes */}
+                <Route path="/:role">
+                  <Route path="dashboard" element={<Dashboard />} />
+                  <Route path="members" element={<Members />} />
+                  <Route path="sessions" element={<Sessions />} />
+                  <Route path="analytics" element={<Analytics />} />
+                  <Route path="notifications" element={<Notifications />} />
+                  <Route path="settings" element={<Settings />} />
+                  
+                  {/* Admin Specific */}
+                  <Route
+                    path="admins"
+                    element={
+                      <ProtectedRoute allowedRoles={["super_admin", "admin"]}>
+                        <AdminManagement />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="staff"
+                    element={
+                      <ProtectedRoute allowedRoles={["super_admin", "admin"]}>
+                        <StaffManagement />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="course-reps"
+                    element={
+                      <ProtectedRoute allowedRoles={["super_admin", "staff", "admin", "lecturer"]}>
+                        <CourseRepManagement />
+                      </ProtectedRoute>
+                    }
+                  />
+                </Route>
               </Route>
               <Route path="/kiosk" element={<Kiosk />} />
               <Route path="*" element={<NotFound />} />

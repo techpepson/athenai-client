@@ -224,7 +224,10 @@ export const EditMemberModal = ({
                 value={formData.role}
                 onValueChange={(value) => {
                   const newRole = value as Member["role"];
-                  if (member.role === "course_rep" && newRole === "student") {
+                  if (
+                    (member.role === "course_rep" && newRole === "student") ||
+                    (member.role === "admin" && newRole === "staff")
+                  ) {
                     setPendingRole(newRole);
                     setRoleAlertOpen(true);
                   } else {
@@ -379,9 +382,15 @@ export const EditMemberModal = ({
       <AlertDialog open={roleAlertOpen} onOpenChange={setRoleAlertOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Warning: Changing Course Rep to Student</AlertDialogTitle>
+            <AlertDialogTitle>
+              {pendingRole === "student"
+                ? "Warning: Changing Course Rep to Student"
+                : "Warning: Changing Admin to Staff"}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              Check this box if you want to proceed. This action will cause the student to lose all course rep privileges, including all assigned courses.
+              {pendingRole === "student"
+                ? "Check this box if you want to proceed. This action will cause the student to lose all course rep privileges, including all assigned courses."
+                : "Check this box if you want to proceed. This action will cause the admin to lose all admin privileges."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
