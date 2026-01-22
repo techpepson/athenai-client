@@ -67,7 +67,7 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
         name,
         department || "cs",
         "1",
-        coursesTaken.join(","),
+        coursesTaken,
       );
     } else if (role === "staff") {
       result = addStaffUserComplete(

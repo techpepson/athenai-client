@@ -32,6 +32,7 @@ export interface User {
     department: string;
   };
   coursesTaught?: string[];
+  coursesTaken?: string | string[];
 }
 
 export interface Course {
@@ -375,6 +376,7 @@ export const addStudentUser = (
   name: string,
   program: string,
   semester: string,
+  coursesTaken: string[] = [],
   password: string = "student123",
 ): { success: boolean; error?: string } => {
   const users = getStoredUsers();
@@ -395,6 +397,7 @@ export const addStudentUser = (
     studentId,
     program,
     semester,
+    coursesTaken,
   };
 
   users.push(newUser);

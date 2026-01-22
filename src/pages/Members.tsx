@@ -64,18 +64,34 @@ const Members = () => {
   const loadMembers = () => {
     const users = getAllUsers();
     // Map User to Member
-    const mappedMembers: Member[] = users.map((u) => ({
-      id: u.id,
-      name: u.name,
-      email: u.email,
-      role: u.role,
-      department: u.department,
-      studentId: u.studentId || u.staffId, // Map both to generic ID field if needed or keep separate
-      photoUrl: undefined, // Mock users don't have photoUrl yet
-      isMinor: false, // Default
-      createdAt: new Date(), // Mock date
-      status: "active",
-    }));
+    const mappedMembers: Member[] = users.map((u) => {
+      // Determine status: only students with registered courses are active
+      let status: "active" | "inactive" = "inactive";
+      if (u.role === "student") {
+        const courses = Array.isArray(u.coursesTaken)
+          ? u.coursesTaken
+          : typeof u.coursesTaken === "string"
+            ? u.coursesTaken
+                .split(",")
+                .map((c) => c.trim())
+                .filter(Boolean)
+            : [];
+        status = courses.length > 0 ? "active" : "inactive";
+      }
+
+      return {
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        role: u.role,
+        department: u.department,
+        studentId: u.studentId || u.staffId, // Map both to generic ID field if needed or keep separate
+        photoUrl: undefined, // Mock users don't have photoUrl yet
+        isMinor: false, // Default
+        createdAt: new Date(), // Mock date
+        status,
+      };
+    });
     setMembers(mappedMembers);
   };
 
@@ -151,7 +167,11 @@ const Members = () => {
         }
         // Check coursesTaken for students
         if (fullUser.coursesTaken) {
-          return fullUser.coursesTaken.split(",").includes(courseFilter);
+          const courses =
+            typeof fullUser.coursesTaken === "string"
+              ? fullUser.coursesTaken.split(",")
+              : fullUser.coursesTaken;
+          return courses.includes(courseFilter);
         }
         return false;
       })();

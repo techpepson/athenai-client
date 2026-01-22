@@ -1,13 +1,13 @@
-import { Member } from '@/types/attendance';
-import { cn } from '@/lib/utils';
-import { Mail, Phone, MoreVertical, Shield } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Member } from "@/types/attendance";
+import { cn } from "@/lib/utils";
+import { Mail, Phone, MoreVertical, Shield } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+} from "@/components/ui/dropdown-menu";
 
 interface MemberCardProps {
   member: Member;
@@ -16,11 +16,16 @@ interface MemberCardProps {
   onViewAttendance?: (member: Member) => void;
 }
 
-export const MemberCard = ({ member, onEdit, onDelete, onViewAttendance }: MemberCardProps) => {
+export const MemberCard = ({
+  member,
+  onEdit,
+  onDelete,
+  onViewAttendance,
+}: MemberCardProps) => {
   const roleColors = {
-    student: 'bg-primary/20 text-primary',
-    staff: 'bg-success/20 text-success',
-    admin: 'bg-warning/20 text-warning'
+    student: "bg-primary/20 text-primary",
+    staff: "bg-success/20 text-success",
+    admin: "bg-warning/20 text-warning",
   };
 
   return (
@@ -37,11 +42,14 @@ export const MemberCard = ({ member, onEdit, onDelete, onViewAttendance }: Membe
           ) : (
             <div className="w-14 h-14 rounded-xl bg-gradient-primary flex items-center justify-center">
               <span className="text-lg font-bold text-primary-foreground">
-                {member.name.split(' ').map(n => n[0]).join('')}
+                {member.name
+                  .split(" ")
+                  .map((n) => n[0])
+                  .join("")}
               </span>
             </div>
           )}
-          {member.status === 'active' && (
+          {member.role === "student" && member.status === "active" && (
             <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-success rounded-full border-2 border-card" />
           )}
         </div>
@@ -49,7 +57,9 @@ export const MemberCard = ({ member, onEdit, onDelete, onViewAttendance }: Membe
         {/* Info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <h3 className="font-semibold text-foreground truncate">{member.name}</h3>
+            <h3 className="font-semibold text-foreground truncate">
+              {member.name}
+            </h3>
             {member.isMinor && (
               <span title="Minor - Parent contact required">
                 <Shield className="w-4 h-4 text-warning flex-shrink-0" />
@@ -57,27 +67,47 @@ export const MemberCard = ({ member, onEdit, onDelete, onViewAttendance }: Membe
             )}
           </div>
           <div className="flex items-center gap-2 mt-1">
-            <span className={cn('px-2 py-0.5 text-xs font-medium rounded-full', roleColors[member.role])}>
+            <span
+              className={cn(
+                "px-2 py-0.5 text-xs font-medium rounded-full",
+                roleColors[member.role],
+              )}
+            >
               {member.role.charAt(0).toUpperCase() + member.role.slice(1)}
             </span>
-            <span className="text-xs text-muted-foreground">{member.department}</span>
+            <span className="text-xs text-muted-foreground">
+              {member.department}
+            </span>
           </div>
           {member.studentId && (
-            <p className="text-xs text-muted-foreground mt-1">ID: {member.studentId}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              ID: {member.studentId}
+            </p>
           )}
         </div>
 
         {/* Actions */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="secondary" size="icon" className="opacity-0 group-hover:opacity-100 transition-opacity">
+            <Button
+              variant="secondary"
+              size="icon"
+              className="opacity-0 group-hover:opacity-100 transition-opacity"
+            >
               <MoreVertical className="w-4 h-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => onEdit?.(member)}>Edit Member</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onViewAttendance?.(member)}>View Attendance</DropdownMenuItem>
-            <DropdownMenuItem className="text-destructive" onClick={() => onDelete?.(member)}>
+            <DropdownMenuItem onClick={() => onEdit?.(member)}>
+              Edit Member
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onViewAttendance?.(member)}>
+              View Attendance
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="text-destructive"
+              onClick={() => onDelete?.(member)}
+            >
               Remove
             </DropdownMenuItem>
           </DropdownMenuContent>
