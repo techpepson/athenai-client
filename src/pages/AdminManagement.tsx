@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Trash2, UserCog, Copy, Check, Shield } from "lucide-react";
+import { Plus, Trash2, UserCog, Copy, Check, Shield, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,6 +27,9 @@ import {
   deleteAdminStaffUser,
   getAllUsers,
   User,
+  createPermissionRequest,
+  getMyPermissionRequests,
+  PermissionRequest,
 } from "@/contexts/AuthContext";
 import { AdminPrivilegesModal } from "@/components/admin/AdminPrivilegesModal";
 
@@ -42,13 +45,30 @@ const AdminManagement = () => {
   const [newStaffId, setNewStaffId] = useState("");
   const [generatedPassword, setGeneratedPassword] = useState("");
   const [copied, setCopied] = useState(false);
+  const [myRequests, setMyRequests] = useState<PermissionRequest[]>([]);
   const { toast } = useToast();
 
   const isSuperAdmin = currentUser?.role === "super_admin";
+  const isAdmin = currentUser?.role === "admin";
+  const canAddAdmin =
+    isSuperAdmin || (isAdmin && currentUser?.privileges?.canAddAdmin);
+  const canDeleteAdmin =
+    isSuperAdmin || (isAdmin && currentUser?.privileges?.canDeleteAdmin);
+
+  // Check if admin has pending requests
+  const hasPendingAddRequest = myRequests.some(
+    (r) => r.permissionType === "canAddAdmin" && r.status === "pending",
+  );
+  const hasPendingDeleteRequest = myRequests.some(
+    (r) => r.permissionType === "canDeleteAdmin" && r.status === "pending",
+  );
 
   useEffect(() => {
     loadStaff();
-  }, []);
+    if (currentUser) {
+      setMyRequests(getMyPermissionRequests(currentUser.id));
+    }
+  }, [currentUser]);
 
   const loadStaff = () => {
     // Filter showing only Admins
@@ -114,6 +134,28 @@ const AdminManagement = () => {
     setSelectedStaff(null);
   };
 
+  const handleRequestPermission = (
+    permissionType: "canAddAdmin" | "canDeleteAdmin",
+  ) => {
+    if (!currentUser) return;
+
+    const result = createPermissionRequest(currentUser, permissionType);
+
+    if (result.success) {
+      setMyRequests(getMyPermissionRequests(currentUser.id));
+      toast({
+        title: "Request Sent",
+        description: `Your request for ${permissionType === "canAddAdmin" ? "Add Admin" : "Delete Admin"} permission has been sent to the Super Admin.`,
+      });
+    } else {
+      toast({
+        title: "Error",
+        description: result.error,
+        variant: "destructive",
+      });
+    }
+  };
+
   const copyPassword = () => {
     navigator.clipboard.writeText(generatedPassword);
     setCopied(true);
@@ -140,11 +182,52 @@ const AdminManagement = () => {
             Create and manage system administrators (Admin)
           </p>
         </div>
-        <Button variant="gradient" onClick={() => setAddModalOpen(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          Add Admin
-        </Button>
+        <div className="flex items-center gap-2">
+          {canAddAdmin && (
+            <Button variant="gradient" onClick={() => setAddModalOpen(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              Add Admin
+            </Button>
+          )}
+        </div>
       </div>
+
+      {/* Request Permission Section for Admins without privileges */}
+      {isAdmin && !isSuperAdmin && (!canAddAdmin || !canDeleteAdmin) && (
+        <div className="bg-card rounded-xl border border-border p-4">
+          <h3 className="text-sm font-medium text-foreground mb-3">
+            Request Permissions
+          </h3>
+          <div className="flex flex-wrap gap-3">
+            {!canAddAdmin && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={hasPendingAddRequest}
+                onClick={() => handleRequestPermission("canAddAdmin")}
+              >
+                <Send className="w-4 h-4 mr-2" />
+                {hasPendingAddRequest
+                  ? "Add Admin Request Pending"
+                  : "Request Add Admin Permission"}
+              </Button>
+            )}
+            {!canDeleteAdmin && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={hasPendingDeleteRequest}
+                onClick={() => handleRequestPermission("canDeleteAdmin")}
+              >
+                <Send className="w-4 h-4 mr-2" />
+                {hasPendingDeleteRequest
+                  ? "Delete Admin Request Pending"
+                  : "Request Delete Admin Permission"}
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Staff List */}
       <div className="bg-card rounded-xl border border-border">
@@ -157,10 +240,12 @@ const AdminManagement = () => {
             <p className="text-muted-foreground mb-4">
               Add admin members to help manage the system
             </p>
-            <Button variant="outline" onClick={() => setAddModalOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              Add First Admin
-            </Button>
+            {canAddAdmin && (
+              <Button variant="outline" onClick={() => setAddModalOpen(true)}>
+                <Plus className="w-4 h-4 mr-2" />
+                Add First Admin
+              </Button>
+            )}
           </div>
         ) : (
           <div className="divide-y divide-border">
@@ -183,9 +268,6 @@ const AdminManagement = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full font-medium">
-                    Admin
-                  </span>
                   {staff.mustChangePassword && (
                     <span className="text-xs bg-warning/10 text-warning px-2 py-1 rounded-full">
                       New
@@ -215,17 +297,19 @@ const AdminManagement = () => {
                       <Shield className="w-4 h-4" />
                     </Button>
                   )}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                    onClick={() => {
-                      setSelectedStaff(staff);
-                      setDeleteDialogOpen(true);
-                    }}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+                  {canDeleteAdmin && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => {
+                        setSelectedStaff(staff);
+                        setDeleteDialogOpen(true);
+                      }}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  )}
                 </div>
               </div>
             ))}

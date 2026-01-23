@@ -10,6 +10,7 @@ import {
   Search,
   BookOpen,
   Pencil,
+  Filter,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,6 +61,7 @@ const CourseRepManagement = () => {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [courseRepSearch, setCourseRepSearch] = useState("");
+  const [courseRepCourseFilter, setCourseRepCourseFilter] = useState("all");
 
   // Wizard State - Simplified to 2 steps
   const [step, setStep] = useState(1);
@@ -147,20 +149,33 @@ const CourseRepManagement = () => {
     )
     .slice(0, 5); // Limit results
 
-  // Filter course reps by course name or rep name
+  // Filter course reps by course name, rep name, or student ID
   const filteredCourseReps = courseRepList.filter((rep) => {
-    if (!courseRepSearch) return true;
-    const searchLower = courseRepSearch.toLowerCase();
-    // Check rep name
-    if (rep.name.toLowerCase().includes(searchLower)) return true;
-    // Check course names
-    if (
-      rep.courseRepData?.some((data) =>
+    // Filter by course if selected
+    if (courseRepCourseFilter && courseRepCourseFilter !== "all") {
+      if (
+        !rep.courseRepData?.some(
+          (data) => data.courseId === courseRepCourseFilter,
+        )
+      ) {
+        return false;
+      }
+    }
+
+    // Filter by search text (name, course name, or student ID)
+    if (courseRepSearch) {
+      const searchLower = courseRepSearch.toLowerCase();
+      const matchesName = rep.name.toLowerCase().includes(searchLower);
+      const matchesCourse = rep.courseRepData?.some((data) =>
         data.courseName.toLowerCase().includes(searchLower),
-      )
-    )
-      return true;
-    return false;
+      );
+      const matchesStudentId = rep.studentId
+        ?.toLowerCase()
+        .includes(searchLower);
+      if (!matchesName && !matchesCourse && !matchesStudentId) return false;
+    }
+
+    return true;
   });
 
   return (
@@ -198,30 +213,64 @@ const CourseRepManagement = () => {
         </div>
       </div>
 
-      {/* Search Filter */}
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search by course name or rep name..."
-          className="pl-9"
-          value={courseRepSearch}
-          onChange={(e) => setCourseRepSearch(e.target.value)}
-        />
+      {/* Filters Section */}
+      <div className="flex flex-wrap items-center gap-4 bg-card p-4 rounded-xl border border-border">
+        {/* Search by Name/Course/Student ID */}
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search by name or student ID..."
+            className="pl-9"
+            value={courseRepSearch}
+            onChange={(e) => setCourseRepSearch(e.target.value)}
+          />
+        </div>
+
+        {/* Filter by Course */}
+        <Select
+          value={courseRepCourseFilter}
+          onValueChange={setCourseRepCourseFilter}
+        >
+          <SelectTrigger className="w-48">
+            <Filter className="w-4 h-4 mr-2" />
+            <SelectValue placeholder="Filter by course" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Courses</SelectItem>
+            {MOCK_COURSES.map((course) => (
+              <SelectItem key={course.id} value={course.id}>
+                {course.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <div className="text-sm text-muted-foreground whitespace-nowrap">
+          {filteredCourseReps.length} rep
+          {filteredCourseReps.length !== 1 ? "s" : ""}
+        </div>
       </div>
 
       {/* Course Rep List */}
       <div className="bg-card rounded-xl border border-border">
-        {filteredCourseReps.length === 0 && courseRepSearch ? (
+        {filteredCourseReps.length === 0 &&
+        (courseRepSearch || courseRepCourseFilter !== "all") ? (
           <div className="p-12 text-center">
             <Search className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-medium text-foreground mb-2">
               No results found
             </h3>
             <p className="text-muted-foreground mb-4">
-              No course representatives match "{courseRepSearch}"
+              No course representatives match your filters
             </p>
-            <Button variant="outline" onClick={() => setCourseRepSearch("")}>
-              Clear Search
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCourseRepSearch("");
+                setCourseRepCourseFilter("all");
+              }}
+            >
+              Clear Filters
             </Button>
           </div>
         ) : courseRepList.length === 0 ? (

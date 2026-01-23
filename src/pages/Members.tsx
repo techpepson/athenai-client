@@ -28,6 +28,7 @@ import {
   deleteStudentUser,
   deleteStaffUser,
   deleteAdminStaffUser,
+  removeCourseRep,
   MOCK_DEPARTMENTS,
   MOCK_COURSES,
   ROLE_FILTER_OPTIONS,
@@ -53,6 +54,12 @@ const Members = () => {
   const [viewAttendanceOpen, setViewAttendanceOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [courseRepActionDialogOpen, setCourseRepActionDialogOpen] =
+    useState(false);
+  const [removePrivilegeConfirmOpen, setRemovePrivilegeConfirmOpen] =
+    useState(false);
+  const [deleteEntirelyConfirmOpen, setDeleteEntirelyConfirmOpen] =
+    useState(false);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const { user } = useAuth();
   const { toast } = useToast();
@@ -70,77 +77,78 @@ const Members = () => {
         if (!user) return false;
 
         if (user.role === "lecturer") {
-            // Lecturer can only see students registered to their courses
-            // And fellow staff? "members-limited to only student registered to his or her courses"
-            // So we exclude admin/staff/lecturer from the list? Requirement says "only student".
-            if (u.role !== "student" && u.role !== "course_rep") return false;
+          // Lecturer can only see students registered to their courses
+          // And fellow staff? "members-limited to only student registered to his or her courses"
+          // So we exclude admin/staff/lecturer from the list? Requirement says "only student".
+          if (u.role !== "student" && u.role !== "course_rep") return false;
 
-            // Check if student takes any of the lecturer's courses
-            const studentCourses = Array.isArray(u.coursesTaken)
-                ? u.coursesTaken
-                : typeof u.coursesTaken === "string"
-                    ? u.coursesTaken.split(",").map(c => c.trim())
-                    : [];
-            
-            const lecturerCourses = user.coursesTaught || [];
-            return studentCourses.some(c => lecturerCourses.includes(c));
+          // Check if student takes any of the lecturer's courses
+          const studentCourses = Array.isArray(u.coursesTaken)
+            ? u.coursesTaken
+            : typeof u.coursesTaken === "string"
+              ? u.coursesTaken.split(",").map((c) => c.trim())
+              : [];
+
+          const lecturerCourses = user.coursesTaught || [];
+          return studentCourses.some((c) => lecturerCourses.includes(c));
         }
 
         if (user.role === "course_rep" || user.role === "student") {
-             // Students/Reps see peers in their relevant courses
-             if (u.role !== "student" && u.role !== "course_rep") return false;
-             
-             // For Course Reps: Courses they rep. For Students: Courses they take.
-             let relevantCourseIds: string[] = [];
-             
-             if (user.role === "course_rep") {
-                 relevantCourseIds = user.courseRepData?.map(c => c.courseId) || [];
-             } else {
-                 relevantCourseIds = Array.isArray(user.coursesTaken)
-                    ? user.coursesTaken
-                    : typeof user.coursesTaken === "string"
-                        ? user.coursesTaken.split(",").map(c => c.trim())
-                        : [];
-             }
+          // Students/Reps see peers in their relevant courses
+          if (u.role !== "student" && u.role !== "course_rep") return false;
 
-             const studentCourses = Array.isArray(u.coursesTaken)
-                ? u.coursesTaken
-                : typeof u.coursesTaken === "string"
-                    ? u.coursesTaken.split(",").map(c => c.trim())
-                    : [];
-             return studentCourses.some(c => relevantCourseIds.includes(c));
+          // For Course Reps: Courses they rep. For Students: Courses they take.
+          let relevantCourseIds: string[] = [];
+
+          if (user.role === "course_rep") {
+            relevantCourseIds =
+              user.courseRepData?.map((c) => c.courseId) || [];
+          } else {
+            relevantCourseIds = Array.isArray(user.coursesTaken)
+              ? user.coursesTaken
+              : typeof user.coursesTaken === "string"
+                ? user.coursesTaken.split(",").map((c) => c.trim())
+                : [];
+          }
+
+          const studentCourses = Array.isArray(u.coursesTaken)
+            ? u.coursesTaken
+            : typeof u.coursesTaken === "string"
+              ? u.coursesTaken.split(",").map((c) => c.trim())
+              : [];
+          return studentCourses.some((c) => relevantCourseIds.includes(c));
         }
 
         return true; // Admin/SuperAdmin/Staff see all (Staff visibility unclear but leaving as all for now per typical extensive access)
       })
       .map((u) => {
-      // Determine status: only students with registered courses are active
-      let status: "active" | "inactive" = "inactive";
-      if (u.role === "student") {
-        const courses = Array.isArray(u.coursesTaken)
-          ? u.coursesTaken
-          : typeof u.coursesTaken === "string"
+        // Determine status: only students with registered courses are active
+        let status: "active" | "inactive" = "inactive";
+        if (u.role === "student") {
+          const courses = Array.isArray(u.coursesTaken)
             ? u.coursesTaken
-                .split(",")
-                .map((c) => c.trim())
-                .filter(Boolean)
-            : [];
-        status = courses.length > 0 ? "active" : "inactive";
-      }
+            : typeof u.coursesTaken === "string"
+              ? u.coursesTaken
+                  .split(",")
+                  .map((c) => c.trim())
+                  .filter(Boolean)
+              : [];
+          status = courses.length > 0 ? "active" : "inactive";
+        }
 
-      return {
-        id: u.id,
-        name: u.name,
-        email: u.email,
-        role: u.role,
-        department: u.department,
-        studentId: u.studentId || u.staffId, // Map both to generic ID field if needed or keep separate
-        photoUrl: undefined, // Mock users don't have photoUrl yet
-        isMinor: false, // Default
-        createdAt: new Date(), // Mock date
-        status,
-      };
-    });
+        return {
+          id: u.id,
+          name: u.name,
+          email: u.email,
+          role: u.role,
+          department: u.department,
+          studentId: u.studentId || u.staffId, // Map both to generic ID field if needed or keep separate
+          photoUrl: undefined, // Mock users don't have photoUrl yet
+          isMinor: false, // Default
+          createdAt: new Date(), // Mock date
+          status,
+        };
+      });
     setMembers(mappedMembers);
   };
 
@@ -156,7 +164,65 @@ const Members = () => {
 
   const handleDeleteMember = (member: Member) => {
     setSelectedMember(member);
-    setDeleteDialogOpen(true);
+    if (member.role === "course_rep") {
+      setCourseRepActionDialogOpen(true);
+    } else {
+      setDeleteDialogOpen(true);
+    }
+  };
+
+  const handleRemoveCourseRepPrivilege = () => {
+    setCourseRepActionDialogOpen(false);
+    setRemovePrivilegeConfirmOpen(true);
+  };
+
+  const handleDeleteCourseRepEntirely = () => {
+    setCourseRepActionDialogOpen(false);
+    setDeleteEntirelyConfirmOpen(true);
+  };
+
+  const confirmRemovePrivilege = () => {
+    if (!selectedMember) return;
+
+    const success = removeCourseRep(selectedMember.id);
+
+    if (success) {
+      toast({
+        title: "Privilege Removed",
+        description: `${selectedMember.name} has been returned to student status. All data is safe.`,
+      });
+      loadMembers();
+      setRemovePrivilegeConfirmOpen(false);
+      setSelectedMember(null);
+    } else {
+      toast({
+        title: "Error",
+        description: "Could not remove course rep privilege.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const confirmDeleteEntirely = () => {
+    if (!selectedMember) return;
+
+    const success = deleteStudentUser(selectedMember.id);
+
+    if (success) {
+      toast({
+        title: "Student Deleted",
+        description: `${selectedMember.name} has been permanently removed from the system.`,
+      });
+      loadMembers();
+      setDeleteEntirelyConfirmOpen(false);
+      setSelectedMember(null);
+    } else {
+      toast({
+        title: "Error",
+        description: "Could not delete student.",
+        variant: "destructive",
+      });
+    }
   };
 
   const confirmDelete = () => {
@@ -374,6 +440,118 @@ const Members = () => {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Course Rep Action Dialog - Choose between remove privilege or delete */}
+      <AlertDialog
+        open={courseRepActionDialogOpen}
+        onOpenChange={setCourseRepActionDialogOpen}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Course Rep</AlertDialogTitle>
+            <AlertDialogDescription>
+              {selectedMember?.name} is a Course Representative. How would you
+              like to proceed?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex flex-col gap-3 py-4">
+            <Button
+              variant="outline"
+              className="justify-start h-auto p-4"
+              onClick={handleRemoveCourseRepPrivilege}
+            >
+              <div className="text-left">
+                <p className="font-medium">Remove Course Rep Privilege</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Demote to regular student. Keep all attendance and course
+                  data.
+                </p>
+              </div>
+            </Button>
+            <Button
+              variant="outline"
+              className="justify-start h-auto p-4 border-destructive/50 hover:bg-destructive/10"
+              onClick={handleDeleteCourseRepEntirely}
+            >
+              <div className="text-left">
+                <p className="font-medium text-destructive">Delete Entirely</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Permanently remove student from the system.
+                </p>
+              </div>
+            </Button>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Remove Privilege Confirmation Dialog */}
+      <AlertDialog
+        open={removePrivilegeConfirmOpen}
+        onOpenChange={setRemovePrivilegeConfirmOpen}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Course Rep Privilege</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <span className="block">
+                <strong>{selectedMember?.name}</strong> will return back as a
+                regular student.
+              </span>
+              <span className="block text-success font-medium">
+                All data is completely safe. Attendance records and course
+                registrations will be preserved.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmRemovePrivilege}>
+              Remove Privilege
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Entirely Confirmation Dialog */}
+      <AlertDialog
+        open={deleteEntirelyConfirmOpen}
+        onOpenChange={setDeleteEntirelyConfirmOpen}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-destructive">
+              Delete Student Permanently
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <span className="block">
+                <strong>{selectedMember?.name}</strong> will be deleted
+                completely from the system.
+              </span>
+              <span className="block text-destructive font-medium">
+                ⚠️ All data about this student will be permanently lost,
+                including attendance records, course registrations, and course
+                rep assignments.
+              </span>
+              <span className="block text-sm text-muted-foreground mt-2">
+                Consider using "Remove Privilege" action instead to preserve
+                data.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteEntirely}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete Permanently
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

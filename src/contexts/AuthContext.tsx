@@ -19,6 +19,21 @@ export interface AdminPrivileges {
   canDeleteAdmin: boolean;
 }
 
+export type PermissionRequestType = "canAddAdmin" | "canDeleteAdmin";
+export type PermissionRequestStatus = "pending" | "approved" | "denied";
+
+export interface PermissionRequest {
+  id: string;
+  requesterId: string;
+  requesterName: string;
+  requesterEmail: string;
+  permissionType: PermissionRequestType;
+  status: PermissionRequestStatus;
+  createdAt: string;
+  respondedAt?: string;
+  respondedBy?: string;
+}
+
 export interface User {
   id: string;
   email: string;
@@ -572,6 +587,113 @@ export const updateAdminPrivileges = (
   users[userIndex].privileges = privileges;
   saveUsers(users);
   return { success: true };
+};
+
+// Permission Requests Storage
+const PERMISSION_REQUESTS_KEY = "facetrack_permission_requests";
+
+const getStoredPermissionRequests = (): PermissionRequest[] => {
+  const stored = localStorage.getItem(PERMISSION_REQUESTS_KEY);
+  return stored ? JSON.parse(stored) : [];
+};
+
+const savePermissionRequests = (requests: PermissionRequest[]) => {
+  localStorage.setItem(PERMISSION_REQUESTS_KEY, JSON.stringify(requests));
+};
+
+export const createPermissionRequest = (
+  requester: User,
+  permissionType: PermissionRequestType,
+): { success: boolean; error?: string } => {
+  const requests = getStoredPermissionRequests();
+
+  // Check if there's already a pending request for this permission
+  const existingRequest = requests.find(
+    (r) =>
+      r.requesterId === requester.id &&
+      r.permissionType === permissionType &&
+      r.status === "pending",
+  );
+
+  if (existingRequest) {
+    return {
+      success: false,
+      error: "You already have a pending request for this permission",
+    };
+  }
+
+  const newRequest: PermissionRequest = {
+    id: crypto.randomUUID(),
+    requesterId: requester.id,
+    requesterName: requester.name,
+    requesterEmail: requester.email,
+    permissionType,
+    status: "pending",
+    createdAt: new Date().toISOString(),
+  };
+
+  requests.push(newRequest);
+  savePermissionRequests(requests);
+  return { success: true };
+};
+
+export const getPermissionRequests = (
+  status?: PermissionRequestStatus,
+): PermissionRequest[] => {
+  const requests = getStoredPermissionRequests();
+  if (status) {
+    return requests.filter((r) => r.status === status);
+  }
+  return requests;
+};
+
+export const getPendingRequestsCount = (): number => {
+  return getPermissionRequests("pending").length;
+};
+
+export const respondToPermissionRequest = (
+  requestId: string,
+  approved: boolean,
+  responderId: string,
+): { success: boolean; error?: string } => {
+  const requests = getStoredPermissionRequests();
+  const requestIndex = requests.findIndex((r) => r.id === requestId);
+
+  if (requestIndex === -1) {
+    return { success: false, error: "Request not found" };
+  }
+
+  const request = requests[requestIndex];
+  request.status = approved ? "approved" : "denied";
+  request.respondedAt = new Date().toISOString();
+  request.respondedBy = responderId;
+
+  // If approved, update the admin's privileges
+  if (approved) {
+    const users = getStoredUsers();
+    const userIndex = users.findIndex((u) => u.id === request.requesterId);
+
+    if (userIndex !== -1) {
+      if (!users[userIndex].privileges) {
+        users[userIndex].privileges = {
+          canAddAdmin: false,
+          canDeleteAdmin: false,
+        };
+      }
+      users[userIndex].privileges[request.permissionType] = true;
+      saveUsers(users);
+    }
+  }
+
+  savePermissionRequests(requests);
+  return { success: true };
+};
+
+export const getMyPermissionRequests = (
+  userId: string,
+): PermissionRequest[] => {
+  const requests = getStoredPermissionRequests();
+  return requests.filter((r) => r.requesterId === userId);
 };
 
 export const deleteAdminStaffUser = (userId: string): boolean => {
