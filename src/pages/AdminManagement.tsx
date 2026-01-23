@@ -34,10 +34,11 @@ import {
 import { AdminPrivilegesModal } from "@/components/admin/AdminPrivilegesModal";
 
 const AdminManagement = () => {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, logout } = useAuth();
   const [staffList, setStaffList] = useState<User[]>([]);
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selfDeleteDialogOpen, setSelfDeleteDialogOpen] = useState(false);
   const [privilegesModalOpen, setPrivilegesModalOpen] = useState(false);
   const [selectedStaff, setSelectedStaff] = useState<User | null>(null);
   const [newStaffName, setNewStaffName] = useState("");
@@ -131,6 +132,24 @@ const AdminManagement = () => {
       }
     }
     setDeleteDialogOpen(false);
+    setSelectedStaff(null);
+  };
+
+  const handleSelfDelete = () => {
+    if (selectedStaff && currentUser && selectedStaff.id === currentUser.id) {
+      const success = deleteAdminStaffUser(selectedStaff.id);
+      if (success) {
+        toast({
+          title: "Account Deleted",
+          description: "Your admin account has been removed. Logging out...",
+        });
+        // Small delay to show the toast before logout
+        setTimeout(() => {
+          logout();
+        }, 1000);
+      }
+    }
+    setSelfDeleteDialogOpen(false);
     setSelectedStaff(null);
   };
 
@@ -304,7 +323,12 @@ const AdminManagement = () => {
                       className="text-destructive hover:text-destructive hover:bg-destructive/10"
                       onClick={() => {
                         setSelectedStaff(staff);
-                        setDeleteDialogOpen(true);
+                        // Check if admin is trying to delete themselves
+                        if (currentUser && staff.id === currentUser.id) {
+                          setSelfDeleteDialogOpen(true);
+                        } else {
+                          setDeleteDialogOpen(true);
+                        }
                       }}
                     >
                       <Trash2 className="w-4 h-4" />
@@ -417,6 +441,40 @@ const AdminManagement = () => {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Self Delete Warning Dialog */}
+      <AlertDialog open={selfDeleteDialogOpen} onOpenChange={setSelfDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-destructive">Delete Your Own Account?</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <span className="block font-medium text-foreground">
+                Warning: This action cannot be undone!
+              </span>
+              <span className="block">
+                You are about to delete your own admin account. This will:
+              </span>
+              <ul className="list-disc list-inside space-y-1 mt-2">
+                <li>Permanently remove all your admin data</li>
+                <li>Revoke all your permissions and privileges</li>
+                <li>Log you out of the system immediately</li>
+              </ul>
+              <span className="block mt-3 text-destructive font-medium">
+                Are you absolutely sure you want to proceed?
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>No, Keep My Account</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleSelfDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Yes, Delete My Account
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
