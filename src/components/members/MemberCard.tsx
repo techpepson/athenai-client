@@ -95,18 +95,24 @@ export const MemberCard = ({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => onEdit?.(member)}>
-              Edit Member
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onViewAttendance?.(member)}>
-              View Attendance
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="text-destructive"
-              onClick={() => onDelete?.(member)}
-            >
-              Remove
-            </DropdownMenuItem>
+            {onEdit && (
+              <DropdownMenuItem onClick={() => onEdit(member)}>
+                Edit Member
+              </DropdownMenuItem>
+            )}
+            {onViewAttendance && (
+              <DropdownMenuItem onClick={() => onViewAttendance(member)}>
+                View Attendance
+              </DropdownMenuItem>
+            )}
+            {onDelete && (
+              <DropdownMenuItem
+                className="text-destructive"
+                onClick={() => onDelete(member)}
+              >
+                Remove
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

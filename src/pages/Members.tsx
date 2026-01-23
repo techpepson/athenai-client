@@ -263,6 +263,17 @@ const Members = () => {
 
   // Super admin and admin staff can add members
   const canAddMembers = user?.role === "super_admin" || user?.role === "admin";
+  const isLecturer = user?.role === "lecturer";
+
+  // Filter role options for lecturers - only show students and course reps
+  const roleFilterOptions = isLecturer
+    ? ROLE_FILTER_OPTIONS.filter(
+        (option) =>
+          option.value === "all" ||
+          option.value === "student" ||
+          option.value === "course_rep",
+      )
+    : ROLE_FILTER_OPTIONS;
 
   const filteredMembers = members.filter((member) => {
     const matchesSearch =
@@ -355,9 +366,9 @@ const Members = () => {
             <SelectValue placeholder="Filter by role" />
           </SelectTrigger>
           <SelectContent>
-            {ROLE_FILTER_OPTIONS.map((option) => (
+            {roleFilterOptions.map((option) => (
               <SelectItem key={option.label} value={option.value}>
-                {option.value.charAt(0).toUpperCase() + option.value.slice(1)}
+                {option.label}
               </SelectItem>
             ))}
           </SelectContent>
@@ -391,8 +402,8 @@ const Members = () => {
           <MemberCard
             key={member.id}
             member={member}
-            onEdit={handleEditMember}
-            onDelete={handleDeleteMember}
+            onEdit={isLecturer ? undefined : handleEditMember}
+            onDelete={isLecturer ? undefined : handleDeleteMember}
             onViewAttendance={handleViewAttendance}
           />
         ))}
