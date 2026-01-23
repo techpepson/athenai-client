@@ -447,10 +447,15 @@ const AdminManagement = () => {
       </AlertDialog>
 
       {/* Self Delete Warning Dialog */}
-      <AlertDialog open={selfDeleteDialogOpen} onOpenChange={setSelfDeleteDialogOpen}>
+      <AlertDialog
+        open={selfDeleteDialogOpen}
+        onOpenChange={setSelfDeleteDialogOpen}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-destructive">Delete Your Own Account?</AlertDialogTitle>
+            <AlertDialogTitle className="text-destructive">
+              Delete Your Own Account?
+            </AlertDialogTitle>
             <AlertDialogDescription className="space-y-2">
               <span className="block font-medium text-foreground">
                 Warning: This action cannot be undone!
