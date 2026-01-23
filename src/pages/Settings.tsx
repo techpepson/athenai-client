@@ -39,23 +39,12 @@ import { FacialRegistration } from '@/components/auth/FacialRegistration';
 
 // --- Profile Settings Component ---
 const ProfileSettings = () => {
-    const { user } = useAuth();
+    const { user, updateUser } = useAuth();
     
     // State for editable fields
     const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
     const [coursesTaken, setCoursesTaken] = useState<string[]>([]);
     const [facialData, setFacialData] = useState<string | null>(null);
-
-    useEffect(() => {
-        if (user) {
-            // Load initial data
-            if (Array.isArray(user.coursesTaken)) {
-                setCoursesTaken(user.coursesTaken);
-            } else if (typeof user.coursesTaken === 'string') {
-                setCoursesTaken(user.coursesTaken.split(',').filter(Boolean));
-            }
-        }
-    }, [user]);
 
     if (!user) return null;
 
@@ -73,7 +62,6 @@ const ProfileSettings = () => {
         
         // Check courses changed
         const originalCourses = Array.isArray(user.coursesTaken) ? user.coursesTaken : (typeof user.coursesTaken === 'string' ? user.coursesTaken.split(',').filter(Boolean) : []);
-        // Simple comparison for arrays
         const sortedOriginal = [...originalCourses].sort();
         const sortedCurrent = [...coursesTaken].sort();
         
@@ -84,27 +72,46 @@ const ProfileSettings = () => {
             if (!isSame) hasChanges = true;
         }
 
-        if (profilePhoto) hasChanges = true; // Assuming any new capture is a change
-        if (facialData) hasChanges = true;
+        // Check photo changes
+        if (profilePhoto !== user.profilePhoto) hasChanges = true;
+        
+        // Check facial data changes
+        if (facialData !== user.facialData) hasChanges = true;
 
         setHasUnsavedChanges(hasChanges);
     }, [profilePhoto, coursesTaken, facialData, user]);
+
+    // Initialize state from user data
+    useEffect(() => {
+        if (user) {
+            if (Array.isArray(user.coursesTaken)) {
+                setCoursesTaken(user.coursesTaken);
+            } else if (typeof user.coursesTaken === 'string') {
+                setCoursesTaken(user.coursesTaken.split(',').filter(Boolean));
+            }
+            if (user.profilePhoto) setProfilePhoto(user.profilePhoto);
+            if (user.facialData) setFacialData(user.facialData);
+        }
+    }, [user]);
 
     const handleSaveProfile = () => {
        setShowSaveAlert(true);
     };
 
     const confirmSave = async () => {
-         // Mock save logic
-        console.log("Saving profile:", { profilePhoto, coursesTaken, facialData });
-        
-        // In reality: await updateUser(user.id, { coursesTaken: coursesTaken, ... })
-        // Since updateUser is not exposed in mock context yet, we simulate delay and success.
-        console.log("Mocking update user", { coursesTaken, facialData, profilePhoto });
-        
-        toast.success("Profile updated successfully");
-        setShowSaveAlert(false);
-        setHasUnsavedChanges(false);
+        const { success, error } = await updateUser({
+            coursesTaken,
+            profilePhoto: profilePhoto || undefined,
+            facialData: facialData || undefined
+        });
+
+        if (success) {
+            toast.success("Profile updated successfully");
+            setShowSaveAlert(false);
+            setHasUnsavedChanges(false);
+        } else {
+            toast.error(error || "Failed to update profile");
+        }
     };
 
 
@@ -177,6 +184,9 @@ const ProfileSettings = () => {
                         <div className="flex items-center gap-2 mb-2">
                             <ScanFace className="w-5 h-5 text-primary" />
                             <h3 className="font-semibold text-lg">Facial Recognition Data</h3>
+                             <div className={`px-2 py-0.5 rounded-full text-xs font-medium border ${facialData ? 'bg-green-100 text-green-700 border-green-200' : 'bg-red-100 text-red-700 border-red-200'}`}>
+                                {facialData ? 'Verified' : 'Not Verified'}
+                            </div>
                         </div>
                         <p className="text-sm text-muted-foreground">
                             Update your facial data for kiosk mode and attendance marking.

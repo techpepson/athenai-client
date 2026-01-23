@@ -33,6 +33,8 @@ export interface User {
   }[];
   coursesTaught?: string[];
   coursesTaken?: string | string[];
+  profilePhoto?: string;
+  facialData?: string;
 }
 
 export interface Course {
@@ -52,6 +54,9 @@ interface AuthContextType {
   changePassword: (
     oldPassword: string,
     newPassword: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+  updateUser: (
+    updates: Partial<User>
   ) => Promise<{ success: boolean; error?: string }>;
 }
 
@@ -717,9 +722,36 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return { success: true };
   };
 
+  const updateUser = async (
+    updates: Partial<User>,
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!user) return { success: false, error: "Not logged in" };
+
+    const users = getStoredUsers();
+    const userIndex = users.findIndex((u) => u.id === user.id);
+
+    if (userIndex === -1) return { success: false, error: "User not found" };
+
+    // Update user in local storage
+    const updatedUser = { ...users[userIndex], ...updates };
+    users[userIndex] = updatedUser;
+    
+    // Save to storage
+    saveUsers(users);
+
+    // Update local state
+    const { password: _, ...userWithoutPassword } = updatedUser;
+    setUser(userWithoutPassword);
+    
+    // Update session storage
+    localStorage.setItem("facetrack_session", JSON.stringify(userWithoutPassword));
+
+    return { success: true };
+  };
+
   return (
     <AuthContext.Provider
-      value={{ user, isLoading, login, logout, changePassword }}
+      value={{ user, isLoading, login, logout, changePassword, updateUser }}
     >
       {children}
     </AuthContext.Provider>

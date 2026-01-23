@@ -145,10 +145,17 @@ export const FacialRegistration = ({ onCapture, className }: FacialRegistrationP
         const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
         setCapturedImage(dataUrl);
         onCapture(dataUrl);
-        stopCamera();
+        
+        // Stop camera directly to avoid stale closure on stopCamera function
+        if (stream) {
+          stream.getTracks().forEach(track => track.stop());
+          setStream(null);
+        }
+        setIsCameraOpen(false);
+        setFaceDetected(false);
       }
     }
-  }, [onCapture]);
+  }, [onCapture, stream]);
 
   const retakePhoto = () => {
     setCapturedImage(null);

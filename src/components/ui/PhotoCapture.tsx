@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Camera, Upload, RefreshCw, X } from "lucide-react";
 
@@ -24,6 +24,10 @@ export const PhotoCapture = ({
     currentImage || null,
   );
 
+  useEffect(() => {
+    setPreviewImage(currentImage || null);
+  }, [currentImage]);
+
   const startCamera = async () => {
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -44,6 +48,15 @@ export const PhotoCapture = ({
     setIsCameraOpen(false);
   };
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, [stream]);
+
   const capturePhoto = useCallback(() => {
     if (videoRef.current) {
       const video = videoRef.current;
@@ -56,10 +69,22 @@ export const PhotoCapture = ({
         const dataUrl = canvas.toDataURL("image/jpeg");
         setPreviewImage(dataUrl);
         onCapture(dataUrl);
-        stopCamera();
+        
+        // Stop stream directly here to ensure it uses the current stream scope if closure is tricky, 
+        // or rely on stopCamera if dependencies are fixed.
+        // To be safe against stale closures, we'll access the stream reference directly if we used a ref, 
+        // but since we use state, we MUST depend on 'stream'.
+        if (stream) {
+             stream.getTracks().forEach((track) => track.stop());
+             setStream(null);
+        }
+        setIsCameraOpen(false);
       }
     }
-  }, [onCapture]);
+  }, [onCapture, stream]); 
+  
+  // We can keep stopCamera for the Cancel button, but capturePhoto implements its own stop to be safe/explicit within the callback.
+
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
