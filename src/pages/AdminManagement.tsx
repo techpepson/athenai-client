@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Trash2, UserCog, Copy, Check } from "lucide-react";
+import { Plus, Trash2, UserCog, Copy, Check, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,16 +22,20 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
+  useAuth,
   addAdminStaffUser,
   deleteAdminStaffUser,
   getAllUsers,
   User,
 } from "@/contexts/AuthContext";
+import { AdminPrivilegesModal } from "@/components/admin/AdminPrivilegesModal";
 
 const AdminManagement = () => {
+  const { user: currentUser } = useAuth();
   const [staffList, setStaffList] = useState<User[]>([]);
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [privilegesModalOpen, setPrivilegesModalOpen] = useState(false);
   const [selectedStaff, setSelectedStaff] = useState<User | null>(null);
   const [newStaffName, setNewStaffName] = useState("");
   const [newStaffEmail, setNewStaffEmail] = useState("");
@@ -39,6 +43,8 @@ const AdminManagement = () => {
   const [generatedPassword, setGeneratedPassword] = useState("");
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
+
+  const isSuperAdmin = currentUser?.role === "super_admin";
 
   useEffect(() => {
     loadStaff();
@@ -185,6 +191,30 @@ const AdminManagement = () => {
                       New
                     </span>
                   )}
+                  {staff.privileges?.canAddAdmin && (
+                    <span className="text-xs bg-success/10 text-success px-2 py-1 rounded-full">
+                      +Admin
+                    </span>
+                  )}
+                  {staff.privileges?.canDeleteAdmin && (
+                    <span className="text-xs bg-destructive/10 text-destructive px-2 py-1 rounded-full">
+                      -Admin
+                    </span>
+                  )}
+                  {isSuperAdmin && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-primary hover:text-primary hover:bg-primary/10"
+                      title="Privileges"
+                      onClick={() => {
+                        setSelectedStaff(staff);
+                        setPrivilegesModalOpen(true);
+                      }}
+                    >
+                      <Shield className="w-4 h-4" />
+                    </Button>
+                  )}
                   <Button
                     variant="ghost"
                     size="icon"
@@ -307,6 +337,14 @@ const AdminManagement = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Admin Privileges Modal */}
+      <AdminPrivilegesModal
+        open={privilegesModalOpen}
+        onOpenChange={setPrivilegesModalOpen}
+        admin={selectedStaff}
+        onSave={loadStaff}
+      />
     </div>
   );
 };

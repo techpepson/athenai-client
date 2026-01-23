@@ -14,6 +14,11 @@ export type UserRole =
   | "course_rep"
   | "student";
 
+export interface AdminPrivileges {
+  canAddAdmin: boolean;
+  canDeleteAdmin: boolean;
+}
+
 export interface User {
   id: string;
   email: string;
@@ -35,6 +40,7 @@ export interface User {
   coursesTaken?: string | string[];
   profilePhoto?: string;
   facialData?: string;
+  privileges?: AdminPrivileges;
 }
 
 export interface Course {
@@ -135,6 +141,7 @@ export const MOCK_COURSES: Course[] = [
 
 // Mock data for staff registration form
 export const MOCK_DEPARTMENTS = [
+  { label: "Default: Staff", value: " " },
   { label: "Computer Science", value: "cs" },
   { label: "Electrical Engineering", value: "ee" },
   { label: "Mechanical Engineering", value: "me" },
@@ -538,9 +545,31 @@ export const addAdminStaffUser = (
     staffId,
     password: tempPassword,
     mustChangePassword: true,
+    privileges: {
+      canAddAdmin: false,
+      canDeleteAdmin: false,
+    },
   };
 
   users.push(newUser);
+  saveUsers(users);
+  return { success: true };
+};
+
+export const updateAdminPrivileges = (
+  userId: string,
+  privileges: AdminPrivileges,
+): { success: boolean; error?: string } => {
+  const users = getStoredUsers();
+  const userIndex = users.findIndex(
+    (u) => u.id === userId && u.role === "admin",
+  );
+
+  if (userIndex === -1) {
+    return { success: false, error: "Admin user not found" };
+  }
+
+  users[userIndex].privileges = privileges;
   saveUsers(users);
   return { success: true };
 };
