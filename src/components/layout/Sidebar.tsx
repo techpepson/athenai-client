@@ -74,12 +74,13 @@ export const Sidebar = () => {
     if (isStudent) return "/student";
     return "";
   };
-  
+
   const rolePrefix = getRolePrefix();
 
   // Define visibility constants based on user request
   const canSeeDashboard = true; // All roles
-  const canSeeMembers = isSuperAdmin || isAdmin || isLecturer || isCourseRep || isStudent; // Staff not listed for members
+  const canSeeMembers =
+    isSuperAdmin || isAdmin || isLecturer || isCourseRep || isStudent; // Staff not listed for members
   const canSeeSessions = true; // All roles
   const canSeeKiosk = isCourseRep || isSuperAdmin || isAdmin || isStaff; // "course reps... kiosk Mode", assume staff/admins too? User only listed it for CourseRep. Let's stick to request: Course Rep. AND commonly Admins/Staff run sessions.
   // Wait, User request: "course reps - these are prvileges (dashboard ... kiosk Mode ...)"
@@ -88,14 +89,15 @@ export const Sidebar = () => {
   // "Lecturer ... sessions" - No Kiosk mentioned.
   // "Privileges of admin ... sessions" - No Kiosk mentioned.
   // Kiosk is typically for starting a scan. It seems implied for anyone who can START a session.
-  // Re-reading: "Studnet = ... session- see but cant start sesion only view". 
-  // Let's enable Kiosk for: SuperAdmin, Admin, Lecturer, CourseRep. (Anyone who can start session). 
+  // Re-reading: "Studnet = ... session- see but cant start sesion only view".
+  // Let's enable Kiosk for: SuperAdmin, Admin, Lecturer, CourseRep. (Anyone who can start session).
   // Staff? "sessions-ashowssattendance records". Might imply view only?
-  // User said: "Staff has ... sessions". 
+  // User said: "Staff has ... sessions".
   // User said: "Privileges of admin ... sessions".
   // Let's assume Kiosk is for Session Runners.
-  const canRunSessions = isSuperAdmin || isAdmin || isLecturer || isCourseRep || isStaff; // Staff usually can too.
-  
+  const canRunSessions =
+    isSuperAdmin || isAdmin || isLecturer || isCourseRep || isStaff; // Staff usually can too.
+
   const canSeeAnalytics = true; // All roles (scoped)
   const canSeeNotifications = true; // All roles
   const canSeeAdmins = isSuperAdmin || isAdmin; // "admins" listed for Admin
@@ -115,7 +117,11 @@ export const Sidebar = () => {
         <div className="p-4 border-b border-sidebar-border">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 flex items-center justify-center">
-              <img src="/comasIcon.png" alt="icon" className="w-10 h-10 object-contain" />
+              <img
+                src="/comasIcon.png"
+                alt="icon"
+                className="w-10 h-10 object-contain"
+              />
             </div>
             {!collapsed && (
               <div className="animate-fade-in">
@@ -150,25 +156,26 @@ export const Sidebar = () => {
             />
           )}
 
-          {canSeeSessions && !isStudent && ( /* Hide Sessions for pure Students (Course Rep is distinct var here if logic holds, but wait. isStudent is true for CourseRep? Let's check logic: isStudent = user.role === 'student'. CourseRep is 'course_rep'. User said 'Studdnet = ... session- see but cant start'. User later said 'if student is class rep show session... if not dont'. So plain 'student' role hides sessions. */
-            <NavItem
-              to={`${rolePrefix}/sessions`}
-              icon={<CalendarClock className="w-5 h-5" />}
-              label="Sessions"
-              collapsed={collapsed}
-            />
-          )}
+          {canSeeSessions &&
+            !isStudent /* Hide Sessions for pure Students (Course Rep is distinct var here if logic holds, but wait. isStudent is true for CourseRep? Let's check logic: isStudent = user.role === 'student'. CourseRep is 'course_rep'. User said 'Studdnet = ... session- see but cant start'. User later said 'if student is class rep show session... if not dont'. So plain 'student' role hides sessions. */ && (
+              <NavItem
+                to={`${rolePrefix}/sessions`}
+                icon={<CalendarClock className="w-5 h-5" />}
+                label="Sessions"
+                collapsed={collapsed}
+              />
+            )}
 
-            {isCourseRep || isSuperAdmin ? ( // Kiosk only for CourseRep or SuperAdmin
-              canRunSessions && (
+          {isCourseRep || isSuperAdmin // Kiosk only for CourseRep or SuperAdmin
+            ? canRunSessions && (
                 <NavItem
-                  to="/kiosk" 
+                  to="/kiosk"
                   icon={<Camera className="w-5 h-5" />}
                   label="Kiosk Mode"
                   collapsed={collapsed}
                 />
               )
-            ) : null}
+            : null}
 
           {canSeeAnalytics && (
             <NavItem
@@ -219,7 +226,9 @@ export const Sidebar = () => {
             <NavItem
               to={`${rolePrefix}/settings`}
               icon={<Settings className="w-5 h-5" />}
-              label={isStudent || isCourseRep ? "Profile Settings" : "Settings"} /* Dynamic Label */
+              label={
+                isStudent || isCourseRep ? "Profile Settings" : "Settings"
+              } /* Dynamic Label */
               collapsed={collapsed}
             />
           )}
