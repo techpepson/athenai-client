@@ -56,7 +56,7 @@ interface AuthContextType {
     newPassword: string,
   ) => Promise<{ success: boolean; error?: string }>;
   updateUser: (
-    updates: Partial<User>
+    updates: Partial<User>,
   ) => Promise<{ success: boolean; error?: string }>;
 }
 
@@ -287,18 +287,18 @@ export const getStaffUsers = (): User[] => {
 export const deleteStaffUser = (userId: string): boolean => {
   const users = getStoredUsers();
   const userToDelete = users.find((u) => u.id === userId);
-  
+
   const filtered = users.filter(
     (u) => u.id !== userId || u.role === "super_admin",
   );
   if (filtered.length !== users.length) {
     saveUsers(filtered);
-    
+
     // Also remove from mock DB if exists
     if (userToDelete?.staffId && MOCK_STAFF_DB[userToDelete.staffId]) {
       delete MOCK_STAFF_DB[userToDelete.staffId];
     }
-    
+
     return true;
   }
   return false;
@@ -326,7 +326,9 @@ export const assignCourseRep = (
   // For now we allow multiple, or maybe we should restrict?
   // Let's restrict: Check if course already has a rep
   // Check if someone else is already rep for this course
-  const existingRep = users.find((u) => u.courseRepData?.some((c) => c.courseId === courseId));
+  const existingRep = users.find((u) =>
+    u.courseRepData?.some((c) => c.courseId === courseId),
+  );
   if (existingRep && existingRep.id !== studentId) {
     return {
       success: false,
@@ -335,15 +337,15 @@ export const assignCourseRep = (
   }
 
   const user = users[studentIndex];
-  
+
   const currentData = user.courseRepData || [];
   // Add if not already present
-  if (!currentData.some(c => c.courseId === course.id)) {
-      currentData.push({
-          courseId: course.id,
-          courseName: course.name,
-          department: course.department,
-      });
+  if (!currentData.some((c) => c.courseId === course.id)) {
+    currentData.push({
+      courseId: course.id,
+      courseName: course.name,
+      department: course.department,
+    });
   }
 
   // Update user role and data
@@ -380,7 +382,9 @@ export const removeCourseRep = (userId: string): boolean => {
 
 export const updateUser = (
   userId: string,
-  updates: Partial<User & { coursesTaught?: string[]; coursesTaken?: string[] | string }>,
+  updates: Partial<
+    User & { coursesTaught?: string[]; coursesTaken?: string[] | string }
+  >,
 ): { success: boolean; error?: string } => {
   const users = getStoredUsers();
   const userIndex = users.findIndex((u) => u.id === userId);
@@ -454,7 +458,7 @@ export const addStudentUser = (
     name,
     role: "student",
     password,
-    mustChangePassword: false,
+    mustChangePassword: true,
     studentId,
     program,
     semester,
@@ -499,7 +503,7 @@ export const addStaffUserComplete = (
     name,
     role: "staff",
     password,
-    mustChangePassword: false,
+    mustChangePassword: true,
     staffId,
     department,
     coursesTaught,
@@ -516,6 +520,7 @@ export const addStaffUserComplete = (
 
 // Admin Staff management
 export const addAdminStaffUser = (
+  staffId: string,
   email: string,
   name: string,
   tempPassword: string,
@@ -530,6 +535,7 @@ export const addAdminStaffUser = (
     email,
     name,
     role: "admin",
+    staffId,
     password: tempPassword,
     mustChangePassword: true,
   };
@@ -572,7 +578,7 @@ export const addLecturerUserComplete = (
     name,
     role: "lecturer",
     password,
-    mustChangePassword: false,
+    mustChangePassword: true,
     staffId,
     department,
     coursesTaught,
@@ -593,10 +599,7 @@ export const deleteStudentUser = (userId: string): boolean => {
 
   // Allow deleting students, course reps, and legacy class reps
   const filtered = users.filter(
-    (u) =>
-      u.id !== userId ||
-      (u.role !== "student" &&
-        u.role !== "course_rep"),
+    (u) => u.id !== userId || (u.role !== "student" && u.role !== "course_rep"),
   );
   if (filtered.length !== users.length) {
     saveUsers(filtered);
@@ -735,16 +738,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // Update user in local storage
     const updatedUser = { ...users[userIndex], ...updates };
     users[userIndex] = updatedUser;
-    
+
     // Save to storage
     saveUsers(users);
 
     // Update local state
     const { password: _, ...userWithoutPassword } = updatedUser;
     setUser(userWithoutPassword);
-    
+
     // Update session storage
-    localStorage.setItem("facetrack_session", JSON.stringify(userWithoutPassword));
+    localStorage.setItem(
+      "facetrack_session",
+      JSON.stringify(userWithoutPassword),
+    );
 
     return { success: true };
   };

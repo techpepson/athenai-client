@@ -35,6 +35,7 @@ const AdminManagement = () => {
   const [selectedStaff, setSelectedStaff] = useState<User | null>(null);
   const [newStaffName, setNewStaffName] = useState("");
   const [newStaffEmail, setNewStaffEmail] = useState("");
+  const [newStaffId, setNewStaffId] = useState("");
   const [generatedPassword, setGeneratedPassword] = useState("");
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
@@ -59,7 +60,7 @@ const AdminManagement = () => {
   };
 
   const handleAddStaff = () => {
-    if (!newStaffName.trim() || !newStaffEmail.trim()) {
+    if (!newStaffName.trim() || !newStaffEmail.trim() || !newStaffId.trim()) {
       toast({
         title: "Error",
         description: "Please fill in all fields",
@@ -69,7 +70,12 @@ const AdminManagement = () => {
     }
 
     const tempPassword = generateTempPassword();
-    const result = addAdminStaffUser(newStaffEmail, newStaffName, tempPassword);
+    const result = addAdminStaffUser(
+      newStaffId,
+      newStaffEmail,
+      newStaffName,
+      tempPassword,
+    );
 
     if (result.success) {
       setGeneratedPassword(tempPassword);
@@ -112,6 +118,7 @@ const AdminManagement = () => {
     setAddModalOpen(false);
     setNewStaffName("");
     setNewStaffEmail("");
+    setNewStaffId("");
     setGeneratedPassword("");
   };
 
@@ -205,6 +212,15 @@ const AdminManagement = () => {
 
           {!generatedPassword ? (
             <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="staffId">Staff ID</Label>
+                <Input
+                  id="staffId"
+                  placeholder="e.g., ADM001"
+                  value={newStaffId}
+                  onChange={(e) => setNewStaffId(e.target.value)}
+                />
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="name">Full Name</Label>
                 <Input

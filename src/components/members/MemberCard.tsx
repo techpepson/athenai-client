@@ -62,11 +62,6 @@ export const MemberCard = ({
             <h3 className="font-semibold text-foreground truncate">
               {member.name}
             </h3>
-            {member.isMinor && (
-              <span title="Minor - Parent contact required">
-                <Shield className="w-4 h-4 text-warning flex-shrink-0" />
-              </span>
-            )}
           </div>
           <div className="flex items-center gap-2 mt-1">
             <span

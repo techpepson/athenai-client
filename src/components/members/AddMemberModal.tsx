@@ -4,6 +4,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,16 +17,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Camera, Upload, User } from "lucide-react";
+import { Camera, Upload, User, Copy, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { MultiSelect } from "@/components/ui/multi-select";
 import {
   addStudentUser,
   addStaffUserComplete,
   addLecturerUserComplete,
+  addAdminStaffUser,
   MOCK_DEPARTMENTS,
   MOCK_COURSES,
   MEMBER_ROLES,
+  useAuth,
 } from "@/contexts/AuthContext";
 import { PhotoCapture } from "@/components/ui/PhotoCapture";
 
@@ -49,55 +52,82 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
   const [hourlyRate, setHourlyRate] = useState("");
   const [coursesTaught, setCoursesTaught] = useState<string[]>([]);
   const [coursesTaken, setCoursesTaken] = useState<string[]>([]);
+  const [generatedPassword, setGeneratedPassword] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [createdMemberName, setCreatedMemberName] = useState("");
   const { toast } = useToast();
+  const { user } = useAuth();
+
+  // Check if current user is super_admin
+  const isSuperAdmin = user?.role === "super_admin";
+
+  const generateTempPassword = () => {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+    let password = "";
+    for (let i = 0; i < 10; i++) {
+      password += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return password;
+  };
+
+  const copyPassword = () => {
+    navigator.clipboard.writeText(generatedPassword);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    const tempPassword = generateTempPassword();
     let result;
+
     if (role === "student") {
       // For mock purposes, using 'cs' as program if dept not set correctly for student schema
       result = addStudentUser(
         idNumber,
         email,
         name,
-        department || "cs",
+        department || "",
         "1",
         coursesTaken,
+        tempPassword,
       );
     } else if (role === "staff") {
       result = addStaffUserComplete(
         idNumber,
         email,
         name,
-        department || "cs",
+        department || "",
         coursesTaught,
+        tempPassword,
       );
     } else if (role === "lecturer") {
       result = addLecturerUserComplete(
         idNumber,
         email,
         name,
-        department || "cs",
+        department || "",
         coursesTaught,
+        tempPassword,
       );
     } else if (role === "admin") {
-      // Add admin staff logic here (you'll need to create this function in AuthContext)
-      toast({
-        title: "Info",
-        description: "Admin creation requires super admin privileges.",
-        variant: "default",
-      });
-      return;
+      // Only super_admin can create admin users
+      if (!isSuperAdmin) {
+        toast({
+          title: "Access Denied",
+          description: "Only super admins can create admin users.",
+          variant: "destructive",
+        });
+        return;
+      }
+      result = addAdminStaffUser(idNumber, email, name, tempPassword);
     }
 
     if (result && result.success) {
-      toast({
-        title: "Member Added",
-        description: `${name} has been added successfully.`,
-      });
+      setCreatedMemberName(name);
+      setGeneratedPassword(tempPassword);
       resetForm();
-      onOpenChange(false);
     } else if (result) {
       toast({
         title: "Error",
@@ -119,159 +149,203 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
     setCoursesTaken([]);
   };
 
+  const closeModal = () => {
+    resetForm();
+    setGeneratedPassword("");
+    setCreatedMemberName("");
+    setCopied(false);
+    onOpenChange(false);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={closeModal}>
       <DialogContent className="sm:max-w-[600px] bg-card border-border">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold">
-            Add New Member
+            {generatedPassword
+              ? "Member Created Successfully"
+              : "Add New Member"}
           </DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Photo Section */}
-          <div className="flex items-center justify-center pb-4">
-             <PhotoCapture 
+        {generatedPassword ? (
+          <div className="space-y-4">
+            <div className="p-4 bg-success/10 border border-success/20 rounded-lg">
+              <p className="text-sm text-success font-medium mb-2">
+                {createdMemberName} has been added successfully!
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Share this temporary password with the new member. They must
+                change it on first login.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Temporary Password</Label>
+              <div className="flex gap-2">
+                <Input
+                  value={generatedPassword}
+                  readOnly
+                  className="font-mono"
+                />
+                <Button variant="outline" size="icon" onClick={copyPassword}>
+                  {copied ? (
+                    <Check className="w-4 h-4 text-success" />
+                  ) : (
+                    <Copy className="w-4 h-4" />
+                  )}
+                </Button>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="gradient" onClick={closeModal}>
+                Done
+              </Button>
+            </DialogFooter>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Photo Section */}
+            <div className="flex items-center justify-center pb-4">
+              <PhotoCapture
                 onCapture={(data) => {
-                    // Logic to handle captured data if needed elsewhere
-                    console.log("Captured member photo");
+                  // Logic to handle captured data if needed elsewhere
+                  console.log("Captured member photo");
                 }}
                 label="Profile Photo"
                 description="Add a photo for facial recognition"
-             />
-          </div>
+              />
+            </div>
 
-          {/* Basic Info */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Full Name</Label>
-              <Input
-                id="name"
-                placeholder="Enter full name"
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="email@example.com"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="role">Role</Label>
-              <Select
-                value={role}
-                onValueChange={(v: typeof role) => setRole(v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select role" />
-                </SelectTrigger>
-                <SelectContent>
-                  {MEMBER_ROLES.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="department">Department/Program</Label>
-              <Select value={department} onValueChange={setDepartment}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select department" />
-                </SelectTrigger>
-                <SelectContent>
-                  {MOCK_DEPARTMENTS.map((dept) => (
-                    <SelectItem key={dept.value} value={dept.value}>
-                      {dept.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="studentId">ID Number</Label>
-              <Input
-                id="studentId"
-                placeholder={
-                  role === "student" ? "e.g., 123456" : "e.g., STF001"
-                }
-                required
-                value={idNumber}
-                onChange={(e) => setIdNumber(e.target.value)}
-              />
-            </div>
-            {role === "lecturer" && (
+            {/* Basic Info */}
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="hourlyRate">Hourly Rate</Label>
+                <Label htmlFor="name">Full Name</Label>
                 <Input
-                  id="hourlyRate"
-                  type="number"
-                  placeholder="e.g., 50"
+                  id="name"
+                  placeholder="Enter full name"
                   required
-                  value={hourlyRate}
-                  onChange={(e) => setHourlyRate(e.target.value)}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
                 />
               </div>
-            )}
-          </div>
-
-          {/* Courses for Student and Lecturer */}
-          {(role === "lecturer" || role === "student") && (
-            <div className="space-y-2">
-              {role === "student" && (
-                <Label htmlFor="courses">Courses to Learn</Label>
-              )}
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="email@example.com"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="role">Role</Label>
+                <Select
+                  value={role}
+                  onValueChange={(v: typeof role) => setRole(v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MEMBER_ROLES.filter(
+                      (option) => option.value !== "admin" || isSuperAdmin,
+                    ).map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="department">Department/Program</Label>
+                <Select value={department} onValueChange={setDepartment}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MOCK_DEPARTMENTS.map((dept) => (
+                      <SelectItem key={dept.value} value={dept.value}>
+                        {dept.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="studentId">ID Number</Label>
+                <Input
+                  id="studentId"
+                  placeholder={
+                    role === "student" ? "e.g., 123456" : "e.g., STF001"
+                  }
+                  required
+                  value={idNumber}
+                  onChange={(e) => setIdNumber(e.target.value)}
+                />
+              </div>
               {role === "lecturer" && (
-                <Label htmlFor="courses">Courses to Teach</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="hourlyRate">Hourly Rate</Label>
+                  <Input
+                    id="hourlyRate"
+                    type="number"
+                    placeholder="e.g., 50"
+                    required
+                    value={hourlyRate}
+                    onChange={(e) => setHourlyRate(e.target.value)}
+                  />
+                </div>
               )}
-
-              <MultiSelect
-                options={MOCK_COURSES.filter(
-                  (course) => !department || course.department === department,
-                ).map((course) => ({
-                  label: course.name,
-                  value: course.id,
-                }))}
-                selected={role === "student" ? coursesTaken : coursesTaught}
-                onChange={
-                  role === "student" ? setCoursesTaken : setCoursesTaught
-                }
-                placeholder={
-                  department ? "Select courses..." : "Select Department first"
-                }
-                className="w-full"
-              />
-              <p className="text-xs text-muted-foreground">
-                {role === "student"
-                  ? "Select courses this student will take"
-                  : "Select courses this lecturer will teach"}
-              </p>
             </div>
-          )}
 
-          {/* Actions */}
-          <div className="flex justify-end gap-3 pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" variant="gradient">
-              Add Member
-            </Button>
-          </div>
-        </form>
+            {/* Courses for Student and Lecturer */}
+            {(role === "lecturer" || role === "student") && (
+              <div className="space-y-2">
+                {role === "student" && (
+                  <Label htmlFor="courses">Courses to Learn</Label>
+                )}
+                {role === "lecturer" && (
+                  <Label htmlFor="courses">Courses to Teach</Label>
+                )}
+
+                <MultiSelect
+                  options={MOCK_COURSES.filter(
+                    (course) => !department || course.department === department,
+                  ).map((course) => ({
+                    label: course.name,
+                    value: course.id,
+                  }))}
+                  selected={role === "student" ? coursesTaken : coursesTaught}
+                  onChange={
+                    role === "student" ? setCoursesTaken : setCoursesTaught
+                  }
+                  placeholder={
+                    department ? "Select courses..." : "Select Department first"
+                  }
+                  className="w-full"
+                />
+                <p className="text-xs text-muted-foreground">
+                  {role === "student"
+                    ? "Select courses this student will take"
+                    : "Select courses this lecturer will teach"}
+                </p>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex justify-end gap-3 pt-4">
+              <Button type="button" variant="outline" onClick={closeModal}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="gradient">
+                Add Member
+              </Button>
+            </div>
+          </form>
+        )}
       </DialogContent>
     </Dialog>
   );
