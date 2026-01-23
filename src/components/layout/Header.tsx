@@ -3,6 +3,7 @@ import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { mockAlerts } from '@/data/mockData';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 
 export const Header = () => {
@@ -19,6 +20,44 @@ export const Header = () => {
     : 'Guest';
 
   const firstName = user?.name.split(' ')[0] || 'Guest';
+  const navigate = useNavigate();
+
+  const handleNotificationClick = () => {
+    if (!user?.role) return;
+    
+    const rolePrefix =
+      user.role === "super_admin"
+        ? "super_admin"
+        : user.role === "admin"
+          ? "admin"
+          : user.role === "lecturer"
+            ? "lecturer"
+            : user.role === "course_rep"
+              ? "course_rep"
+              : user.role === "staff"
+                ? "staff"
+                : "student";
+                
+    navigate(`/${rolePrefix}/notifications`);
+  };
+  const handleProfileClick = () => {
+    if (!user?.role) return;
+    
+    const rolePrefix =
+      user.role === "super_admin"
+        ? "super_admin"
+        : user.role === "admin"
+          ? "admin"
+          : user.role === "lecturer"
+            ? "lecturer"
+            : user.role === "course_rep"
+              ? "course_rep"
+              : user.role === "staff"
+                ? "staff"
+                : "student";
+                
+    navigate(`/${rolePrefix}/settings`);
+  };
 
   return (
     <header className="h-16 border-b border-border bg-card/50 backdrop-blur-xl sticky top-0 z-40">
@@ -43,7 +82,7 @@ export const Header = () => {
             {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
           </Button>
 
-          <Button variant="ghost" size="icon" className="relative">
+          <Button variant="ghost" size="icon" className="relative" onClick={handleNotificationClick}>
             <Bell className="w-5 h-5" />
             {unreadCount > 0 && (
               <span className="absolute -top-1 -right-1 w-5 h-5 bg-destructive text-destructive-foreground text-xs rounded-full flex items-center justify-center font-medium">
@@ -54,7 +93,7 @@ export const Header = () => {
           
           <div className="w-px h-8 bg-border" />
           
-          <Button variant="ghost" className="gap-2">
+          <Button variant="ghost" className="gap-2" onClick={handleProfileClick}>
             <div className="w-8 h-8 rounded-full bg-gradient-primary flex items-center justify-center">
               <User className="w-4 h-4 text-primary-foreground" />
             </div>

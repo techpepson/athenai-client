@@ -141,7 +141,7 @@ export const Sidebar = () => {
             />
           )}
 
-          {canSeeMembers && (
+          {canSeeMembers && !isStudent && (
             <NavItem
               to={`${rolePrefix}/members`}
               icon={<Users className="w-5 h-5" />}
@@ -150,7 +150,7 @@ export const Sidebar = () => {
             />
           )}
 
-          {canSeeSessions && (
+          {canSeeSessions && !isStudent && ( /* Hide Sessions for pure Students (Course Rep is distinct var here if logic holds, but wait. isStudent is true for CourseRep? Let's check logic: isStudent = user.role === 'student'. CourseRep is 'course_rep'. User said 'Studdnet = ... session- see but cant start'. User later said 'if student is class rep show session... if not dont'. So plain 'student' role hides sessions. */
             <NavItem
               to={`${rolePrefix}/sessions`}
               icon={<CalendarClock className="w-5 h-5" />}
@@ -159,14 +159,16 @@ export const Sidebar = () => {
             />
           )}
 
-          {canRunSessions && (isCourseRep || isSuperAdmin) && ( // Explicit mention for Course Rep & Super Admin
-            <NavItem
-              to="/kiosk" 
-              icon={<Camera className="w-5 h-5" />}
-              label="Kiosk Mode"
-              collapsed={collapsed}
-            />
-          )}
+            {isCourseRep || isSuperAdmin ? ( // Kiosk only for CourseRep or SuperAdmin
+              canRunSessions && (
+                <NavItem
+                  to="/kiosk" 
+                  icon={<Camera className="w-5 h-5" />}
+                  label="Kiosk Mode"
+                  collapsed={collapsed}
+                />
+              )
+            ) : null}
 
           {canSeeAnalytics && (
             <NavItem
@@ -217,7 +219,7 @@ export const Sidebar = () => {
             <NavItem
               to={`${rolePrefix}/settings`}
               icon={<Settings className="w-5 h-5" />}
-              label="Settings"
+              label={isStudent || isCourseRep ? "Profile Settings" : "Settings"} /* Dynamic Label */
               collapsed={collapsed}
             />
           )}

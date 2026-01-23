@@ -27,6 +27,7 @@ import {
   MOCK_COURSES,
   MEMBER_ROLES,
 } from "@/contexts/AuthContext";
+import { PhotoCapture } from "@/components/ui/PhotoCapture";
 
 interface AddMemberModalProps {
   open: boolean;
@@ -129,35 +130,15 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Photo Section */}
-          <div className="flex items-center gap-6">
-            <div className="relative">
-              <div className="w-24 h-24 rounded-xl bg-secondary flex items-center justify-center border-2 border-dashed border-border">
-                <User className="w-10 h-10 text-muted-foreground" />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-foreground">
-                Profile Photo
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Add a photo for facial recognition
-              </p>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCaptureMode(true)}
-                >
-                  <Camera className="w-4 h-4 mr-2" />
-                  Capture
-                </Button>
-                <Button type="button" variant="outline" size="sm">
-                  <Upload className="w-4 h-4 mr-2" />
-                  Upload
-                </Button>
-              </div>
-            </div>
+          <div className="flex items-center justify-center pb-4">
+             <PhotoCapture 
+                onCapture={(data) => {
+                    // Logic to handle captured data if needed elsewhere
+                    console.log("Captured member photo");
+                }}
+                label="Profile Photo"
+                description="Add a photo for facial recognition"
+             />
           </div>
 
           {/* Basic Info */}
