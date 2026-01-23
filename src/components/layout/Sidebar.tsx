@@ -115,7 +115,7 @@ export const Sidebar = () => {
         <div className="p-4 border-b border-sidebar-border">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 flex items-center justify-center">
-              <img src="./comasIcon.png" alt="icon" />
+              <img src="/comasIcon.png" alt="icon" className="w-10 h-10 object-contain" />
             </div>
             {!collapsed && (
               <div className="animate-fade-in">

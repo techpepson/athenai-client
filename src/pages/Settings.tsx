@@ -110,8 +110,10 @@ const ProfileSettings = () => {
       } else if (typeof user.coursesTaken === "string") {
         setCoursesTaken(user.coursesTaken.split(",").filter(Boolean));
       }
-      if (user.profilePhoto) setProfilePhoto(user.profilePhoto);
-      if (user.facialData) setFacialData(user.facialData);
+      // Always set profilePhoto from user data (even if null/undefined)
+      setProfilePhoto(user.profilePhoto || null);
+      // Always set facialData from user data (even if null/undefined)
+      setFacialData(user.facialData || null);
     }
   }, [user]);
 
