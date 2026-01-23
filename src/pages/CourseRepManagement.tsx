@@ -9,6 +9,7 @@ import {
   ArrowRight,
   Search,
   BookOpen,
+  Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,16 +49,20 @@ import {
   MOCK_COURSES,
 } from "@/contexts/AuthContext";
 import { Badge } from "@/components/ui/badge";
+import { EditMemberModal } from "@/components/members/EditMemberModal";
+import { Member } from "@/types/attendance";
 
 const CourseRepManagement = () => {
   const [courseRepList, setCourseRepList] = useState<User[]>([]);
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedCourseRep, setSelectedCourseRep] = useState<User | null>(null);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingMember, setEditingMember] = useState<Member | null>(null);
+  const [courseRepSearch, setCourseRepSearch] = useState("");
 
-  // Wizard State
+  // Wizard State - Simplified to 2 steps
   const [step, setStep] = useState(1);
-  const [selectedDept, setSelectedDept] = useState("");
   const [selectedCourse, setSelectedCourse] = useState("");
   const [studentSearch, setStudentSearch] = useState("");
   const [selectedStudent, setSelectedStudent] = useState<User | null>(null);
@@ -73,7 +78,6 @@ const CourseRepManagement = () => {
     if (addModalOpen) {
       // Reset wizard
       setStep(1);
-      setSelectedDept("");
       setSelectedCourse("");
       setStudentSearch("");
       setSelectedStudent(null);
@@ -82,7 +86,7 @@ const CourseRepManagement = () => {
 
   // Load students for search
   useEffect(() => {
-    if (step === 3) {
+    if (step === 2) {
       const allUsers = getAllUsers();
       // Filter for students.
       // Ideally we would filter by Department/Program too, but mapping might be loose.
@@ -132,10 +136,8 @@ const CourseRepManagement = () => {
     setSelectedCourseRep(null);
   };
 
-  // Filtered Lists
-  const filteredCourses = MOCK_COURSES.filter(
-    (c) => c.department === selectedDept,
-  );
+  // Filtered Lists - Show all courses
+  const allCourses = MOCK_COURSES;
 
   const filteredStudents = availableStudents
     .filter(
@@ -144,6 +146,22 @@ const CourseRepManagement = () => {
         s.email.toLowerCase().includes(studentSearch.toLowerCase()),
     )
     .slice(0, 5); // Limit results
+
+  // Filter course reps by course name or rep name
+  const filteredCourseReps = courseRepList.filter((rep) => {
+    if (!courseRepSearch) return true;
+    const searchLower = courseRepSearch.toLowerCase();
+    // Check rep name
+    if (rep.name.toLowerCase().includes(searchLower)) return true;
+    // Check course names
+    if (
+      rep.courseRepData?.some((data) =>
+        data.courseName.toLowerCase().includes(searchLower),
+      )
+    )
+      return true;
+    return false;
+  });
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -180,9 +198,33 @@ const CourseRepManagement = () => {
         </div>
       </div>
 
+      {/* Search Filter */}
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Search by course name or rep name..."
+          className="pl-9"
+          value={courseRepSearch}
+          onChange={(e) => setCourseRepSearch(e.target.value)}
+        />
+      </div>
+
       {/* Course Rep List */}
       <div className="bg-card rounded-xl border border-border">
-        {courseRepList.length === 0 ? (
+        {filteredCourseReps.length === 0 && courseRepSearch ? (
+          <div className="p-12 text-center">
+            <Search className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-foreground mb-2">
+              No results found
+            </h3>
+            <p className="text-muted-foreground mb-4">
+              No course representatives match "{courseRepSearch}"
+            </p>
+            <Button variant="outline" onClick={() => setCourseRepSearch("")}>
+              Clear Search
+            </Button>
+          </div>
+        ) : courseRepList.length === 0 ? (
           <div className="p-12 text-center">
             <UserCheck className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-medium text-foreground mb-2">
@@ -199,7 +241,7 @@ const CourseRepManagement = () => {
           </div>
         ) : (
           <div className="divide-y divide-border">
-            {courseRepList.map((rep) => (
+            {filteredCourseReps.map((rep) => (
               <div
                 key={rep.id}
                 className="p-4 flex items-center justify-between"
@@ -238,6 +280,28 @@ const CourseRepManagement = () => {
                   <Button
                     variant="ghost"
                     size="icon"
+                    onClick={() => {
+                      // Convert User to Member format for EditMemberModal
+                      const memberData: Member = {
+                        id: rep.id,
+                        name: rep.name,
+                        email: rep.email,
+                        role: rep.role as Member["role"],
+                        department: rep.department,
+                        studentId: rep.studentId,
+                        isMinor: false,
+                        createdAt: new Date(),
+                        status: "active",
+                      };
+                      setEditingMember(memberData);
+                      setEditModalOpen(true);
+                    }}
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     className="text-destructive hover:text-destructive hover:bg-destructive/10"
                     onClick={() => {
                       setSelectedCourseRep(rep);
@@ -258,40 +322,15 @@ const CourseRepManagement = () => {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              Assign Course Representative (Step {step}/3)
+              Assign Course Representative (Step {step}/2)
             </DialogTitle>
           </DialogHeader>
 
           <div className="py-4">
-            {/* Step 1: Select Department */}
+            {/* Step 1: Select Course */}
             {step === 1 && (
               <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
-                <Label>Select Department</Label>
-                <Select value={selectedDept} onValueChange={setSelectedDept}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose department..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {MOCK_DEPARTMENTS.map((dept) => (
-                      <SelectItem key={dept.value} value={dept.value}>
-                        {dept.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            {/* Step 2: Select Course */}
-            {step === 2 && (
-              <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
-                <Label>
-                  Select Course in{" "}
-                  {
-                    MOCK_DEPARTMENTS.find((d) => d.value === selectedDept)
-                      ?.label
-                  }
-                </Label>
+                <Label>Select Course</Label>
                 <Select
                   value={selectedCourse}
                   onValueChange={setSelectedCourse}
@@ -300,10 +339,10 @@ const CourseRepManagement = () => {
                     <SelectValue placeholder="Choose course..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {filteredCourses.length > 0 ? (
-                      filteredCourses.map((course) => (
+                    {allCourses.length > 0 ? (
+                      allCourses.map((course) => (
                         <SelectItem key={course.id} value={course.id}>
-                          {course.name}
+                          {course.name} ({course.department})
                         </SelectItem>
                       ))
                     ) : (
@@ -316,8 +355,8 @@ const CourseRepManagement = () => {
               </div>
             )}
 
-            {/* Step 3: Select Student */}
-            {step === 3 && (
+            {/* Step 2: Select Student */}
+            {step === 2 && (
               <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
                 <Label>Search Student</Label>
                 <div className="relative">
@@ -382,14 +421,11 @@ const CourseRepManagement = () => {
               </Button>
             )}
 
-            {step < 3 ? (
+            {step < 2 ? (
               <Button
                 variant="gradient"
                 onClick={() => setStep(step + 1)}
-                disabled={
-                  (step === 1 && !selectedDept) ||
-                  (step === 2 && !selectedCourse)
-                }
+                disabled={step === 1 && !selectedCourse}
               >
                 Next <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
@@ -405,6 +441,17 @@ const CourseRepManagement = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Edit Member Modal */}
+      <EditMemberModal
+        open={editModalOpen}
+        onOpenChange={setEditModalOpen}
+        member={editingMember}
+        onSave={() => {
+          loadCourseReps();
+          setEditModalOpen(false);
+        }}
+      />
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
