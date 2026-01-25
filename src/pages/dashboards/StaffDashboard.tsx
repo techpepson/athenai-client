@@ -90,25 +90,25 @@ const StaffDashboard = () => {
   const firstName = user?.name.split(" ")[0] || "Staff";
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-4 sm:space-y-6 animate-fade-in">
       {/* Page Header */}
       <div>
-        <h1 className="text-2xl font-bold text-foreground">
+        <h1 className="text-xl sm:text-2xl font-bold text-foreground">
           My Attendance Stats
         </h1>
-        <p className="text-muted-foreground mt-1">
+        <p className="text-sm sm:text-base text-muted-foreground mt-1">
           Welcome back {firstName}!, here's your attendance overview
         </p>
-        <p className="text-sm text-muted-foreground mt-2">
+        <p className="text-xs sm:text-sm text-muted-foreground mt-2">
           Staff ID: {user?.staffId || "N/A"}
         </p>
       </div>
 
       {/* Month Filter */}
-      <div className="flex items-center gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
         <label className="text-sm font-medium">Filter by Month:</label>
         <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-          <SelectTrigger className="w-64">
+          <SelectTrigger className="w-full sm:w-64">
             <SelectValue placeholder="Select a month" />
           </SelectTrigger>
           <SelectContent>
@@ -122,7 +122,7 @@ const StaffDashboard = () => {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 md:gap-4">
         <StatCard
           title="Total Sessions"
           value={totalSessions}
@@ -153,17 +153,17 @@ const StaffDashboard = () => {
       </div>
 
       {/* Session Details */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         {/* Session Type Breakdown */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BarChart3 className="w-5 h-5" />
+        <Card className="lg:col-span-1">
+          <CardHeader className="p-4 sm:p-6">
+            <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+              <BarChart3 className="w-4 h-4 sm:w-5 sm:h-5" />
               Session Breakdown
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
+          <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
+            <div className="space-y-2 sm:space-y-3">
               {Object.entries(sessionBreakdown).length > 0 ? (
                 Object.entries(sessionBreakdown).map(([type, count]) => (
                   <div
@@ -187,14 +187,14 @@ const StaffDashboard = () => {
 
         {/* Daily Attendance */}
         <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="w-5 h-5" />
+          <CardHeader className="p-4 sm:p-6">
+            <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+              <Clock className="w-4 h-4 sm:w-5 sm:h-5" />
               Daily Attendance Overview
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-2 max-h-96 overflow-y-auto">
+          <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
+            <div className="space-y-2 max-h-72 sm:max-h-96 overflow-y-auto">
               {Object.entries(dailyTrend).length > 0 ? (
                 Object.entries(dailyTrend)
                   .sort(([dateA], [dateB]) => dateB.localeCompare(dateA))

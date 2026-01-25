@@ -316,88 +316,95 @@ const Members = () => {
   });
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-4 sm:space-y-6 animate-fade-in">
       {/* Page Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">
+          <h1 className="text-xl sm:text-2xl font-bold text-foreground">
             Members Management
           </h1>
-          <p className="text-muted-foreground mt-1">
+          <p className="text-sm sm:text-base text-muted-foreground mt-1">
             Manage students, staff, and administrators
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           {canAddMembers && (
-            <Button variant="outline">
-              <Upload className="w-4 h-4 mr-2" />
-              Import CSV
+            <Button variant="outline" size="sm" className="sm:size-default">
+              <Upload className="w-4 h-4 sm:mr-2" />
+              <span className="hidden sm:inline">Import CSV</span>
             </Button>
           )}
-          <Button variant="outline">
-            <Download className="w-4 h-4 mr-2" />
-            Export
+          <Button variant="outline" size="sm" className="sm:size-default">
+            <Download className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Export</span>
           </Button>
           {canAddMembers && (
-            <Button variant="gradient" onClick={() => setAddModalOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              Add Member
+            <Button
+              variant="gradient"
+              size="sm"
+              className="sm:size-default"
+              onClick={() => setAddModalOpen(true)}
+            >
+              <Plus className="w-4 h-4 sm:mr-2" />
+              <span className="hidden sm:inline">Add Member</span>
             </Button>
           )}
         </div>
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-4 bg-card p-4 rounded-xl border border-border">
-        <div className="relative flex-1 max-w-md">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3 sm:gap-4 bg-card p-3 sm:p-4 rounded-lg sm:rounded-xl border border-border">
+        <div className="relative flex-1 min-w-0 sm:max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             placeholder="Search by name, email, or ID..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
+            className="pl-10 text-sm"
           />
         </div>
 
-        {/* Role Filter */}
-        <Select value={roleFilter} onValueChange={setRoleFilter}>
-          <SelectTrigger className="w-40">
-            <Filter className="w-4 h-4 mr-2" />
-            <SelectValue placeholder="Filter by role" />
-          </SelectTrigger>
-          <SelectContent>
-            {roleFilterOptions.map((option) => (
-              <SelectItem key={option.label} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+          {/* Role Filter */}
+          <Select value={roleFilter} onValueChange={setRoleFilter}>
+            <SelectTrigger className="w-[130px] sm:w-40 text-sm">
+              <Filter className="w-4 h-4 mr-1 sm:mr-2" />
+              <SelectValue placeholder="Role" />
+            </SelectTrigger>
+            <SelectContent>
+              {roleFilterOptions.map((option) => (
+                <SelectItem key={option.label} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-        {/* Course Filter */}
-        <Select value={courseFilter} onValueChange={setCourseFilter}>
-          <SelectTrigger className="w-52">
-            <Building2 className="w-4 h-4 mr-2" />
-            <SelectValue placeholder="Filter by course" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Courses</SelectItem>
-            {MOCK_COURSES.map((course) => (
-              <SelectItem key={course.id} value={course.id}>
-                {course.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          {/* Course Filter */}
+          <Select value={courseFilter} onValueChange={setCourseFilter}>
+            <SelectTrigger className="w-[140px] sm:w-52 text-sm">
+              <Building2 className="w-4 h-4 mr-1 sm:mr-2" />
+              <SelectValue placeholder="Course" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Courses</SelectItem>
+              {MOCK_COURSES.map((course) => (
+                <SelectItem key={course.id} value={course.id}>
+                  {course.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-        <div className="text-sm text-muted-foreground whitespace-nowrap">
-          {filteredMembers.length} member
-          {filteredMembers.length !== 1 ? "s" : ""}
+          <div className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
+            {filteredMembers.length} member
+            {filteredMembers.length !== 1 ? "s" : ""}
+          </div>
         </div>
       </div>
 
       {/* Members Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
         {filteredMembers.map((member) => (
           <MemberCard
             key={member.id}

@@ -120,18 +120,22 @@ const LecturerDashboard = () => {
   );
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-4 sm:space-y-6 animate-fade-in">
       {/* Page Header */}
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
-        <p className="text-muted-foreground mt-1">{welcomeMessage}</p>
+        <h1 className="text-xl sm:text-2xl font-bold text-foreground">
+          Dashboard
+        </h1>
+        <p className="text-sm sm:text-base text-muted-foreground mt-1">
+          {welcomeMessage}
+        </p>
       </div>
 
       {/* Course Filter */}
-      <div className="flex items-center gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
         <label className="text-sm font-medium">Filter by Course:</label>
         <Select value={selectedCourse} onValueChange={setSelectedCourse}>
-          <SelectTrigger className="w-64">
+          <SelectTrigger className="w-full sm:w-64">
             <SelectValue placeholder="Select a course" />
           </SelectTrigger>
           <SelectContent>
@@ -146,7 +150,7 @@ const LecturerDashboard = () => {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2 sm:gap-3 md:gap-4">
         <StatCard
           title="Total Students"
           value={totalStudentsEnrolled}
@@ -186,25 +190,25 @@ const LecturerDashboard = () => {
       </div>
 
       {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         {/* Chart Section */}
-        <div className="lg:col-span-2 bg-card rounded-xl border border-border p-6">
-          <div className="flex items-center justify-between mb-6">
+        <div className="lg:col-span-2 bg-card rounded-lg sm:rounded-xl border border-border p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 mb-4 sm:mb-6">
             <div>
-              <h2 className="text-lg font-semibold text-foreground">
+              <h2 className="text-base sm:text-lg font-semibold text-foreground">
                 Weekly Attendance
               </h2>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs sm:text-sm text-muted-foreground">
                 Attendance trends for this week
               </p>
             </div>
-            <div className="flex items-center gap-4 text-sm">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-primary" />
+            <div className="flex items-center gap-3 sm:gap-4 text-xs sm:text-sm">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-primary" />
                 <span className="text-muted-foreground">Present</span>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-warning" />
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-warning" />
                 <span className="text-muted-foreground">Late</span>
               </div>
             </div>
@@ -213,14 +217,14 @@ const LecturerDashboard = () => {
         </div>
 
         {/* Courses Taught Summary */}
-        <div className="bg-card rounded-xl border border-border p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-foreground">
+        <div className="bg-card rounded-lg sm:rounded-xl border border-border p-4 sm:p-6">
+          <div className="flex items-center justify-between mb-3 sm:mb-4">
+            <h2 className="text-base sm:text-lg font-semibold text-foreground">
               Courses Overview
             </h2>
-            <BookOpen className="w-5 h-5 text-muted-foreground" />
+            <BookOpen className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
           </div>
-          <div className="space-y-4 max-h-[360px] overflow-y-auto scrollbar-hide">
+          <div className="space-y-3 sm:space-y-4 max-h-[280px] sm:max-h-[360px] overflow-y-auto scrollbar-hide">
             {taughtCourses.map((course) => {
               const stats = courseStats[course.id];
               return (
@@ -266,17 +270,17 @@ const LecturerDashboard = () => {
 
       {/* Active Sessions */}
       <div>
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3 sm:mb-4">
           <div>
-            <h2 className="text-lg font-semibold text-foreground">
+            <h2 className="text-base sm:text-lg font-semibold text-foreground">
               Active & Upcoming Sessions
             </h2>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs sm:text-sm text-muted-foreground">
               {activeSessions.length} sessions currently running or scheduled
             </p>
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
           {activeSessions.map((session) => (
             <ActiveSessionCard key={session.id} session={session} />
           ))}

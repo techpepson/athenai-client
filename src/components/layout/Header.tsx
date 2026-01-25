@@ -1,4 +1,4 @@
-import { Bell, Search, User, Sun, Moon } from "lucide-react";
+import { Bell, Search, User, Sun, Moon, Menu } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,7 +6,11 @@ import { mockAlerts } from "@/data/mockData";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 
-export const Header = () => {
+interface HeaderProps {
+  onMenuClick: () => void;
+}
+
+export const Header = ({ onMenuClick }: HeaderProps) => {
   const unreadCount = mockAlerts.filter((a) => !a.read).length;
   const { theme, setTheme } = useTheme();
   const { user } = useAuth();
@@ -63,19 +67,41 @@ export const Header = () => {
   };
 
   return (
-    <header className="h-16 border-b border-border bg-card/50 backdrop-blur-xl sticky top-0 z-40">
-      <div className="h-full px-6 flex items-center justify-between">
-        {/* Search */}
-        <div className="relative w-96">
+    <header className="h-14 sm:h-16 border-b border-border bg-card/50 backdrop-blur-xl sticky top-0 z-40">
+      <div className="h-full px-3 sm:px-4 md:px-6 flex items-center justify-between gap-2 sm:gap-4">
+        {/* Mobile menu button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onMenuClick}
+          className="lg:hidden flex-shrink-0"
+        >
+          <Menu className="w-5 h-5" />
+        </Button>
+
+        {/* Search - hidden on mobile, visible on tablet+ */}
+        <div className="relative hidden sm:block flex-1 max-w-sm md:max-w-md lg:max-w-lg">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Search members, sessions, or reports..."
-            className="pl-10 bg-secondary/50 border-border/50 focus:bg-secondary"
+            placeholder="Search members, sessions..."
+            className="pl-10 bg-secondary/50 border-border/50 focus:bg-secondary text-sm"
           />
         </div>
 
+        {/* Mobile search icon */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="sm:hidden text-muted-foreground"
+        >
+          <Search className="w-5 h-5" />
+        </Button>
+
+        {/* Spacer for mobile */}
+        <div className="flex-1 sm:hidden" />
+
         {/* Actions */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1 sm:gap-2 md:gap-3">
           <Button
             variant="ghost"
             size="icon"
@@ -83,9 +109,9 @@ export const Header = () => {
             className="text-muted-foreground hover:text-foreground"
           >
             {theme === "dark" ? (
-              <Sun className="w-5 h-5" />
+              <Sun className="w-4 h-4 sm:w-5 sm:h-5" />
             ) : (
-              <Moon className="w-5 h-5" />
+              <Moon className="w-4 h-4 sm:w-5 sm:h-5" />
             )}
           </Button>
 
@@ -95,25 +121,25 @@ export const Header = () => {
             className="relative"
             onClick={handleNotificationClick}
           >
-            <Bell className="w-5 h-5" />
+            <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
             {unreadCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-5 h-5 bg-destructive text-destructive-foreground text-xs rounded-full flex items-center justify-center font-medium">
+              <span className="absolute -top-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-destructive text-destructive-foreground text-[10px] sm:text-xs rounded-full flex items-center justify-center font-medium">
                 {unreadCount}
               </span>
             )}
           </Button>
 
-          <div className="w-px h-8 bg-border" />
+          <div className="w-px h-6 sm:h-8 bg-border hidden sm:block" />
 
           <Button
             variant="ghost"
-            className="gap-2"
+            className="gap-1 sm:gap-2 px-1 sm:px-2"
             onClick={handleProfileClick}
           >
-            <div className="w-8 h-8 rounded-full bg-gradient-primary flex items-center justify-center">
-              <User className="w-4 h-4 text-primary-foreground" />
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-primary flex items-center justify-center flex-shrink-0">
+              <User className="w-3 h-3 sm:w-4 sm:h-4 text-primary-foreground" />
             </div>
-            <div className="text-left">
+            <div className="text-left hidden md:block">
               <p className="text-sm font-medium">{firstName}</p>
               <p className="text-xs text-muted-foreground">{formattedRole}</p>
             </div>

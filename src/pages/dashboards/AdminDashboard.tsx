@@ -178,19 +178,23 @@ const AdminDashboard = () => {
   );
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-4 sm:space-y-6 animate-fade-in">
       {/* Page Header */}
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
-        <p className="text-muted-foreground mt-1">{welcomeMessage}</p>
+        <h1 className="text-xl sm:text-2xl font-bold text-foreground">
+          Dashboard
+        </h1>
+        <p className="text-sm sm:text-base text-muted-foreground mt-1">
+          {welcomeMessage}
+        </p>
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
           <label className="text-sm font-medium">Filter Type:</label>
           <Select value={filterType} onValueChange={setFilterType}>
-            <SelectTrigger className="w-48">
+            <SelectTrigger className="w-full sm:w-48">
               <SelectValue placeholder="Select filter type" />
             </SelectTrigger>
             <SelectContent>
@@ -201,10 +205,10 @@ const AdminDashboard = () => {
           </Select>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
           <label className="text-sm font-medium">Select Course:</label>
           <Select value={selectedCourse} onValueChange={setSelectedCourse}>
-            <SelectTrigger className="w-64">
+            <SelectTrigger className="w-full sm:w-64">
               <SelectValue placeholder="Select a course" />
             </SelectTrigger>
             <SelectContent>
@@ -220,7 +224,7 @@ const AdminDashboard = () => {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2 sm:gap-3 md:gap-4">
         <StatCard
           title="Total Members"
           value={totalMembers.toLocaleString()}
@@ -268,25 +272,25 @@ const AdminDashboard = () => {
         </TabsList>
 
         {/* Overview Tab */}
-        <TabsContent value="overview" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 bg-card rounded-xl border border-border p-6">
-              <div className="flex items-center justify-between mb-6">
+        <TabsContent value="overview" className="space-y-4 sm:space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+            <div className="lg:col-span-2 bg-card rounded-lg sm:rounded-xl border border-border p-4 sm:p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 mb-4 sm:mb-6">
                 <div>
-                  <h2 className="text-lg font-semibold text-foreground">
+                  <h2 className="text-base sm:text-lg font-semibold text-foreground">
                     Weekly Attendance
                   </h2>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-xs sm:text-sm text-muted-foreground">
                     Attendance trends for this week
                   </p>
                 </div>
-                <div className="flex items-center gap-4 text-sm">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-primary" />
+                <div className="flex items-center gap-3 sm:gap-4 text-xs sm:text-sm">
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-primary" />
                     <span className="text-muted-foreground">Present</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-warning" />
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-warning" />
                     <span className="text-muted-foreground">Late</span>
                   </div>
                 </div>
@@ -295,13 +299,13 @@ const AdminDashboard = () => {
             </div>
 
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <BookOpen className="w-5 h-5" />
+              <CardHeader className="p-4 sm:p-6">
+                <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                  <BookOpen className="w-4 h-4 sm:w-5 sm:h-5" />
                   Quick Stats
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0 space-y-2 sm:space-y-3">
                 <div className="p-3 rounded-lg bg-muted/50">
                   <p className="text-xs text-muted-foreground">
                     Avg Students/Course
@@ -398,13 +402,15 @@ const AdminDashboard = () => {
         </TabsContent>
 
         {/* Analysis Tab */}
-        <TabsContent value="analysis" className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <TabsContent value="analysis" className="space-y-4 sm:space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
             <Card>
-              <CardHeader>
-                <CardTitle>Top Performing Courses</CardTitle>
+              <CardHeader className="p-4 sm:p-6">
+                <CardTitle className="text-base sm:text-lg">
+                  Top Performing Courses
+                </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
                 <div className="space-y-3">
                   {[...courseDetails]
                     .sort((a, b) => b.attendanceRate - a.attendanceRate)
@@ -427,10 +433,12 @@ const AdminDashboard = () => {
             </Card>
 
             <Card>
-              <CardHeader>
-                <CardTitle>Courses Needing Attention</CardTitle>
+              <CardHeader className="p-4 sm:p-6">
+                <CardTitle className="text-base sm:text-lg">
+                  Courses Needing Attention
+                </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
                 <div className="space-y-3">
                   {[...courseDetails]
                     .sort((a, b) => a.attendanceRate - b.attendanceRate)
@@ -460,18 +468,18 @@ const AdminDashboard = () => {
 
       {/* Active Sessions */}
       <div>
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3 sm:mb-4">
           <div>
-            <h2 className="text-lg font-semibold text-foreground">
+            <h2 className="text-base sm:text-lg font-semibold text-foreground">
               Active & Upcoming Sessions
             </h2>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs sm:text-sm text-muted-foreground">
               {activeSessionsList.length} sessions currently running or
               scheduled
             </p>
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
           {activeSessionsList.map((session) => (
             <ActiveSessionCard key={session.id} session={session} />
           ))}

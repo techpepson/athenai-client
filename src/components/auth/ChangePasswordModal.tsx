@@ -1,8 +1,8 @@
-import { useState } from 'react';
-import { Eye, EyeOff, Loader2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { useState } from "react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -10,9 +10,9 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-} from '@/components/ui/dialog';
-import { useAuth } from '@/contexts/AuthContext';
-import { useToast } from '@/hooks/use-toast';
+} from "@/components/ui/dialog";
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
 
 interface ChangePasswordModalProps {
   open: boolean;
@@ -20,10 +20,14 @@ interface ChangePasswordModalProps {
   required?: boolean;
 }
 
-export const ChangePasswordModal = ({ open, onOpenChange, required }: ChangePasswordModalProps) => {
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+export const ChangePasswordModal = ({
+  open,
+  onOpenChange,
+  required,
+}: ChangePasswordModalProps) => {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPasswords, setShowPasswords] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { changePassword } = useAuth();
@@ -34,18 +38,18 @@ export const ChangePasswordModal = ({ open, onOpenChange, required }: ChangePass
 
     if (newPassword.length < 6) {
       toast({
-        title: 'Error',
-        description: 'New password must be at least 6 characters',
-        variant: 'destructive',
+        title: "Error",
+        description: "New password must be at least 6 characters",
+        variant: "destructive",
       });
       return;
     }
 
     if (newPassword !== confirmPassword) {
       toast({
-        title: 'Error',
-        description: 'Passwords do not match',
-        variant: 'destructive',
+        title: "Error",
+        description: "Passwords do not match",
+        variant: "destructive",
       });
       return;
     }
@@ -55,18 +59,18 @@ export const ChangePasswordModal = ({ open, onOpenChange, required }: ChangePass
 
     if (result.success) {
       toast({
-        title: 'Password changed',
-        description: 'Your password has been updated successfully',
+        title: "Password changed",
+        description: "Your password has been updated successfully",
       });
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
       onOpenChange(false);
     } else {
       toast({
-        title: 'Error',
+        title: "Error",
         description: result.error,
-        variant: 'destructive',
+        variant: "destructive",
       });
     }
 
@@ -75,13 +79,16 @@ export const ChangePasswordModal = ({ open, onOpenChange, required }: ChangePass
 
   return (
     <Dialog open={open} onOpenChange={required ? undefined : onOpenChange}>
-      <DialogContent className="sm:max-w-md" onPointerDownOutside={required ? (e) => e.preventDefault() : undefined}>
+      <DialogContent
+        className="sm:max-w-md bg-card"
+        onPointerDownOutside={required ? (e) => e.preventDefault() : undefined}
+      >
         <DialogHeader>
           <DialogTitle>Change Password</DialogTitle>
           <DialogDescription>
             {required
-              ? 'You must change your password before continuing.'
-              : 'Enter your current password and choose a new one.'}
+              ? "You must change your password before continuing."
+              : "Enter your current password and choose a new one."}
           </DialogDescription>
         </DialogHeader>
 
@@ -91,7 +98,7 @@ export const ChangePasswordModal = ({ open, onOpenChange, required }: ChangePass
             <div className="relative">
               <Input
                 id="current"
-                type={showPasswords ? 'text' : 'password'}
+                type={showPasswords ? "text" : "password"}
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
                 required
@@ -104,7 +111,7 @@ export const ChangePasswordModal = ({ open, onOpenChange, required }: ChangePass
             <Label htmlFor="new">New Password</Label>
             <Input
               id="new"
-              type={showPasswords ? 'text' : 'password'}
+              type={showPasswords ? "text" : "password"}
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               required
@@ -117,7 +124,7 @@ export const ChangePasswordModal = ({ open, onOpenChange, required }: ChangePass
             <Label htmlFor="confirm">Confirm New Password</Label>
             <Input
               id="confirm"
-              type={showPasswords ? 'text' : 'password'}
+              type={showPasswords ? "text" : "password"}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
@@ -137,7 +144,12 @@ export const ChangePasswordModal = ({ open, onOpenChange, required }: ChangePass
 
           <DialogFooter>
             {!required && (
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                disabled={isLoading}
+              >
                 Cancel
               </Button>
             )}
@@ -148,7 +160,7 @@ export const ChangePasswordModal = ({ open, onOpenChange, required }: ChangePass
                   Changing...
                 </>
               ) : (
-                'Change Password'
+                "Change Password"
               )}
             </Button>
           </DialogFooter>

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { useState, useEffect, useRef } from "react";
+import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
@@ -16,21 +16,29 @@ import {
   UserCog,
   Key,
   GraduationCap,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { ChangePasswordModal } from "@/components/auth/ChangePasswordModal";
+
+interface SidebarProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
 
 interface NavItemProps {
   to: string;
   icon: React.ReactNode;
   label: string;
   collapsed: boolean;
+  onClick?: () => void;
 }
 
-const NavItem = ({ to, icon, label, collapsed }: NavItemProps) => (
+const NavItem = ({ to, icon, label, collapsed, onClick }: NavItemProps) => (
   <NavLink
     to={to}
+    onClick={onClick}
     className={({ isActive }) =>
       cn(
         "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200",
@@ -47,11 +55,21 @@ const NavItem = ({ to, icon, label, collapsed }: NavItemProps) => (
   </NavLink>
 );
 
-export const Sidebar = () => {
+export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   const [collapsed, setCollapsed] = useState(false);
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const prevPathname = useRef(location.pathname);
+
+  // Close sidebar on route change (mobile) - only when path actually changes
+  useEffect(() => {
+    if (prevPathname.current !== location.pathname) {
+      onClose();
+      prevPathname.current = location.pathname;
+    }
+  }, [location.pathname, onClose]);
 
   const handleLogout = () => {
     logout();
@@ -107,10 +125,20 @@ export const Sidebar = () => {
 
   return (
     <>
+      {/* Mobile overlay */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={onClose}
+        />
+      )}
+
       <aside
         className={cn(
           "fixed left-0 top-0 h-screen bg-sidebar border-r border-sidebar-border flex flex-col transition-all duration-300 z-50",
-          collapsed ? "w-16" : "w-64",
+          // Desktop: always visible
+          "hidden lg:flex",
+          collapsed ? "lg:w-16" : "lg:w-64",
         )}
       >
         {/* Logo */}
@@ -289,6 +317,184 @@ export const Sidebar = () => {
               <ChevronLeft className="w-4 h-4" />
             )}
             {!collapsed && <span className="ml-2">Collapse</span>}
+          </Button>
+        </div>
+      </aside>
+
+      {/* Mobile Sidebar */}
+      <aside
+        className={cn(
+          "fixed left-0 top-0 h-screen bg-sidebar border-r border-sidebar-border flex flex-col transition-transform duration-300 z-50 w-72",
+          "lg:hidden",
+          isOpen ? "translate-x-0" : "-translate-x-full",
+        )}
+      >
+        {/* Mobile Header with close button */}
+        <div className="p-4 border-b border-sidebar-border flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 flex items-center justify-center">
+              <img
+                src="/comasIcon.png"
+                alt="icon"
+                className="w-10 h-10 object-contain"
+              />
+            </div>
+            <div>
+              <h1 className="font-bold text-lg text-sidebar-foreground">
+                FaceTrack
+              </h1>
+              <p className="text-xs text-sidebar-foreground/50">
+                Attendance System
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            className="text-sidebar-foreground"
+          >
+            <X className="w-5 h-5" />
+          </Button>
+        </div>
+
+        {/* Mobile Navigation */}
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto scrollbar-hide">
+          {canSeeDashboard && (
+            <NavItem
+              to={`${rolePrefix}/dashboard`}
+              icon={<LayoutDashboard className="w-5 h-5" />}
+              label="Dashboard"
+              collapsed={false}
+              onClick={onClose}
+            />
+          )}
+
+          {canSeeMembers && !isStudent && (
+            <NavItem
+              to={`${rolePrefix}/members`}
+              icon={<Users className="w-5 h-5" />}
+              label="Members"
+              collapsed={false}
+              onClick={onClose}
+            />
+          )}
+
+          {canSeeSessions && !isStudent && (
+            <NavItem
+              to={`${rolePrefix}/sessions`}
+              icon={<CalendarClock className="w-5 h-5" />}
+              label="Sessions"
+              collapsed={false}
+              onClick={onClose}
+            />
+          )}
+
+          {(isCourseRep || isSuperAdmin) && canRunSessions && (
+            <NavItem
+              to="/kiosk"
+              icon={<Camera className="w-5 h-5" />}
+              label="Kiosk Mode"
+              collapsed={false}
+              onClick={onClose}
+            />
+          )}
+
+          {canSeeAnalytics && (
+            <NavItem
+              to={`${rolePrefix}/analytics`}
+              icon={<BarChart3 className="w-5 h-5" />}
+              label="Analytics"
+              collapsed={false}
+              onClick={onClose}
+            />
+          )}
+
+          {canSeeNotifications && (
+            <NavItem
+              to={`${rolePrefix}/notifications`}
+              icon={<Bell className="w-5 h-5" />}
+              label="Notifications"
+              collapsed={false}
+              onClick={onClose}
+            />
+          )}
+
+          {canSeeAdmins && (
+            <NavItem
+              to={`${rolePrefix}/admins`}
+              icon={<Shield className="w-5 h-5" />}
+              label="Admins"
+              collapsed={false}
+              onClick={onClose}
+            />
+          )}
+
+          {canSeeStaffManagement && (
+            <NavItem
+              to={`${rolePrefix}/staff`}
+              icon={<UserCog className="w-5 h-5" />}
+              label="Staff Management"
+              collapsed={false}
+              onClick={onClose}
+            />
+          )}
+
+          {canSeeCourseReps && (
+            <NavItem
+              to={`${rolePrefix}/course-reps`}
+              icon={<GraduationCap className="w-5 h-5" />}
+              label="Course Reps"
+              collapsed={false}
+              onClick={onClose}
+            />
+          )}
+
+          {canSeeSettings && (
+            <NavItem
+              to={`${rolePrefix}/settings`}
+              icon={<Settings className="w-5 h-5" />}
+              label={isStudent || isCourseRep ? "Profile Settings" : "Settings"}
+              collapsed={false}
+              onClick={onClose}
+            />
+          )}
+        </nav>
+
+        {/* Mobile User Section */}
+        <div className="p-3 border-t border-sidebar-border space-y-2">
+          {user && (
+            <div className="px-3 py-2 rounded-lg bg-sidebar-accent/50">
+              <p className="text-sm font-medium text-sidebar-foreground truncate">
+                {user.name}
+              </p>
+              <p className="text-xs text-sidebar-foreground/50 capitalize">
+                {user.role.replace("_", " ")}
+              </p>
+            </div>
+          )}
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setChangePasswordOpen(true);
+              onClose();
+            }}
+            className="w-full justify-start text-sidebar-foreground/70 hover:text-sidebar-foreground"
+          >
+            <Key className="w-4 h-4" />
+            <span className="ml-2">Change Password</span>
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleLogout}
+            className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10"
+          >
+            <LogOut className="w-4 h-4" />
+            <span className="ml-2">Logout</span>
           </Button>
         </div>
       </aside>
