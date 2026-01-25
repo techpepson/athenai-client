@@ -15,10 +15,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { toast } from 'sonner';
-import { LogIn, LogOut } from 'lucide-react';
-import { User, MOCK_COURSES, MOCK_DEPARTMENTS } from '@/contexts/AuthContext';
+import { User, MOCK_COURSES } from '@/contexts/AuthContext';
 
 interface CreateSessionModalProps {
   open: boolean;
@@ -27,15 +25,12 @@ interface CreateSessionModalProps {
 }
 
 export const CreateSessionModal = ({ open, onOpenChange, user }: CreateSessionModalProps) => {
-  const [attendanceType, setAttendanceType] = useState<'checkin' | 'checkout'>('checkin');
-  const [selectedDept, setSelectedDept] = useState('');
   const [selectedCourse, setSelectedCourse] = useState('');
   
   // Pre-fill for Course Rep
   useEffect(() => {
     if (open && user?.isCourseRep && user?.courseRepData && user.courseRepData.length > 0) {
         // Default to the first course assigned
-        setSelectedDept(user.courseRepData[0].department);
         setSelectedCourse(user.courseRepData[0].courseId);
     }
   }, [open, user]);
@@ -43,16 +38,11 @@ export const CreateSessionModal = ({ open, onOpenChange, user }: CreateSessionMo
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     // Logic would go here to actually create the session with selectedCourse/Dept
-    toast.success(`${attendanceType === 'checkin' ? 'Check-in' : 'Check-out'} session created successfully!`);
+    toast.success('Session created successfully!');
     onOpenChange(false);
   };
   
   const isCourseRep = user?.isCourseRep;
-
-  // Filter courses based on department
-  const filteredCourses = selectedDept 
-      ? MOCK_COURSES.filter(c => c.department === selectedDept)
-      : MOCK_COURSES;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -62,80 +52,27 @@ export const CreateSessionModal = ({ open, onOpenChange, user }: CreateSessionMo
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Attendance Type Selection */}
-          <div className="space-y-3">
-            <Label>Attendance Type</Label>
-            <RadioGroup
-              value={attendanceType}
-              onValueChange={(value) => setAttendanceType(value as 'checkin' | 'checkout')}
-              className="grid grid-cols-2 gap-4"
-            >
-              <div>
-                <RadioGroupItem value="checkin" id="checkin" className="peer sr-only" />
-                <Label
-                  htmlFor="checkin"
-                  className="flex flex-col items-center justify-between rounded-lg border-2 border-border bg-card p-4 hover:bg-muted/50 peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/10 cursor-pointer transition-all"
-                >
-                  <LogIn className="mb-2 h-6 w-6 text-success" />
-                  <span className="font-medium">Check-in</span>
-                  <span className="text-xs text-muted-foreground">Track arrivals</span>
-                </Label>
-              </div>
-              <div>
-                <RadioGroupItem value="checkout" id="checkout" className="peer sr-only" />
-                <Label
-                  htmlFor="checkout"
-                  className="flex flex-col items-center justify-between rounded-lg border-2 border-border bg-card p-4 hover:bg-muted/50 peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/10 cursor-pointer transition-all"
-                >
-                  <LogOut className="mb-2 h-6 w-6 text-warning" />
-                  <span className="font-medium">Check-out</span>
-                  <span className="text-xs text-muted-foreground">Track departures</span>
-                </Label>
-              </div>
-            </RadioGroup>
-          </div>
-
           <div className="space-y-2">
             <Label htmlFor="sessionName">Session Name</Label>
             <Input id="sessionName" placeholder="e.g., Introduction to Programming" required />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="sessionType">Session Type</Label>
-              <Select defaultValue="class">
-                <SelectTrigger>
-                  <SelectValue placeholder="Select type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="class">Class</SelectItem>
-                  <SelectItem value="exam">Examination</SelectItem>
-                  <SelectItem value="event">Event</SelectItem>
-                  <SelectItem value="shift">Work Shift</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="department">Department</Label>
-              <Select 
-                value={selectedDept} 
-                onValueChange={setSelectedDept}
-                disabled={isCourseRep}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select department" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Departments</SelectItem>
-                  {MOCK_DEPARTMENTS.map(dept => (
-                      <SelectItem key={dept.value} value={dept.value}>{dept.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="sessionType">Session Type</Label>
+            <Select defaultValue="class">
+              <SelectTrigger>
+                <SelectValue placeholder="Select type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="class">Class</SelectItem>
+                <SelectItem value="exam">Examination</SelectItem>
+                <SelectItem value="event">Event</SelectItem>
+                <SelectItem value="shift">Work Shift</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           
-          {/* New Course Selection */}
+          {/* Course Selection */}
           <div className="space-y-2">
               <Label htmlFor="course">Course</Label>
               <Select 
@@ -147,7 +84,7 @@ export const CreateSessionModal = ({ open, onOpenChange, user }: CreateSessionMo
                   <SelectValue placeholder="Select course" />
                 </SelectTrigger>
                 <SelectContent>
-                   {filteredCourses.map(course => (
+                   {MOCK_COURSES.map(course => (
                        <SelectItem key={course.id} value={course.id}>{course.name}</SelectItem>
                    ))}
                 </SelectContent>

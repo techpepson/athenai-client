@@ -7,8 +7,6 @@ import {
   Play,
   Pause,
   CheckCircle,
-  LogIn,
-  LogOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -66,21 +64,6 @@ export const SessionCard = ({
           >
             {session.type.charAt(0).toUpperCase() + session.type.slice(1)}
           </span>
-          {/* <span
-            className={cn(
-              "flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full border",
-              session.attendanceType === "checkin"
-                ? "bg-success/20 text-success border-success/30"
-                : "bg-warning/20 text-warning border-warning/30",
-            )}
-          >
-            {session.attendanceType === "checkin" ? (
-              <LogIn className="w-3 h-3" />
-            ) : (
-              <LogOut className="w-3 h-3" />
-            )}
-            {session.attendanceType === "checkin" ? "Check-in" : "Check-out"}
-          </span> */}
           <span
             className={cn(
               "flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full",

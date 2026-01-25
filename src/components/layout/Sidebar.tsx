@@ -324,7 +324,7 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
       {/* Mobile Sidebar */}
       <aside
         className={cn(
-          "fixed left-0 top-0 h-screen bg-sidebar border-r border-sidebar-border flex flex-col transition-transform duration-300 z-50 w-72",
+          "fixed left-0 top-0 h-screen bg-sidebar border-r border-sidebar-border flex flex-col transition-transform duration-300 z-50 w-72 rounded-r-2xl",
           "lg:hidden",
           isOpen ? "translate-x-0" : "-translate-x-full",
         )}
