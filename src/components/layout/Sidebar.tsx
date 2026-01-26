@@ -17,6 +17,7 @@ import {
   Key,
   GraduationCap,
   X,
+  Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
@@ -246,6 +247,15 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
               to={`${rolePrefix}/course-reps`}
               icon={<GraduationCap className="w-5 h-5" />}
               label="Course Reps"
+              collapsed={collapsed}
+            />
+          )}
+
+          {isLecturer && (
+            <NavItem
+              to={`${rolePrefix}/payroll`}
+              icon={<Wallet className="w-5 h-5" />}
+              label="Payroll"
               collapsed={collapsed}
             />
           )}

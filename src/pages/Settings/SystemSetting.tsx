@@ -74,7 +74,9 @@ const SystemSetting = () => {
 
   useEffect(() => {
     // Filter for lecturers (those with coursesTaught)
-    setStaffList(getAllUsers().filter((u) => u.role === "lecturer" || u.coursesTaught));
+    setStaffList(
+      getAllUsers().filter((u) => u.role === "lecturer" || u.coursesTaught),
+    );
   }, []);
 
   const handleSave = () => {

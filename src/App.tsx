@@ -19,6 +19,7 @@ import Settings from "./pages/Settings";
 import StaffManagement from "./pages/StaffManagement";
 import AdminManagement from "./pages/AdminManagement";
 import CourseRepManagement from "./pages/CourseRepManagement";
+import Payroll from "./pages/Payroll";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -80,6 +81,14 @@ const App = () => (
                           ]}
                         >
                           <CourseRepManagement />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="payroll"
+                      element={
+                        <ProtectedRoute allowedRoles={["lecturer"]}>
+                          <Payroll />
                         </ProtectedRoute>
                       }
                     />
