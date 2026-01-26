@@ -530,18 +530,6 @@ const SystemSetting = () => {
               <div className="flex items-center justify-between p-4 bg-secondary/50 rounded-lg">
                 <div>
                   <p className="font-medium text-foreground">
-                    Parent notifications
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    Send check-in/out alerts to parents of minors
-                  </p>
-                </div>
-                <Switch defaultChecked />
-              </div>
-
-              <div className="flex items-center justify-between p-4 bg-secondary/50 rounded-lg">
-                <div>
-                  <p className="font-medium text-foreground">
                     Late arrival alerts
                   </p>
                   <p className="text-sm text-muted-foreground">
