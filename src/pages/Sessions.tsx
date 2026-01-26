@@ -4,11 +4,11 @@ import { Button } from "@/components/ui/button";
 import { SessionCard } from "@/components/sessions/SessionCard";
 import { CreateSessionModal } from "@/components/sessions/CreateSessionModal";
 import { SessionReportModal } from "@/components/sessions/SessionReportModal";
-import { mockSessions } from "@/data/mockData";
 import { AttendanceSession } from "@/types/attendance";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSession } from "@/contexts/SessionContext";
 
 const Sessions = () => {
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -18,27 +18,70 @@ const Sessions = () => {
   const [activeTab, setActiveTab] = useState("all");
   const { user } = useAuth();
 
-  // Filter sessions for Course Rep (Optional: User asked "student without course rep priviledges only see session ongoing")
-  // But strictly, sessions list usually shows all sessions?
-  // User said: "student without course rep priviledges only see session ongoing"
-  // This implies filtering the VIEW itself for regular students (or non-reps).
-  // Let's implement that filter.
-  //   const filteredSessions = mockSessions.filter(session => {
-  //     if (user?.role === 'student' && !user.isCourseRep) {
-  //          // Regular student: Only active?
-  //          if (session.status !== 'active') return false;
-  //     }
-  //     // Existing filtering
-  //     if (activeTab === 'all') return true;
-  //     return session.status === activeTab;
-  //   });
+  // Get sessions from context
+  const { sessions, addSession } = useSession();
 
-  // Actually, I'll stick to the button restriction first, and maybe tab filtering.
-  const filteredSessions = mockSessions.filter((session) => {
-    // Permission-based view filtering could be here
+  // Filter sessions based on user role and course association
+  const getVisibleSessions = () => {
+    return sessions.filter((session) => {
+      // Super admin and admin can see all sessions
+      if (user?.role === "super_admin" || user?.role === "admin") {
+        return true;
+      }
+
+      // Lecturers can see sessions for courses they teach
+      if (user?.role === "lecturer" && user.coursesTaught) {
+        const coursesTaught = Array.isArray(user.coursesTaught)
+          ? user.coursesTaught
+          : [user.coursesTaught];
+        if (session.courseId && coursesTaught.includes(session.courseId)) {
+          return true;
+        }
+      }
+
+      // Course reps can see sessions for courses they handle
+      if (user?.isCourseRep && user.courseRepData) {
+        const courseRepCourseIds = user.courseRepData.map((c) => c.courseId);
+        if (session.courseId && courseRepCourseIds.includes(session.courseId)) {
+          return true;
+        }
+      }
+
+      // Staff can see sessions they created
+      if (user?.role === "staff" && session.createdBy === user.id) {
+        return true;
+      }
+
+      // Students can only see active sessions for their courses
+      if (user?.role === "student" && !user.isCourseRep) {
+        const coursesTaken = Array.isArray(user.coursesTaken)
+          ? user.coursesTaken
+          : user.coursesTaken
+            ? [user.coursesTaken]
+            : [];
+        if (
+          session.status === "active" &&
+          session.courseId &&
+          coursesTaken.includes(session.courseId)
+        ) {
+          return true;
+        }
+      }
+
+      return false;
+    });
+  };
+
+  // Filter sessions based on active tab
+  const filteredSessions = getVisibleSessions().filter((session) => {
     if (activeTab === "all") return true;
     return session.status === activeTab;
   });
+
+  // Handle creating a new session
+  const handleCreateSession = (newSession: AttendanceSession) => {
+    addSession(newSession);
+  };
 
   const handleStartSession = () => {
     toast.success("Session started! Kiosk mode is now active.");
@@ -67,8 +110,8 @@ const Sessions = () => {
         </div>
         {(user?.role === "super_admin" ||
           user?.role === "admin" ||
-          user?.role === "staff" ||
-          user?.role === "course_rep") && (
+          user?.role === "lecturer" ||
+          user?.isCourseRep) && (
           <Button variant="gradient" onClick={() => setCreateModalOpen(true)}>
             <Plus className="w-4 h-4 mr-2" />
             Create Session
@@ -115,8 +158,8 @@ const Sessions = () => {
               <p className="text-muted-foreground">No sessions found.</p>
               {(user?.role === "super_admin" ||
                 user?.role === "admin" ||
-                user?.role === "staff" ||
-                user?.role === "course_rep") && (
+                user?.role === "lecturer" ||
+                user?.isCourseRep) && (
                 <Button
                   variant="outline"
                   className="mt-4"
@@ -135,6 +178,7 @@ const Sessions = () => {
         open={createModalOpen}
         onOpenChange={setCreateModalOpen}
         user={user}
+        onCreateSession={handleCreateSession}
       />
 
       {/* Session Report Modal */}

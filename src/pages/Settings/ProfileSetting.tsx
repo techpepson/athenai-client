@@ -142,10 +142,10 @@ const ProfileSetting = () => {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Identity & Photo */}
-        <div className="md:col-span-1 space-y-6">
-          <div className="bg-card rounded-xl border border-border p-6 space-y-4">
+        <div className="lg:col-span-1 space-y-6">
+          <div className="bg-card rounded-xl border border-border p-4 sm:p-6 space-y-4">
             <h3 className="font-semibold text-lg">Identity</h3>
             <div className="flex flex-col items-center">
               <PhotoCapture
@@ -181,11 +181,11 @@ const ProfileSetting = () => {
         </div>
 
         {/* Right Column: Facial Data & Courses */}
-        <div className="md:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-6">
           {/* Facial Registration Section - Only for students and course reps */}
           {(isStudent || isCourseRep) && (
-            <div className="bg-card rounded-xl border border-border p-6 space-y-4">
-              <div className="flex items-center gap-2 mb-2">
+            <div className="bg-card rounded-xl border border-border p-4 sm:p-6 space-y-4">
+              <div className="flex flex-wrap items-center gap-2 mb-2">
                 <ScanFace className="w-5 h-5 text-primary" />
                 <h3 className="font-semibold text-lg">
                   Facial Recognition Data
@@ -199,7 +199,7 @@ const ProfileSetting = () => {
               <p className="text-sm text-muted-foreground">
                 Update your facial data for kiosk mode and attendance marking.
               </p>
-              <div className="p-4 bg-secondary/10 rounded-xl relative overflow-hidden">
+              <div className="p-2 sm:p-4 bg-secondary/10 rounded-xl relative overflow-visible min-h-[350px] sm:min-h-[400px]">
                 <FacialRegistration onCapture={(data) => setFacialData(data)} />
               </div>
             </div>

@@ -130,6 +130,35 @@ const MOCK_USERS: (User & { password: string })[] = [
     staffId: "STF001",
     department: "cs",
   },
+  // Mock lecturer user
+  {
+    id: "lecturer_1",
+    email: "lecturer@gmail.com",
+    name: "Prof. John Mensah",
+    role: "lecturer",
+    password: "lecturer123",
+    mustChangePassword: false,
+    staffId: "LEC001",
+    department: "cs",
+    coursesTaught: ["ds", "alg", "db"],
+  },
+  // Mock course rep user (student with course rep privileges)
+  {
+    id: "courserep_1",
+    email: "courserep@gmail.com",
+    name: "Kwame Asante",
+    role: "student",
+    password: "courserep123",
+    mustChangePassword: false,
+    studentId: "654321",
+    program: "cs",
+    semester: "2",
+    isCourseRep: true,
+    courseRepData: [
+      { courseId: "ds", courseName: "Data Structures", department: "cs" },
+      { courseId: "web", courseName: "Web Development", department: "cs" },
+    ],
+  },
 ];
 
 // Mock data for student registration form

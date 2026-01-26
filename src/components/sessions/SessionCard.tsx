@@ -1,13 +1,6 @@
 import { AttendanceSession } from "@/types/attendance";
 import { cn } from "@/lib/utils";
-import {
-  Clock,
-  MapPin,
-  Users,
-  Play,
-  Pause,
-  CheckCircle,
-} from "lucide-react";
+import { Clock, MapPin, Users, Play, Pause, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { User } from "@/contexts/AuthContext";
@@ -142,7 +135,9 @@ export const SessionCard = ({
             disabled={
               user?.role === "student" ||
               (user?.role === "course_rep" &&
-                !user?.courseRepData?.some((c) => c.courseId === session.courseId))
+                !user?.courseRepData?.some(
+                  (c) => c.courseId === session.courseId,
+                ))
             }
           >
             <Play className="w-4 h-4 mr-2" />
@@ -157,7 +152,9 @@ export const SessionCard = ({
             disabled={
               user?.role === "student" ||
               (user?.role === "course_rep" &&
-                !user?.courseRepData?.some((c) => c.courseId === session.courseId))
+                !user?.courseRepData?.some(
+                  (c) => c.courseId === session.courseId,
+                ))
             }
           >
             <Pause className="w-4 h-4 mr-2" />

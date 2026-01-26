@@ -86,7 +86,7 @@ export const mockMembers: Member[] = [
 export const mockSessions: AttendanceSession[] = [
   {
     id: '1',
-    name: 'Introduction to Programming',
+    name: 'Data Structures',
     type: 'class',
     attendanceType: 'checkin',
     department: 'Computer Science',
@@ -95,45 +95,61 @@ export const mockSessions: AttendanceSession[] = [
     status: 'active',
     location: 'Room 101',
     expectedCount: 45,
-    presentCount: 38
+    presentCount: 38,
+    courseId: 'ds',
+    courseName: 'Data Structures',
+    createdBy: '1',
+    createdByRole: 'super_admin'
   },
   {
     id: '2',
-    name: 'Midterm Examination',
+    name: 'Algorithms',
     type: 'exam',
     attendanceType: 'checkin',
-    department: 'Engineering',
+    department: 'Computer Science',
     startTime: new Date(Date.now() + 60 * 60 * 1000),
     endTime: new Date(Date.now() + 4 * 60 * 60 * 1000),
     status: 'scheduled',
     location: 'Hall A',
     expectedCount: 120,
-    presentCount: 0
+    presentCount: 0,
+    courseId: 'alg',
+    courseName: 'Algorithms',
+    createdBy: '1',
+    createdByRole: 'super_admin'
   },
   {
     id: '3',
-    name: 'Morning Staff Meeting',
-    type: 'event',
-    attendanceType: 'checkout',
+    name: 'Web Development',
+    type: 'class',
+    attendanceType: 'checkin',
     startTime: new Date(Date.now() - 30 * 60 * 1000),
     endTime: new Date(Date.now() + 30 * 60 * 1000),
     status: 'active',
-    location: 'Conference Room',
+    location: 'Lab 2',
     expectedCount: 25,
-    presentCount: 22
+    presentCount: 22,
+    courseId: 'web',
+    courseName: 'Web Development',
+    createdBy: 'admin_staff_1',
+    createdByRole: 'admin'
   },
   {
     id: '4',
-    name: 'Lab Session - Physics',
+    name: 'Database Systems',
     type: 'class',
-    attendanceType: 'checkout',
-    department: 'Engineering',
+    attendanceType: 'checkin',
+    department: 'Computer Science',
     startTime: new Date(Date.now() - 2 * 60 * 60 * 1000),
     endTime: new Date(Date.now() - 30 * 60 * 1000),
     status: 'completed',
     location: 'Lab 3',
     expectedCount: 30,
-    presentCount: 28
+    presentCount: 28,
+    courseId: 'db',
+    courseName: 'Database Systems',
+    createdBy: '1',
+    createdByRole: 'super_admin'
   }
 ];
 

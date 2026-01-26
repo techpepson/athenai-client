@@ -30,6 +30,8 @@ export interface AttendanceSession {
   presentCount: number;
   courseId?: string;
   courseName?: string;
+  createdBy?: string;
+  createdByRole?: 'super_admin' | 'admin' | 'staff' | 'lecturer' | 'course_rep' | 'student';
 }
 
 export interface AttendanceRecord {
