@@ -184,7 +184,7 @@ export const MOCK_COURSES: Course[] = [
 ];
 
 // Mock data for staff registration form
-export const MOCK_DEPARTMENTS = [
+export const MOCK_DEPARTMENTS: { label: string; value: string }[] = [
   { label: "Default: Staff", value: " " },
   { label: "Computer Science", value: "cs" },
   { label: "Electrical Engineering", value: "ee" },
@@ -193,6 +193,35 @@ export const MOCK_DEPARTMENTS = [
   { label: "Mathematics", value: "math" },
   { label: "Physics", value: "phy" },
 ];
+
+// Helper functions to add departments and courses
+export const addDepartment = (label: string, value: string): boolean => {
+  // Check if department already exists
+  const exists = MOCK_DEPARTMENTS.some(
+    (d) => d.value === value || d.label.toLowerCase() === label.toLowerCase(),
+  );
+  if (exists) return false;
+  MOCK_DEPARTMENTS.push({ label, value });
+  return true;
+};
+
+export const addCourse = (
+  id: string,
+  name: string,
+  department: string,
+): boolean => {
+  // Check if course already exists
+  const exists = MOCK_COURSES.some(
+    (c) => c.id === id || c.name.toLowerCase() === name.toLowerCase(),
+  );
+  if (exists) return false;
+  MOCK_COURSES.push({ id, name, department });
+  return true;
+};
+
+export const getDepartments = () =>
+  MOCK_DEPARTMENTS.filter((d) => d.value.trim() !== "");
+export const getCourses = () => MOCK_COURSES;
 
 // Mock student database for auto-fill
 export const MOCK_STUDENT_DB: Record<

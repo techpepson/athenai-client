@@ -18,6 +18,13 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
   Building,
   Bell,
   Shield,
@@ -37,6 +44,10 @@ import {
   getAllUsers,
   User,
   useAuth,
+  addDepartment,
+  addCourse,
+  getDepartments,
+  getCourses,
 } from "@/contexts/AuthContext";
 
 const SystemSetting = () => {
@@ -45,10 +56,25 @@ const SystemSetting = () => {
   const [organizationLogo, setOrganizationLogo] = useState<string | null>(null);
   const [staffList, setStaffList] = useState<User[]>([]);
 
+  // Department modal state
+  const [departmentModalOpen, setDepartmentModalOpen] = useState(false);
+  const [newDeptLabel, setNewDeptLabel] = useState("");
+  const [newDeptValue, setNewDeptValue] = useState("");
+
+  // Course modal state
+  const [courseModalOpen, setCourseModalOpen] = useState(false);
+  const [newCourseName, setNewCourseName] = useState("");
+  const [newCourseId, setNewCourseId] = useState("");
+  const [newCourseDept, setNewCourseDept] = useState("");
+
+  // Trigger re-render when data changes
+  const [refreshKey, setRefreshKey] = useState(0);
+
   const isSuperAdmin = user?.role === "super_admin";
 
   useEffect(() => {
-    setStaffList(getAllUsers().filter((u) => u.role === "staff"));
+    // Filter for lecturers (those with coursesTaught)
+    setStaffList(getAllUsers().filter((u) => u.role === "lecturer" || u.coursesTaught));
   }, []);
 
   const handleSave = () => {
@@ -83,8 +109,150 @@ const SystemSetting = () => {
     return staffList.filter((s) => s.coursesTaught?.includes(courseId));
   };
 
+  // Handle adding a new department
+  const handleAddDepartment = () => {
+    if (!newDeptLabel.trim() || !newDeptValue.trim()) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+    const success = addDepartment(
+      newDeptLabel.trim(),
+      newDeptValue.trim().toLowerCase(),
+    );
+    if (success) {
+      toast.success(`Department "${newDeptLabel}" added successfully`);
+      setDepartmentModalOpen(false);
+      setNewDeptLabel("");
+      setNewDeptValue("");
+      setRefreshKey((prev) => prev + 1);
+    } else {
+      toast.error("Department already exists");
+    }
+  };
+
+  // Handle adding a new course
+  const handleAddCourse = () => {
+    if (!newCourseName.trim() || !newCourseId.trim() || !newCourseDept) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+    const success = addCourse(
+      newCourseId.trim().toLowerCase(),
+      newCourseName.trim(),
+      newCourseDept,
+    );
+    if (success) {
+      toast.success(`Course "${newCourseName}" added successfully`);
+      setCourseModalOpen(false);
+      setNewCourseName("");
+      setNewCourseId("");
+      setNewCourseDept("");
+      setRefreshKey((prev) => prev + 1);
+    } else {
+      toast.error("Course already exists");
+    }
+  };
+
+  // Get current departments and courses (for re-render)
+  const departments = getDepartments();
+  const courses = getCourses();
+
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* Add Department Modal */}
+      <Dialog open={departmentModalOpen} onOpenChange={setDepartmentModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Add New Department</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="deptLabel">Department Name</Label>
+              <Input
+                id="deptLabel"
+                placeholder="e.g., Computer Science"
+                value={newDeptLabel}
+                onChange={(e) => setNewDeptLabel(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="deptValue">Department Code</Label>
+              <Input
+                id="deptValue"
+                placeholder="e.g., cs"
+                value={newDeptValue}
+                onChange={(e) => setNewDeptValue(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Short code used internally (lowercase)
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDepartmentModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleAddDepartment}>Add Department</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Course Modal */}
+      <Dialog open={courseModalOpen} onOpenChange={setCourseModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Add New Course</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="courseName">Course Name</Label>
+              <Input
+                id="courseName"
+                placeholder="e.g., Data Structures"
+                value={newCourseName}
+                onChange={(e) => setNewCourseName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="courseId">Course Code</Label>
+              <Input
+                id="courseId"
+                placeholder="e.g., ds101"
+                value={newCourseId}
+                onChange={(e) => setNewCourseId(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Unique identifier for this course (lowercase)
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="courseDept">Department</Label>
+              <Select value={newCourseDept} onValueChange={setNewCourseDept}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select department" />
+                </SelectTrigger>
+                <SelectContent>
+                  {departments.map((dept) => (
+                    <SelectItem key={dept.value} value={dept.value}>
+                      {dept.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCourseModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddCourse}>Add Course</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Page Header */}
       <div className="flex items-start justify-between">
         <div>
@@ -188,18 +356,31 @@ const SystemSetting = () => {
                   Departments & Courses
                 </h3>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setDepartmentModalOpen(true)}
+                  >
                     + Add Department
                   </Button>
-                  <Button variant="outline" size="sm">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCourseModalOpen(true)}
+                  >
                     + Add Course
                   </Button>
                 </div>
               </div>
 
-              <Accordion type="single" collapsible className="w-full">
-                {MOCK_DEPARTMENTS.map((dept) => {
-                  const deptCourses = MOCK_COURSES.filter(
+              <Accordion
+                type="single"
+                collapsible
+                className="w-full"
+                key={refreshKey}
+              >
+                {departments.map((dept) => {
+                  const deptCourses = courses.filter(
                     (c) => c.department === dept.value,
                   );
                   return (

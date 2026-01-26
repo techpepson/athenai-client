@@ -21,6 +21,22 @@ const Sessions = () => {
   // Get sessions from context
   const { sessions, addSession } = useSession();
 
+  // Debug: Log user and sessions for troubleshooting
+  console.log(
+    "Current user:",
+    user?.email,
+    "Role:",
+    user?.role,
+    "isCourseRep:",
+    user?.isCourseRep,
+    "courseRepData:",
+    user?.courseRepData,
+  );
+  console.log(
+    "All sessions:",
+    sessions.map((s) => ({ id: s.id, name: s.name, courseId: s.courseId })),
+  );
+
   // Filter sessions based on user role and course association
   const getVisibleSessions = () => {
     return sessions.filter((session) => {
@@ -40,7 +56,11 @@ const Sessions = () => {
       }
 
       // Course reps can see sessions for courses they handle
-      if (user?.isCourseRep && user.courseRepData) {
+      // Check both isCourseRep flag and role === "course_rep"
+      if (
+        (user?.isCourseRep || user?.role === "course_rep") &&
+        user?.courseRepData
+      ) {
         const courseRepCourseIds = user.courseRepData.map((c) => c.courseId);
         if (session.courseId && courseRepCourseIds.includes(session.courseId)) {
           return true;

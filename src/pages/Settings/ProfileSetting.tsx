@@ -142,9 +142,9 @@ const ProfileSetting = () => {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Left Column: Identity & Photo */}
-        <div className="lg:col-span-1 space-y-6">
+        <div className="xl:col-span-1 space-y-6">
           <div className="bg-card rounded-xl border border-border p-4 sm:p-6 space-y-4">
             <h3 className="font-semibold text-lg">Identity</h3>
             <div className="flex flex-col items-center">
@@ -181,7 +181,7 @@ const ProfileSetting = () => {
         </div>
 
         {/* Right Column: Facial Data & Courses */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="xl:col-span-2 space-y-6">
           {/* Facial Registration Section - Only for students and course reps */}
           {(isStudent || isCourseRep) && (
             <div className="bg-card rounded-xl border border-border p-4 sm:p-6 space-y-4">
