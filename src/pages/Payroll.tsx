@@ -1,8 +1,11 @@
-import { useState, useEffect } from "react";
-import { TrendingUp, Clock, DollarSign, CheckCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Calendar, Search } from "lucide-react";
+import { useState } from "react";
+import {
+  TrendingUp,
+  Clock,
+  DollarSign,
+  CheckCircle,
+  Calendar,
+} from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -10,10 +13,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useToast } from "@/hooks/use-toast";
 import { useAuth, getCourses, MOCK_SESSIONS } from "@/contexts/AuthContext";
 import { PayrollStatsCard } from "@/components/staff/PayrollStatsCard";
-import { PayrollTable } from "@/components/staff/PayrollTable";
 
 interface Session {
   id: string;
@@ -33,12 +34,9 @@ interface Session {
 
 const Payroll = () => {
   const { user } = useAuth();
-  const [sessions, setSessions] = useState<Session[]>(MOCK_SESSIONS);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [sessions] = useState<Session[]>(MOCK_SESSIONS);
   const [selectedCourse, setSelectedCourse] = useState<string>("all");
   const [selectedMonth, setSelectedMonth] = useState<string>("2026-01");
-  const [expandedStaff, setExpandedStaff] = useState<Set<string>>(new Set());
-  const { toast } = useToast();
 
   // Get courses taught by the current lecturer
   const allCourses = getCourses();
@@ -52,16 +50,11 @@ const Payroll = () => {
     const isLecturerCourse = user?.coursesTaught?.includes(session.courseId);
     if (!isLecturerCourse) return false;
 
-    const matchesSearch =
-      session.staffName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      session.staffId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      session.courseName.toLowerCase().includes(searchQuery.toLowerCase());
-
     const matchesCourse =
       selectedCourse === "all" || session.courseId === selectedCourse;
     const matchesMonth = session.date.startsWith(selectedMonth);
 
-    return matchesSearch && matchesCourse && matchesMonth;
+    return matchesCourse && matchesMonth;
   });
 
   // Calculate statistics
@@ -80,42 +73,6 @@ const Payroll = () => {
 
   const stats = calculateStats();
 
-  // Group sessions by course
-  const groupByCourse = () => {
-    const grouped: { [key: string]: Session[] } = {};
-    filteredSessions.forEach((session) => {
-      if (!grouped[session.courseId]) {
-        grouped[session.courseId] = [];
-      }
-      grouped[session.courseId].push(session);
-    });
-    return grouped;
-  };
-
-  const handlePayStaff = (sessionId: string) => {
-    setSessions((prev) =>
-      prev.map((s) =>
-        s.id === sessionId ? { ...s, paymentStatus: "paid" as const } : s,
-      ),
-    );
-    toast({
-      title: "Payment processed",
-      description: "Payment has been marked as complete",
-    });
-  };
-
-  const toggleStaffExpansion = (staffId: string) => {
-    setExpandedStaff((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(staffId)) {
-        newSet.delete(staffId);
-      } else {
-        newSet.add(staffId);
-      }
-      return newSet;
-    });
-  };
-
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
@@ -127,22 +84,12 @@ const Payroll = () => {
 
       {/* Filters - Only Course dropdown and Date filter */}
       <div className="flex items-center gap-4 bg-card p-4 rounded-xl border border-border flex-wrap">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Search sessions..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-
         <Select value={selectedCourse} onValueChange={setSelectedCourse}>
           <SelectTrigger className="w-52">
-            <SelectValue placeholder="All Courses" />
+            <SelectValue placeholder="All My Courses" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Courses</SelectItem>
+            <SelectItem value="all">All My Courses</SelectItem>
             {lecturerCourses.map((course) => (
               <SelectItem key={course.id} value={course.id}>
                 {course.name}
@@ -186,7 +133,7 @@ const Payroll = () => {
         />
       </div>
 
-      {/* Monthly Payroll Overview with Action header */}
+      {/* Monthly Payroll Overview */}
       <div className="bg-card rounded-xl border border-border overflow-hidden">
         <div className="p-6 border-b border-border">
           <div className="flex items-center justify-between">
@@ -203,15 +150,76 @@ const Payroll = () => {
         </div>
 
         <div className="overflow-x-auto">
-          <PayrollTable
-            sessions={filteredSessions}
-            selectedStaff="all"
-            expandedStaff={expandedStaff}
-            onToggleExpansion={toggleStaffExpansion}
-            onPayStaff={handlePayStaff}
-            onSelectStaff={() => {}}
-            groupedSessions={groupByCourse()}
-          />
+          <table className="w-full">
+            <thead className="bg-muted/50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Date
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Module
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Hours Worked
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Earnings
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Status
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {filteredSessions
+                .sort(
+                  (a, b) =>
+                    new Date(b.date).getTime() - new Date(a.date).getTime(),
+                )
+                .map((session) => (
+                  <tr
+                    key={session.id}
+                    className="hover:bg-muted/30 transition-colors"
+                  >
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-3">
+                        <Calendar className="w-4 h-4 text-muted-foreground" />
+                        <div className="text-sm text-foreground">
+                          {new Date(session.date).toLocaleDateString()}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="px-3 py-1 bg-primary/10 text-primary text-xs rounded-full font-medium">
+                        {session.courseName}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-2 text-sm text-foreground">
+                        <Clock className="w-4 h-4 text-muted-foreground" />
+                        {session.hoursWorked}h
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-semibold text-emerald-600">
+                        ${session.earnings.toFixed(2)}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {session.paymentStatus === "pending" ? (
+                        <span className="px-3 py-1 bg-amber-500/10 text-amber-600 text-xs rounded-full font-medium">
+                          Pending
+                        </span>
+                      ) : (
+                        <span className="px-3 py-1 bg-emerald-500/10 text-emerald-600 text-xs rounded-full font-medium">
+                          Paid
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
         </div>
 
         {filteredSessions.length === 0 && (
