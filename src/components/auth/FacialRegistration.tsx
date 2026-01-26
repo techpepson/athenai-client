@@ -298,23 +298,22 @@ export const FacialRegistration = ({
           </div>
         ) : (
           /* Initial State (Kiosk Style) */
-          <div className="text-center p-4 sm:p-8 transition-colors w-full h-full flex flex-col items-center justify-center bg-white min-h-[280px]">
-            <div className="mb-4 sm:mb-6">
-              <ScanFace className="w-12 h-12 sm:w-16 sm:h-16 text-primary" />
+          <div className="text-center p-3 xs:p-4 sm:p-8 transition-colors w-full h-full flex flex-col items-center justify-center bg-white min-h-[240px] xs:min-h-[280px]">
+            <div className="mb-3 xs:mb-4 sm:mb-6">
+              <ScanFace className="w-10 h-10 xs:w-12 xs:h-12 sm:w-16 sm:h-16 text-primary" />
             </div>
-            <h3 className="font-bold text-xl sm:text-2xl mb-2 text-foreground">
+            <h3 className="font-bold text-lg xs:text-xl sm:text-2xl mb-1 xs:mb-2 text-foreground">
               Facial Verification
             </h3>
-            <p className="text-muted-foreground max-w-xs mx-auto mb-4 sm:mb-8 text-sm sm:text-base">
-              Please position your face within the frame to verify your
-              identity.
+            <p className="text-muted-foreground max-w-[200px] xs:max-w-xs mx-auto mb-3 xs:mb-4 sm:mb-8 text-xs xs:text-sm sm:text-base leading-tight">
+              Position your face within the frame to verify your identity.
             </p>
             <Button
               onClick={startCamera}
-              size="lg"
-              className="rounded-full px-6 sm:px-8 h-10 sm:h-12 shadow-lg text-base sm:text-lg"
+              size="default"
+              className="rounded-full px-4 xs:px-6 sm:px-8 h-9 xs:h-10 sm:h-12 shadow-lg text-sm xs:text-base sm:text-lg"
             >
-              <Camera className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
+              <Camera className="w-4 h-4 sm:w-5 sm:h-5 mr-1.5 xs:mr-2" />
               Start Camera
             </Button>
           </div>

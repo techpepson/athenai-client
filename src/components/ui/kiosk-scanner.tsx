@@ -33,7 +33,7 @@ export const KioskScanner = ({
       {/* Main Frame */}
       <div
         className={cn(
-          "relative w-full max-w-lg aspect-[3/4] lg:aspect-[4/5] h-full lg:h-[85%] rounded-3xl overflow-hidden border-4 transition-all duration-500 shadow-2xl backdrop-blur-sm z-10 flex flex-col",
+          "relative w-full max-w-lg aspect-[3/4] sm:aspect-[3/4] lg:aspect-[4/5] h-auto min-h-[280px] sm:min-h-0 lg:h-[85%] rounded-2xl sm:rounded-3xl overflow-hidden border-2 sm:border-4 transition-all duration-500 shadow-2xl backdrop-blur-sm z-10 flex flex-col",
           status === "success"
             ? "border-success shadow-[0_0_60px_rgba(34,197,94,0.4)]"
             : status === "error"
@@ -42,7 +42,7 @@ export const KioskScanner = ({
         )}
       >
         {/* Content Layer */}
-        <div className="relative z-0 w-full h-full flex items-center justify-center overflow-hidden">
+        <div className="relative z-0 w-full h-full flex items-center justify-center overflow-visible">
           {children}
         </div>
 
