@@ -9,10 +9,12 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { getAllUsers, MOCK_SESSIONS } from "@/contexts/AuthContext";
+import { usersServices } from "@/services/users.services";
+import { Role } from "@/enums/enums";
 import { PayrollStatsCard } from "@/components/staff/PayrollStatsCard";
 import { StaffFilters } from "@/components/staff/StaffFilters";
 import { PayrollTable } from "@/components/staff/PayrollTable";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 interface Session {
   id: string;
@@ -30,11 +32,15 @@ interface Session {
   paymentStatus: "pending" | "paid";
 }
 
+// Placeholder sessions until API integration
+const PLACEHOLDER_SESSIONS: Session[] = [];
+
 const StaffManagement = () => {
-  const [sessions, setSessions] = useState<Session[]>(MOCK_SESSIONS);
+  const [sessions, setSessions] = useState<Session[]>(PLACEHOLDER_SESSIONS);
   const [staffList, setStaffList] = useState<{ id: string; name: string }[]>(
     [],
   );
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStaff, setSelectedStaff] = useState<string>("all");
   const [selectedDepartment, setSelectedDepartment] = useState<string>("all");
@@ -46,9 +52,21 @@ const StaffManagement = () => {
     loadStaff();
   }, []);
 
-  const loadStaff = () => {
-    const allUsers = getAllUsers();
-    setStaffList(allUsers.filter((u) => u.role === "staff"));
+  const loadStaff = async () => {
+    setLoading(true);
+    try {
+      const response = await usersServices.getAllUsers();
+      if (response.success && response.data?.users) {
+        const staffUsers = response.data.users
+          .filter((u) => u.role === Role.STAFF || u.role === Role.LECTURER)
+          .map((u) => ({ id: u.id, name: u.name }));
+        setStaffList(staffUsers);
+      }
+    } catch (error) {
+      console.error("Failed to load staff:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Filter sessions based on selected filters

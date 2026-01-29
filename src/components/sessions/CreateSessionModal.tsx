@@ -16,8 +16,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { User, MOCK_COURSES } from "@/contexts/AuthContext";
+import { User } from "@/contexts/AuthContext";
 import { AttendanceSession } from "@/types/attendance";
+import { Role } from "@/enums/enums";
+
+// Placeholder courses until API is integrated
+const PLACEHOLDER_COURSES = [
+  { id: "cs101", name: "Introduction to Computer Science", department: "cs" },
+  { id: "cs201", name: "Data Structures", department: "cs" },
+  { id: "cs301", name: "Algorithms", department: "cs" },
+];
 
 interface CreateSessionModalProps {
   open: boolean;
@@ -42,25 +50,11 @@ export const CreateSessionModal = ({
   const [expectedCount, setExpectedCount] = useState("");
 
   // Pre-fill for Course Rep or Lecturer with single course
+  // TODO: Implement course pre-fill once course data is available from API
   useEffect(() => {
     if (open) {
-      // Course rep: default to first assigned course
-      if (
-        user?.isCourseRep &&
-        user?.courseRepData &&
-        user.courseRepData.length > 0
-      ) {
-        setSelectedCourse(user.courseRepData[0].courseId);
-      }
-      // Lecturer: default to first course they teach if only one
-      else if (user?.role === "lecturer" && user.coursesTaught) {
-        const coursesTaught = Array.isArray(user.coursesTaught)
-          ? user.coursesTaught
-          : [user.coursesTaught];
-        if (coursesTaught.length === 1) {
-          setSelectedCourse(coursesTaught[0]);
-        }
-      }
+      // Course pre-fill will be implemented when course API is integrated
+      // For now, users must manually select their course
     }
   }, [open, user]);
 
@@ -79,7 +73,7 @@ export const CreateSessionModal = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const course = MOCK_COURSES.find((c) => c.id === selectedCourse);
+    const course = PLACEHOLDER_COURSES.find((c) => c.id === selectedCourse);
 
     const newSession: AttendanceSession = {
       id: `session-${Date.now()}`,
@@ -95,7 +89,8 @@ export const CreateSessionModal = ({
       courseId: selectedCourse,
       courseName: course?.name,
       createdBy: user?.id,
-      createdByRole: user?.role,
+      createdByRole:
+        user?.role?.toLowerCase() as AttendanceSession["createdByRole"],
     };
 
     if (onCreateSession) {
@@ -106,32 +101,11 @@ export const CreateSessionModal = ({
     onOpenChange(false);
   };
 
-  const isCourseRep = user?.isCourseRep;
+  const isCourseRep = false; // TODO: Check from user roles
 
-  // Get available courses based on user role
+  // Get available courses based on user role - using placeholder for now
   const getAvailableCourses = () => {
-    // Super admin and admin can see all courses
-    if (user?.role === "super_admin" || user?.role === "admin") {
-      return MOCK_COURSES;
-    }
-
-    // Lecturers can only see courses they teach
-    if (user?.role === "lecturer" && user.coursesTaught) {
-      const coursesTaught = Array.isArray(user.coursesTaught)
-        ? user.coursesTaught
-        : [user.coursesTaught];
-      return MOCK_COURSES.filter((course) => coursesTaught.includes(course.id));
-    }
-
-    // Course reps can only see courses they're assigned to
-    if (user?.isCourseRep && user.courseRepData) {
-      const courseRepCourseIds = user.courseRepData.map((c) => c.courseId);
-      return MOCK_COURSES.filter((course) =>
-        courseRepCourseIds.includes(course.id),
-      );
-    }
-
-    return [];
+    return PLACEHOLDER_COURSES;
   };
 
   const availableCourses = getAvailableCourses();

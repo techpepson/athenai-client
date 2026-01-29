@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { Role } from "@/enums/enums";
 import {
   LayoutDashboard,
   Users,
@@ -77,19 +78,22 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
     navigate("/auth", { replace: true });
   };
 
-  const isSuperAdmin = user?.role === "super_admin";
-  const isAdmin = user?.role === "admin";
-  const isLecturer = user?.role === "lecturer";
-  const isStaff = user?.role === "staff";
-  const isCourseRep = user?.role === "course_rep";
-  const isStudent = user?.role === "student";
+  const isOwner = user?.role === Role.OWNER;
+  const isSystemAdmin = user?.role === Role.SYSTEM_ADMIN;
+  const isAdmin = user?.role === Role.ADMIN;
+  const isLecturer = user?.role === Role.LECTURER;
+  const isStaff = user?.role === Role.STAFF;
+  const isCourseRep = user?.role === Role.REP;
+  const isStudent = user?.role === Role.STUDENT;
+  const isSuperAdmin = isOwner || isSystemAdmin; // Combined for backward compatibility
 
   const getRolePrefix = () => {
-    if (isSuperAdmin) return "/super_admin";
+    if (isOwner) return "/owner";
+    if (isSystemAdmin) return "/system_admin";
     if (isAdmin) return "/admin";
     if (isLecturer) return "/lecturer";
     if (isStaff) return "/staff";
-    if (isCourseRep) return "/course_rep";
+    if (isCourseRep) return "/rep";
     if (isStudent) return "/student";
     return "";
   };

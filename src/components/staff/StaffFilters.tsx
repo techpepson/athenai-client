@@ -7,7 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { MOCK_DEPARTMENTS } from "@/contexts/AuthContext";
+import { DEPARTMENTS } from "@/constants/appConstants";
 
 interface StaffFiltersProps {
   searchQuery: string;
@@ -63,7 +63,7 @@ export const StaffFilters = ({
       </SelectTrigger>
       <SelectContent>
         <SelectItem value="all">All Departments</SelectItem>
-        {MOCK_DEPARTMENTS.map((dept) => (
+        {DEPARTMENTS.map((dept) => (
           <SelectItem key={dept.value} value={dept.value}>
             {dept.label}
           </SelectItem>

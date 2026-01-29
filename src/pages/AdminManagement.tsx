@@ -21,17 +21,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import {
-  useAuth,
-  addAdminStaffUser,
-  deleteAdminStaffUser,
-  getAllUsers,
-  User,
-  createPermissionRequest,
-  getMyPermissionRequests,
-  PermissionRequest,
-} from "@/contexts/AuthContext";
-import { AdminPrivilegesModal } from "@/components/admin/AdminPrivilegesModal";
+import { useAuth, User } from "@/contexts/AuthContext";
+import { usersServices } from "@/services/users.services";
+import { Role } from "@/enums/enums";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 const AdminManagement = () => {
   const { user: currentUser, logout } = useAuth();
@@ -39,42 +32,42 @@ const AdminManagement = () => {
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selfDeleteDialogOpen, setSelfDeleteDialogOpen] = useState(false);
-  const [privilegesModalOpen, setPrivilegesModalOpen] = useState(false);
   const [selectedStaff, setSelectedStaff] = useState<User | null>(null);
   const [newStaffName, setNewStaffName] = useState("");
   const [newStaffEmail, setNewStaffEmail] = useState("");
-  const [newStaffId, setNewStaffId] = useState("");
+  const [newStaffPhone, setNewStaffPhone] = useState("");
   const [generatedPassword, setGeneratedPassword] = useState("");
   const [copied, setCopied] = useState(false);
-  const [myRequests, setMyRequests] = useState<PermissionRequest[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
 
-  const isSuperAdmin = currentUser?.role === "super_admin";
-  const isAdmin = currentUser?.role === "admin";
-  const canAddAdmin =
-    isSuperAdmin || (isAdmin && currentUser?.privileges?.canAddAdmin);
-  const canDeleteAdmin =
-    isSuperAdmin || (isAdmin && currentUser?.privileges?.canDeleteAdmin);
-
-  // Check if admin has pending requests
-  const hasPendingAddRequest = myRequests.some(
-    (r) => r.permissionType === "canAddAdmin" && r.status === "pending",
-  );
-  const hasPendingDeleteRequest = myRequests.some(
-    (r) => r.permissionType === "canDeleteAdmin" && r.status === "pending",
-  );
+  const isOwner = currentUser?.role === Role.OWNER;
+  const isSystemAdmin = currentUser?.role === Role.SYSTEM_ADMIN;
+  const isAdmin = currentUser?.role === Role.ADMIN;
+  const canAddAdmin = isOwner || isSystemAdmin;
+  const canDeleteAdmin = isOwner || isSystemAdmin;
 
   useEffect(() => {
     loadStaff();
-    if (currentUser) {
-      setMyRequests(getMyPermissionRequests(currentUser.id));
-    }
   }, [currentUser]);
 
-  const loadStaff = () => {
-    // Filter showing only Admins
-    const allUsers = getAllUsers();
-    setStaffList(allUsers.filter((u) => u.role === "admin"));
+  const loadStaff = async () => {
+    setIsLoading(true);
+    try {
+      const response = await usersServices.getAllUsers();
+      if (response.success && response.data?.users) {
+        // Filter showing only Admins and System Admins
+        const admins = response.data.users.filter(
+          (u) => u.role === Role.ADMIN || u.role === Role.SYSTEM_ADMIN,
+        );
+        setStaffList(admins as User[]);
+      }
+    } catch (error) {
+      console.error("Failed to load admins:", error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const generateTempPassword = () => {
@@ -86,8 +79,12 @@ const AdminManagement = () => {
     return password;
   };
 
-  const handleAddStaff = () => {
-    if (!newStaffName.trim() || !newStaffEmail.trim() || !newStaffId.trim()) {
+  const handleAddStaff = async () => {
+    if (
+      !newStaffName.trim() ||
+      !newStaffEmail.trim() ||
+      !newStaffPhone.trim()
+    ) {
       toast({
         title: "Error",
         description: "Please fill in all fields",
@@ -96,38 +93,64 @@ const AdminManagement = () => {
       return;
     }
 
+    setIsSubmitting(true);
     const tempPassword = generateTempPassword();
-    const result = addAdminStaffUser(
-      newStaffId,
-      newStaffEmail,
-      newStaffName,
-      tempPassword,
-    );
 
-    if (result.success) {
-      setGeneratedPassword(tempPassword);
-      loadStaff();
-      toast({
-        title: "Admin Created",
-        description: "Share the temporary password with the new admin",
+    try {
+      const response = await usersServices.createAdmin({
+        name: newStaffName,
+        email: newStaffEmail,
+        phone: newStaffPhone,
       });
-    } else {
+
+      if (response.success) {
+        setGeneratedPassword(tempPassword);
+        loadStaff();
+        toast({
+          title: "Admin Created",
+          description: "Share the temporary password with the new admin",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: response.error || "Failed to create admin",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
       toast({
         title: "Error",
-        description: result.error,
+        description:
+          error instanceof Error ? error.message : "Failed to create admin",
         variant: "destructive",
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleDeleteStaff = () => {
+  const handleDeleteStaff = async () => {
     if (selectedStaff) {
-      const success = deleteAdminStaffUser(selectedStaff.id);
-      if (success) {
-        loadStaff();
+      try {
+        const response = await usersServices.removeUser(selectedStaff.email);
+        if (response.success) {
+          loadStaff();
+          toast({
+            title: "Admin removed",
+            description: `${selectedStaff.name} has been removed`,
+          });
+        } else {
+          toast({
+            title: "Error",
+            description: response.error || "Failed to remove admin",
+            variant: "destructive",
+          });
+        }
+      } catch (error) {
         toast({
-          title: "Admin removed",
-          description: `${selectedStaff.name} has been removed`,
+          title: "Error",
+          description: "Failed to remove admin",
+          variant: "destructive",
         });
       }
     }
@@ -135,44 +158,30 @@ const AdminManagement = () => {
     setSelectedStaff(null);
   };
 
-  const handleSelfDelete = () => {
+  const handleSelfDelete = async () => {
     if (selectedStaff && currentUser && selectedStaff.id === currentUser.id) {
-      const success = deleteAdminStaffUser(selectedStaff.id);
-      if (success) {
+      try {
+        const response = await usersServices.removeUser(selectedStaff.email);
+        if (response.success) {
+          toast({
+            title: "Account Deleted",
+            description: "Your admin account has been removed. Logging out...",
+          });
+          // Small delay to show the toast before logout
+          setTimeout(() => {
+            logout();
+          }, 1000);
+        }
+      } catch (error) {
         toast({
-          title: "Account Deleted",
-          description: "Your admin account has been removed. Logging out...",
+          title: "Error",
+          description: "Failed to delete account",
+          variant: "destructive",
         });
-        // Small delay to show the toast before logout
-        setTimeout(() => {
-          logout();
-        }, 1000);
       }
     }
     setSelfDeleteDialogOpen(false);
     setSelectedStaff(null);
-  };
-
-  const handleRequestPermission = (
-    permissionType: "canAddAdmin" | "canDeleteAdmin",
-  ) => {
-    if (!currentUser) return;
-
-    const result = createPermissionRequest(currentUser, permissionType);
-
-    if (result.success) {
-      setMyRequests(getMyPermissionRequests(currentUser.id));
-      toast({
-        title: "Request Sent",
-        description: `Your request for ${permissionType === "canAddAdmin" ? "Add Admin" : "Delete Admin"} permission has been sent to the Super Admin.`,
-      });
-    } else {
-      toast({
-        title: "Error",
-        description: result.error,
-        variant: "destructive",
-      });
-    }
   };
 
   const copyPassword = () => {
@@ -185,7 +194,7 @@ const AdminManagement = () => {
     setAddModalOpen(false);
     setNewStaffName("");
     setNewStaffEmail("");
-    setNewStaffId("");
+    setNewStaffPhone("");
     setGeneratedPassword("");
   };
 
@@ -211,61 +220,24 @@ const AdminManagement = () => {
         </div>
       </div>
 
-      {/* Request Permission Section for Admins without privileges */}
-      {isAdmin && !isSuperAdmin && (!canAddAdmin || !canDeleteAdmin) && (
-        <div className="bg-card rounded-xl border border-border p-4">
-          <h3 className="text-sm font-medium text-foreground mb-3">
-            Request Permissions
-          </h3>
-          <div className="flex flex-wrap gap-3">
-            {!canAddAdmin && (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={hasPendingAddRequest}
-                onClick={() => handleRequestPermission("canAddAdmin")}
-              >
-                <Send className="w-4 h-4 mr-2" />
-                {hasPendingAddRequest
-                  ? "Add Admin Request Pending"
-                  : "Request Add Admin Permission"}
-              </Button>
-            )}
-            {!canDeleteAdmin && (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={hasPendingDeleteRequest}
-                onClick={() => handleRequestPermission("canDeleteAdmin")}
-              >
-                <Send className="w-4 h-4 mr-2" />
-                {hasPendingDeleteRequest
-                  ? "Delete Admin Request Pending"
-                  : "Request Delete Admin Permission"}
-              </Button>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* Staff List */}
       <div className="bg-card rounded-xl border border-border">
-        {staffList.length === 0 ? (
+        {isLoading ? (
           <div className="p-12 text-center">
-            <UserCog className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-foreground mb-2">
-              No admins found
-            </h3>
-            <p className="text-muted-foreground mb-4">
-              Add admin members to help manage the system
-            </p>
-            {canAddAdmin && (
-              <Button variant="outline" onClick={() => setAddModalOpen(true)}>
-                <Plus className="w-4 h-4 mr-2" />
-                Add First Admin
-              </Button>
-            )}
+            <p className="text-muted-foreground">Loading admins...</p>
           </div>
+        ) : staffList.length === 0 ? (
+          <EmptyState
+            type="admins"
+            action={
+              canAddAdmin ? (
+                <Button variant="outline" onClick={() => setAddModalOpen(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add First Admin
+                </Button>
+              ) : undefined
+            }
+          />
         ) : (
           <div className="divide-y divide-border">
             {staffList.map((staff) => (
@@ -287,36 +259,12 @@ const AdminManagement = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {staff.mustChangePassword && (
-                    <span className="text-xs bg-warning/10 text-warning px-2 py-1 rounded-full">
-                      New
-                    </span>
-                  )}
-                  {staff.privileges?.canAddAdmin && (
-                    <span className="text-xs bg-success/10 text-success px-2 py-1 rounded-full">
-                      +Admin
-                    </span>
-                  )}
-                  {staff.privileges?.canDeleteAdmin && (
-                    <span className="text-xs bg-destructive/10 text-destructive px-2 py-1 rounded-full">
-                      -Admin
-                    </span>
-                  )}
-                  {isSuperAdmin && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-primary hover:text-primary hover:bg-primary/10"
-                      title="Privileges"
-                      onClick={() => {
-                        setSelectedStaff(staff);
-                        setPrivilegesModalOpen(true);
-                      }}
-                    >
-                      <Shield className="w-4 h-4" />
-                    </Button>
-                  )}
-                  {canDeleteAdmin && (
+                  <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
+                    {staff.role === Role.SYSTEM_ADMIN
+                      ? "System Admin"
+                      : "Admin"}
+                  </span>
+                  {canDeleteAdmin && staff.role !== Role.OWNER && (
                     <Button
                       variant="ghost"
                       size="icon"
@@ -351,15 +299,6 @@ const AdminManagement = () => {
           {!generatedPassword ? (
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="staffId">Staff ID</Label>
-                <Input
-                  id="staffId"
-                  placeholder="e.g., ADM001"
-                  value={newStaffId}
-                  onChange={(e) => setNewStaffId(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
                 <Label htmlFor="name">Full Name</Label>
                 <Input
                   id="name"
@@ -378,12 +317,30 @@ const AdminManagement = () => {
                   onChange={(e) => setNewStaffEmail(e.target.value)}
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="phone">Phone</Label>
+                <Input
+                  id="phone"
+                  type="tel"
+                  placeholder="Enter phone number"
+                  value={newStaffPhone}
+                  onChange={(e) => setNewStaffPhone(e.target.value)}
+                />
+              </div>
               <DialogFooter>
-                <Button variant="outline" onClick={closeAddModal}>
+                <Button
+                  variant="outline"
+                  onClick={closeAddModal}
+                  disabled={isSubmitting}
+                >
                   Cancel
                 </Button>
-                <Button variant="gradient" onClick={handleAddStaff}>
-                  Create Admin
+                <Button
+                  variant="gradient"
+                  onClick={handleAddStaff}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? "Creating..." : "Create Admin"}
                 </Button>
               </DialogFooter>
             </div>
@@ -484,14 +441,6 @@ const AdminManagement = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* Admin Privileges Modal */}
-      <AdminPrivilegesModal
-        open={privilegesModalOpen}
-        onOpenChange={setPrivilegesModalOpen}
-        admin={selectedStaff}
-        onSave={loadStaff}
-      />
     </div>
   );
 };

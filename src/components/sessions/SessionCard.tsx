@@ -4,6 +4,7 @@ import { Clock, MapPin, Users, Play, Pause, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { User } from "@/contexts/AuthContext";
+import { Role } from "@/enums/enums";
 
 interface SessionCardProps {
   session: AttendanceSession;
@@ -132,13 +133,7 @@ export const SessionCard = ({
             className="flex-1"
             variant="gradient"
             onClick={() => onStart?.(session)}
-            disabled={
-              user?.role === "student" ||
-              (user?.role === "course_rep" &&
-                !user?.courseRepData?.some(
-                  (c) => c.courseId === session.courseId,
-                ))
-            }
+            disabled={user?.role === Role.STUDENT}
           >
             <Play className="w-4 h-4 mr-2" />
             Start Session
@@ -149,13 +144,7 @@ export const SessionCard = ({
             className="flex-1"
             variant="outline"
             onClick={() => onEnd?.(session)}
-            disabled={
-              user?.role === "student" ||
-              (user?.role === "course_rep" &&
-                !user?.courseRepData?.some(
-                  (c) => c.courseId === session.courseId,
-                ))
-            }
+            disabled={user?.role === Role.STUDENT}
           >
             <Pause className="w-4 h-4 mr-2" />
             End Session

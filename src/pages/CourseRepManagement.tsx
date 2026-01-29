@@ -40,24 +40,36 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import {
-  assignCourseRep,
-  removeCourseRep,
-  getCourseRepUsers,
-  getAllUsers,
-  User,
-  MOCK_DEPARTMENTS,
-  MOCK_COURSES,
-} from "@/contexts/AuthContext";
+import { usersServices } from "@/services/users.services";
+import { coursesService, Course } from "@/services/courses.services";
+import { Role } from "@/enums/enums";
+import { IUserPublic } from "@/interface/user.interface";
 import { Badge } from "@/components/ui/badge";
 import { EditMemberModal } from "@/components/members/EditMemberModal";
 import { Member } from "@/types/attendance";
+import { EmptyState } from "@/components/ui/EmptyState";
+
+// Simplified User type for this component
+interface CourseRepUser {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  studentId?: string;
+  courseRepData?: Array<{
+    courseId: string;
+    courseName: string;
+    department: string;
+  }>;
+}
 
 const CourseRepManagement = () => {
-  const [courseRepList, setCourseRepList] = useState<User[]>([]);
+  const [courseRepList, setCourseRepList] = useState<CourseRepUser[]>([]);
+  const [loading, setLoading] = useState(true);
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [selectedCourseRep, setSelectedCourseRep] = useState<User | null>(null);
+  const [selectedCourseRep, setSelectedCourseRep] =
+    useState<CourseRepUser | null>(null);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [courseRepSearch, setCourseRepSearch] = useState("");
@@ -67,14 +79,33 @@ const CourseRepManagement = () => {
   const [step, setStep] = useState(1);
   const [selectedCourse, setSelectedCourse] = useState("");
   const [studentSearch, setStudentSearch] = useState("");
-  const [selectedStudent, setSelectedStudent] = useState<User | null>(null);
-  const [availableStudents, setAvailableStudents] = useState<User[]>([]);
+  const [selectedStudent, setSelectedStudent] = useState<CourseRepUser | null>(
+    null,
+  );
+  const [availableStudents, setAvailableStudents] = useState<CourseRepUser[]>(
+    [],
+  );
+  const [allCourses, setAllCourses] = useState<Course[]>([]);
 
   const { toast } = useToast();
 
   useEffect(() => {
     loadCourseReps();
+    loadCourses();
   }, []);
+
+  const loadCourses = async () => {
+    try {
+      const response = await coursesService.getAllCourses();
+      if (response.success && response.data?.data) {
+        setAllCourses(response.data.data);
+      } else {
+        setAllCourses([]);
+      }
+    } catch {
+      setAllCourses([]);
+    }
+  };
 
   useEffect(() => {
     if (addModalOpen) {
@@ -89,57 +120,76 @@ const CourseRepManagement = () => {
   // Load students for search
   useEffect(() => {
     if (step === 2) {
-      const allUsers = getAllUsers();
-      // Filter for students.
-      // Ideally we would filter by Department/Program too, but mapping might be loose.
-      // Let's filter by role 'student'.
-      const students = allUsers.filter((u) => u.role === "student");
-      setAvailableStudents(students);
+      const loadStudents = async () => {
+        const response = await usersServices.getAllUsers();
+        if (response.success && response.data?.users) {
+          const students = response.data.users
+            .filter((u) => u.role === Role.STUDENT)
+            .map((u) => ({
+              id: u.id,
+              name: u.name,
+              email: u.email,
+              role: u.role,
+              studentId: u.student?.studentId,
+            }));
+          setAvailableStudents(students);
+        }
+      };
+      loadStudents();
     }
   }, [step]);
 
-  const loadCourseReps = () => {
-    setCourseRepList(getCourseRepUsers());
-  };
-
-  const handleAssign = () => {
-    if (!selectedStudent || !selectedCourse) return;
-
-    const result = assignCourseRep(selectedStudent.id, selectedCourse);
-
-    if (result.success) {
-      loadCourseReps();
-      setAddModalOpen(false);
-      toast({
-        title: "Course Rep Assigned",
-        description: `${selectedStudent.name} is now Course Rep for the selected course.`,
-      });
-    } else {
-      toast({
-        title: "Error",
-        description: result.error,
-        variant: "destructive",
-      });
+  const loadCourseReps = async () => {
+    setLoading(true);
+    try {
+      const response = await usersServices.getAllUsers();
+      if (response.success && response.data?.users) {
+        // Filter users with REP role
+        const reps = response.data.users
+          .filter((u) => u.role === Role.REP)
+          .map((u) => ({
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            role: u.role,
+            studentId: u.student?.studentId,
+            courseRepData: [], // Course assignments will come from API
+          }));
+        setCourseRepList(reps);
+      } else {
+        setCourseRepList([]);
+      }
+    } catch {
+      setCourseRepList([]);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleRemoveCourseRep = () => {
+  const handleAssign = async () => {
+    if (!selectedStudent || !selectedCourse) return;
+
+    // TODO: Integrate with assignRep API
+    toast({
+      title: "Feature Coming Soon",
+      description:
+        "Course rep assignment will be available once the API is integrated.",
+    });
+    setAddModalOpen(false);
+  };
+
+  const handleRemoveCourseRep = async () => {
     if (selectedCourseRep) {
-      const success = removeCourseRep(selectedCourseRep.id);
-      if (success) {
-        loadCourseReps();
-        toast({
-          title: "Role Removed",
-          description: `${selectedCourseRep.name} has been removed from course rep role`,
-        });
-      }
+      // TODO: Integrate with removeCourseRep API
+      toast({
+        title: "Feature Coming Soon",
+        description:
+          "Course rep removal will be available once the API is integrated.",
+      });
     }
     setDeleteDialogOpen(false);
     setSelectedCourseRep(null);
   };
-
-  // Filtered Lists - Show all courses
-  const allCourses = MOCK_COURSES;
 
   const filteredStudents = availableStudents
     .filter(
@@ -237,9 +287,9 @@ const CourseRepManagement = () => {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Courses</SelectItem>
-            {MOCK_COURSES.map((course) => (
+            {allCourses.map((course) => (
               <SelectItem key={course.id} value={course.id}>
-                {course.name}
+                {course.title}
               </SelectItem>
             ))}
           </SelectContent>
@@ -336,7 +386,8 @@ const CourseRepManagement = () => {
                         name: rep.name,
                         email: rep.email,
                         role: rep.role as Member["role"],
-                        department: rep.department,
+                        department:
+                          rep.courseRepData?.[0]?.department || "Unknown",
                         studentId: rep.studentId,
                         isMinor: false,
                         createdAt: new Date(),
@@ -391,7 +442,7 @@ const CourseRepManagement = () => {
                     {allCourses.length > 0 ? (
                       allCourses.map((course) => (
                         <SelectItem key={course.id} value={course.id}>
-                          {course.name} ({course.department})
+                          {course.title} ({course.code})
                         </SelectItem>
                       ))
                     ) : (
@@ -451,7 +502,7 @@ const CourseRepManagement = () => {
                     </p>
                     <p className="text-xs text-muted-foreground">
                       Will be assigned to:{" "}
-                      {MOCK_COURSES.find((c) => c.id === selectedCourse)?.name}
+                      {allCourses.find((c) => c.id === selectedCourse)?.title}
                     </p>
                   </div>
                 )}

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   TrendingUp,
   Clock,
@@ -13,7 +13,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useAuth, getCourses, MOCK_SESSIONS } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { coursesService, Course } from "@/services/courses.services";
 import { PayrollStatsCard } from "@/components/staff/PayrollStatsCard";
 
 interface Session {
@@ -32,22 +33,41 @@ interface Session {
   paymentStatus: "pending" | "paid";
 }
 
+// Placeholder - will be replaced with API data
+const PLACEHOLDER_SESSIONS: Session[] = [];
+
 const Payroll = () => {
   const { user } = useAuth();
-  const [sessions] = useState<Session[]>(MOCK_SESSIONS);
+  const [sessions] = useState<Session[]>(PLACEHOLDER_SESSIONS);
   const [selectedCourse, setSelectedCourse] = useState<string>("all");
   const [selectedMonth, setSelectedMonth] = useState<string>("2026-01");
+  const [allCourses, setAllCourses] = useState<Course[]>([]);
+
+  useEffect(() => {
+    const loadCourses = async () => {
+      try {
+        const response = await coursesService.getAllCourses();
+        if (response.success && response.data?.data) {
+          setAllCourses(response.data.data);
+        }
+      } catch {
+        setAllCourses([]);
+      }
+    };
+    loadCourses();
+  }, []);
 
   // Get courses taught by the current lecturer
-  const allCourses = getCourses();
+  // TODO: Fetch lecturer's assigned courses from API
+  const coursesTaught: string[] = []; // Placeholder - will be fetched from lecturer-course assignments API
   const lecturerCourses = allCourses.filter((course) =>
-    user?.coursesTaught?.includes(course.id),
+    coursesTaught.includes(course.id),
   );
 
   // Filter sessions for this lecturer's courses only
   const filteredSessions = sessions.filter((session) => {
     // Only show sessions for courses this lecturer teaches
-    const isLecturerCourse = user?.coursesTaught?.includes(session.courseId);
+    const isLecturerCourse = coursesTaught.includes(session.courseId);
     if (!isLecturerCourse) return false;
 
     const matchesCourse =
@@ -92,7 +112,7 @@ const Payroll = () => {
             <SelectItem value="all">All My Courses</SelectItem>
             {lecturerCourses.map((course) => (
               <SelectItem key={course.id} value={course.id}>
-                {course.name}
+                {course.title}
               </SelectItem>
             ))}
           </SelectContent>

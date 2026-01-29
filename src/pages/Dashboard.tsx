@@ -1,4 +1,5 @@
 import { useAuth } from "@/contexts/AuthContext";
+import { Role } from "@/enums/enums";
 import StudentDashboard from "./dashboards/StudentDashboard";
 import LecturerDashboard from "./dashboards/LecturerDashboard";
 import StaffDashboard from "./dashboards/StaffDashboard";
@@ -8,21 +9,21 @@ const Dashboard = () => {
   const { user } = useAuth();
 
   // Route to appropriate dashboard based on user role
-  if (user?.role === "student" || user?.role === "course_rep") {
+  if (user?.role === Role.STUDENT || user?.role === Role.REP) {
     return <StudentDashboard />;
   }
 
-  if (user?.role === "lecturer") {
+  if (user?.role === Role.LECTURER) {
     // Lecturers are teachers/professors
     return <LecturerDashboard />;
   }
 
-  if (user?.role === "staff") {
+  if (user?.role === Role.STAFF) {
     // Staff are workers (janitors, security, etc.) who track their attendance
     return <StaffDashboard />;
   }
 
-  if (user?.role === "admin" || user?.role === "super_admin") {
+  if (user?.role === Role.ADMIN || user?.role === Role.SYSTEM_ADMIN || user?.role === Role.OWNER) {
     return <AdminDashboard />;
   }
 

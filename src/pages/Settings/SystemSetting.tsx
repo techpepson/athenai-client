@@ -12,12 +12,6 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
-import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -36,47 +30,66 @@ import {
   ImageIcon,
   BookOpen,
   Users,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
-import {
-  MOCK_DEPARTMENTS,
-  MOCK_COURSES,
-  getAllUsers,
-  User,
-  useAuth,
-  addDepartment,
-  addCourse,
-  getDepartments,
-  getCourses,
-} from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { Role } from "@/enums/enums";
+import { coursesService, Course } from "@/services/courses.services";
+import { usersServices } from "@/services/users.services";
+import { IUserPublic } from "@/interface/user.interface";
 
 const SystemSetting = () => {
   const { user } = useAuth();
   const [adminPhoneNumber, setAdminPhoneNumber] = useState("");
   const [organizationLogo, setOrganizationLogo] = useState<string | null>(null);
-  const [staffList, setStaffList] = useState<User[]>([]);
-
-  // Department modal state
-  const [departmentModalOpen, setDepartmentModalOpen] = useState(false);
-  const [newDeptLabel, setNewDeptLabel] = useState("");
-  const [newDeptValue, setNewDeptValue] = useState("");
+  const [staffList, setStaffList] = useState<IUserPublic[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [loadingCourses, setLoadingCourses] = useState(true);
 
   // Course modal state
   const [courseModalOpen, setCourseModalOpen] = useState(false);
-  const [newCourseName, setNewCourseName] = useState("");
-  const [newCourseId, setNewCourseId] = useState("");
-  const [newCourseDept, setNewCourseDept] = useState("");
+  const [newCourseCode, setNewCourseCode] = useState("");
+  const [newCourseTitle, setNewCourseTitle] = useState("");
+  const [newCourseDescription, setNewCourseDescription] = useState("");
+  const [addingCourse, setAddingCourse] = useState(false);
 
-  // Trigger re-render when data changes
-  const [refreshKey, setRefreshKey] = useState(0);
-
-  const isSuperAdmin = user?.role === "super_admin";
+  const isSuperAdmin =
+    user?.role === Role.SYSTEM_ADMIN || user?.role === Role.OWNER;
 
   useEffect(() => {
-    // Filter for lecturers (those with coursesTaught)
-    setStaffList(
-      getAllUsers().filter((u) => u.role === "lecturer" || u.coursesTaught),
-    );
+    // Load lecturers from API
+    const loadStaff = async () => {
+      const response = await usersServices.getAllUsers();
+      if (response.success && response.data?.users) {
+        setStaffList(
+          response.data.users.filter(
+            (u) => u.role === Role.LECTURER || u.role === Role.STAFF,
+          ),
+        );
+      }
+    };
+    loadStaff();
+  }, []);
+
+  useEffect(() => {
+    // Load courses from API
+    const loadCourses = async () => {
+      setLoadingCourses(true);
+      try {
+        const response = await coursesService.getAllCourses();
+        if (response.success && response.data?.data) {
+          setCourses(response.data.data);
+        } else {
+          setCourses([]);
+        }
+      } catch {
+        setCourses([]);
+      } finally {
+        setLoadingCourses(false);
+      }
+    };
+    loadCourses();
   }, []);
 
   const handleSave = () => {
@@ -106,102 +119,55 @@ const SystemSetting = () => {
     setOrganizationLogo(null);
   };
 
-  // Helper to get staff for a course
-  const getStaffForCourse = (courseId: string) => {
-    return staffList.filter((s) => s.coursesTaught?.includes(courseId));
-  };
-
-  // Handle adding a new department
-  const handleAddDepartment = () => {
-    if (!newDeptLabel.trim() || !newDeptValue.trim()) {
-      toast.error("Please fill in all fields");
-      return;
+  // Helper to get lecturers for a course
+  const getLecturersForCourse = (course: Course) => {
+    // Course may have lecturers array from API
+    if (course.lecturers && course.lecturers.length > 0) {
+      // Map lecturer IDs to staff list
+      return staffList.filter((s) =>
+        course.lecturers?.some((l) => l.userId === s.id),
+      );
     }
-    const success = addDepartment(
-      newDeptLabel.trim(),
-      newDeptValue.trim().toLowerCase(),
-    );
-    if (success) {
-      toast.success(`Department "${newDeptLabel}" added successfully`);
-      setDepartmentModalOpen(false);
-      setNewDeptLabel("");
-      setNewDeptValue("");
-      setRefreshKey((prev) => prev + 1);
-    } else {
-      toast.error("Department already exists");
-    }
+    return [];
   };
 
   // Handle adding a new course
-  const handleAddCourse = () => {
-    if (!newCourseName.trim() || !newCourseId.trim() || !newCourseDept) {
-      toast.error("Please fill in all fields");
+  const handleAddCourse = async () => {
+    if (!newCourseCode.trim() || !newCourseTitle.trim()) {
+      toast.error("Please fill in course code and title");
       return;
     }
-    const success = addCourse(
-      newCourseId.trim().toLowerCase(),
-      newCourseName.trim(),
-      newCourseDept,
-    );
-    if (success) {
-      toast.success(`Course "${newCourseName}" added successfully`);
-      setCourseModalOpen(false);
-      setNewCourseName("");
-      setNewCourseId("");
-      setNewCourseDept("");
-      setRefreshKey((prev) => prev + 1);
-    } else {
-      toast.error("Course already exists");
+    setAddingCourse(true);
+    try {
+      const response = await coursesService.addCourse({
+        courseCode: newCourseCode.trim().toUpperCase(),
+        title: newCourseTitle.trim(),
+        description: newCourseDescription.trim() || newCourseTitle.trim(),
+      });
+
+      if (response.success) {
+        toast.success(`Course "${newCourseTitle}" added successfully`);
+        setCourseModalOpen(false);
+        setNewCourseCode("");
+        setNewCourseTitle("");
+        setNewCourseDescription("");
+        // Reload courses
+        const coursesResponse = await coursesService.getAllCourses();
+        if (coursesResponse.success && coursesResponse.data?.data) {
+          setCourses(coursesResponse.data.data);
+        }
+      } else {
+        toast.error(response.error || "Failed to add course");
+      }
+    } catch {
+      toast.error("Failed to add course");
+    } finally {
+      setAddingCourse(false);
     }
   };
 
-  // Get current departments and courses (for re-render)
-  const departments = getDepartments();
-  const courses = getCourses();
-
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Add Department Modal */}
-      <Dialog open={departmentModalOpen} onOpenChange={setDepartmentModalOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Add New Department</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="deptLabel">Department Name</Label>
-              <Input
-                id="deptLabel"
-                placeholder="e.g., Computer Science"
-                value={newDeptLabel}
-                onChange={(e) => setNewDeptLabel(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="deptValue">Department Code</Label>
-              <Input
-                id="deptValue"
-                placeholder="e.g., cs"
-                value={newDeptValue}
-                onChange={(e) => setNewDeptValue(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Short code used internally (lowercase)
-              </p>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setDepartmentModalOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleAddDepartment}>Add Department</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* Add Course Modal */}
       <Dialog open={courseModalOpen} onOpenChange={setCourseModalOpen}>
         <DialogContent className="sm:max-w-[425px]">
@@ -210,47 +176,50 @@ const SystemSetting = () => {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="courseName">Course Name</Label>
+              <Label htmlFor="courseCode">Course Code</Label>
               <Input
-                id="courseName"
-                placeholder="e.g., Data Structures"
-                value={newCourseName}
-                onChange={(e) => setNewCourseName(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="courseId">Course Code</Label>
-              <Input
-                id="courseId"
-                placeholder="e.g., ds101"
-                value={newCourseId}
-                onChange={(e) => setNewCourseId(e.target.value)}
+                id="courseCode"
+                placeholder="e.g., CS101"
+                value={newCourseCode}
+                onChange={(e) => setNewCourseCode(e.target.value)}
               />
               <p className="text-xs text-muted-foreground">
-                Unique identifier for this course (lowercase)
+                Unique identifier for this course
               </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="courseDept">Department</Label>
-              <Select value={newCourseDept} onValueChange={setNewCourseDept}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select department" />
-                </SelectTrigger>
-                <SelectContent>
-                  {departments.map((dept) => (
-                    <SelectItem key={dept.value} value={dept.value}>
-                      {dept.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label htmlFor="courseTitle">Course Title</Label>
+              <Input
+                id="courseTitle"
+                placeholder="e.g., Introduction to Computer Science"
+                value={newCourseTitle}
+                onChange={(e) => setNewCourseTitle(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="courseDescription">Description (Optional)</Label>
+              <Input
+                id="courseDescription"
+                placeholder="Brief description of the course"
+                value={newCourseDescription}
+                onChange={(e) => setNewCourseDescription(e.target.value)}
+              />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCourseModalOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleAddCourse}>Add Course</Button>
+            <Button onClick={handleAddCourse} disabled={addingCourse}>
+              {addingCourse ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Adding...
+                </>
+              ) : (
+                "Add Course"
+              )}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -355,104 +324,79 @@ const SystemSetting = () => {
             <div className="border-t border-border pt-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-foreground">
-                  Departments & Courses
+                  Courses
                 </h3>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setDepartmentModalOpen(true)}
-                  >
-                    + Add Department
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCourseModalOpen(true)}
-                  >
-                    + Add Course
-                  </Button>
-                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCourseModalOpen(true)}
+                >
+                  + Add Course
+                </Button>
               </div>
 
-              <Accordion
-                type="single"
-                collapsible
-                className="w-full"
-                key={refreshKey}
-              >
-                {departments.map((dept) => {
-                  const deptCourses = courses.filter(
-                    (c) => c.department === dept.value,
-                  );
-                  return (
-                    <AccordionItem key={dept.value} value={dept.value}>
-                      <AccordionTrigger className="hover:no-underline">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 bg-primary/10 rounded-lg text-primary">
-                            <Building className="w-4 h-4" />
+              {loadingCourses ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : courses.length === 0 ? (
+                <div className="text-center py-8">
+                  <BookOpen className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-muted-foreground">No courses available</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Add your first course to get started
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {courses.map((course) => {
+                    const lecturers = getLecturersForCourse(course);
+                    return (
+                      <div
+                        key={course.id}
+                        className="border border-border rounded-lg p-4 bg-secondary/10"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-primary/10 rounded-lg text-primary">
+                              <BookOpen className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <span className="font-medium">
+                                {course.title}
+                              </span>
+                              <p className="text-xs text-muted-foreground">
+                                {course.code}
+                              </p>
+                            </div>
                           </div>
-                          <span className="font-medium text-base">
-                            {dept.label}
-                          </span>
-                          <span className="text-xs text-muted-foreground font-normal ml-2">
-                            {deptCourses.length} Courses
-                          </span>
                         </div>
-                      </AccordionTrigger>
-                      <AccordionContent className="pl-4">
-                        <div className="space-y-3 pt-2">
-                          {deptCourses.map((course) => {
-                            const lecturers = getStaffForCourse(course.id);
-                            return (
-                              <div
-                                key={course.id}
-                                className="border border-border rounded-lg p-3 bg-secondary/10"
-                              >
-                                <div className="flex items-start justify-between">
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <BookOpen className="w-4 h-4 text-muted-foreground" />
-                                    <span className="font-medium">
-                                      {course.name}
-                                    </span>
-                                  </div>
-                                </div>
-                                <div className="pl-6">
-                                  <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
-                                    <Users className="w-3 h-3" /> Assigned
-                                    Lecturers:
-                                  </p>
-                                  {lecturers.length > 0 ? (
-                                    <div className="flex flex-wrap gap-2">
-                                      {lecturers.map((l) => (
-                                        <span
-                                          key={l.id}
-                                          className="text-xs bg-background border border-border px-2 py-0.5 rounded-full"
-                                        >
-                                          {l.name}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  ) : (
-                                    <span className="text-xs text-muted-foreground italic">
-                                      No lecturers assigned
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                          {deptCourses.length === 0 && (
-                            <p className="text-sm text-muted-foreground italic pl-4">
-                              No courses available.
-                            </p>
+                        <div className="mt-3 pl-11">
+                          <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                            <Users className="w-3 h-3" /> Assigned Lecturers:
+                          </p>
+                          {lecturers.length > 0 ? (
+                            <div className="flex flex-wrap gap-2">
+                              {lecturers.map((l) => (
+                                <span
+                                  key={l.id}
+                                  className="text-xs bg-background border border-border px-2 py-0.5 rounded-full"
+                                >
+                                  {l.name}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground italic">
+                              No lecturers assigned
+                            </span>
                           )}
                         </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  );
-                })}
-              </Accordion>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </TabsContent>

@@ -4,7 +4,7 @@ import { Eye, EyeOff, Fingerprint, Loader2, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth, getRolePrefix } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { StudentForm } from "@/components/auth/StudentForm";
 import { StaffForm } from "@/components/auth/StaffForm";
@@ -28,18 +28,7 @@ const Auth = () => {
 
   useEffect(() => {
     if (user) {
-      const rolePrefix =
-        user.role === "super_admin"
-          ? "super_admin"
-          : user.role === "admin"
-            ? "admin"
-            : user.role === "lecturer"
-              ? "lecturer"
-              : user.role === "course_rep"
-                ? "course_rep"
-                : user.role === "staff"
-                  ? "staff"
-                  : "student";
+      const rolePrefix = getRolePrefix(user.role);
       navigate(`/${rolePrefix}/dashboard`, { replace: true });
     }
   }, [user, navigate]);
@@ -50,20 +39,10 @@ const Auth = () => {
 
     const result = await login(email, password);
 
-    if (result.success) {
-      const userRole = result.user?.role || "student";
-      const rolePrefix =
-        userRole === "super_admin"
-          ? "super_admin"
-          : userRole === "admin"
-            ? "admin"
-            : userRole === "lecturer"
-              ? "lecturer"
-              : userRole === "course_rep"
-                ? "course_rep"
-                : userRole === "staff"
-                  ? "staff"
-                  : "student";
+    console.log("Login result:", result);
+
+    if (result.success && result.user) {
+      const rolePrefix = getRolePrefix(result.user.role);
 
       toast({
         title: "Welcome back!",

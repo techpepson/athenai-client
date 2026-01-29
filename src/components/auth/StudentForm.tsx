@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -25,16 +25,22 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
-
-// Import mock data from AuthContext
-import { getStudentByStudentId } from "@/contexts/AuthContext";
+import { authServices } from "@/services/auth.services";
+import { Role } from "@/enums/enums";
 
 // --- Schema ---
-const formSchema = z.object({
-  studentId: z.string().min(1, "Student ID is required"),
-  email: z.string().email("Invalid email address"),
-  fullName: z.string().min(2, "Full name is required"),
-});
+const formSchema = z
+  .object({
+    email: z.string().email("Invalid email address"),
+    fullName: z.string().min(2, "Full name is required"),
+    phone: z.string().min(10, "Phone number must be at least 10 digits"),
+    password: z.string().min(6, "Password must be at least 6 characters"),
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
 
 type FormValues = z.infer<typeof formSchema>;
 
@@ -51,38 +57,36 @@ export const StudentForm = ({ onSuccess }: StudentFormProps) => {
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      studentId: "",
       email: "",
       fullName: "",
+      phone: "",
+      password: "",
+      confirmPassword: "",
     },
   });
-
-  // Auto-fill logic using the centralized function
-  const studentId = form.watch("studentId");
-  useEffect(() => {
-    if (studentId) {
-      const studentData = getStudentByStudentId(studentId);
-      if (studentData) {
-        form.setValue("email", studentData.email);
-        form.setValue("fullName", studentData.name);
-        toast({
-          title: "Student Found",
-          description: `Details loaded for ${studentData.name}`,
-        });
-      }
-    }
-  }, [studentId, form, toast]);
 
   const onSubmit = async (data: FormValues) => {
     setIsLoading(true);
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      const response = await authServices.register({
+        email: data.email,
+        name: data.fullName,
+        phone: data.phone,
+        password: data.password,
+        role: Role.STUDENT,
+      });
 
-      console.log("Submission Data:", JSON.stringify(data, null, 2));
-
-      // Show success dialog
-      setShowSuccessDialog(true);
+      if (response.success) {
+        // Show success dialog
+        setShowSuccessDialog(true);
+      } else {
+        toast({
+          title: "Registration Failed",
+          description:
+            response.error || "Something went wrong. Please try again.",
+          variant: "destructive",
+        });
+      }
     } catch (error) {
       console.error(error);
       toast({
@@ -120,7 +124,7 @@ export const StudentForm = ({ onSuccess }: StudentFormProps) => {
             </div>
             <AlertDialogDescription className="pt-4 text-base">
               Your registration has been completed successfully. Please check
-              your student email for your login details.
+              your email for verification instructions before logging in.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -149,13 +153,46 @@ export const StudentForm = ({ onSuccess }: StudentFormProps) => {
             <div className="space-y-4">
               <FormField
                 control={form.control}
-                name="studentId"
+                name="fullName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Student ID</FormLabel>
+                    <FormLabel>Full Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter your full name" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email Address</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="Enter Student ID (e.g., 123456)"
+                        type="email"
+                        placeholder="Enter your student email (e.g., name@st.comas.edu.gh)"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Phone Number</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="tel"
+                        placeholder="Enter your phone number"
                         {...field}
                       />
                     </FormControl>
@@ -167,16 +204,15 @@ export const StudentForm = ({ onSuccess }: StudentFormProps) => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
-                  name="fullName"
+                  name="password"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Full Name</FormLabel>
+                      <FormLabel>Password</FormLabel>
                       <FormControl>
                         <Input
-                          placeholder="Auto-filled"
+                          type="password"
+                          placeholder="Create a password"
                           {...field}
-                          readOnly
-                          className="bg-muted"
                         />
                       </FormControl>
                       <FormMessage />
@@ -186,16 +222,15 @@ export const StudentForm = ({ onSuccess }: StudentFormProps) => {
 
                 <FormField
                   control={form.control}
-                  name="email"
+                  name="confirmPassword"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Email Address</FormLabel>
+                      <FormLabel>Confirm Password</FormLabel>
                       <FormControl>
                         <Input
-                          placeholder="Auto-filled"
+                          type="password"
+                          placeholder="Confirm your password"
                           {...field}
-                          readOnly
-                          className="bg-muted"
                         />
                       </FormControl>
                       <FormMessage />

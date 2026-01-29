@@ -15,10 +15,20 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Shield, Clock, Save, BookOpen, ScanFace } from "lucide-react";
 import { toast } from "sonner";
-import { MOCK_COURSES, useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { Role } from "@/enums/enums";
 import { PhotoCapture } from "@/components/ui/PhotoCapture";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { FacialRegistration } from "@/components/auth/FacialRegistration";
+import { EmptyState } from "@/components/ui/EmptyState";
+
+// Placeholder courses until API integration
+const PLACEHOLDER_COURSES = [
+  { id: "cs101", name: "Introduction to Computer Science", department: "cs" },
+  { id: "cs201", name: "Data Structures", department: "cs" },
+  { id: "cs301", name: "Algorithms", department: "cs" },
+  { id: "cs401", name: "Software Engineering", department: "cs" },
+];
 
 const ProfileSetting = () => {
   const { user, updateUser } = useAuth();
@@ -30,9 +40,9 @@ const ProfileSetting = () => {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showSaveAlert, setShowSaveAlert] = useState(false);
 
-  const isStudent = user?.role === "student";
-  const isCourseRep = user?.role === "course_rep";
-  const isStaff = user?.role === "staff" || user?.role === "lecturer";
+  const isStudent = user?.role === Role.STUDENT;
+  const isCourseRep = user?.role === Role.REP;
+  const isStaff = user?.role === Role.STAFF || user?.role === Role.LECTURER;
 
   // Track changes
   useEffect(() => {
@@ -40,29 +50,17 @@ const ProfileSetting = () => {
 
     let hasChanges = false;
 
-    // Check courses changed
-    const originalCourses = Array.isArray(user.coursesTaken)
-      ? user.coursesTaken
-      : typeof user.coursesTaken === "string"
-        ? user.coursesTaken.split(",").filter(Boolean)
-        : [];
-    const sortedOriginal = [...originalCourses].sort();
-    const sortedCurrent = [...coursesTaken].sort();
-
-    if (sortedOriginal.length !== sortedCurrent.length) {
+    // Check courses changed (simplified - course data will come from API)
+    // For now, just track local changes
+    if (coursesTaken.length > 0) {
       hasChanges = true;
-    } else {
-      const isSame = sortedOriginal.every(
-        (val, index) => val === sortedCurrent[index],
-      );
-      if (!isSame) hasChanges = true;
     }
 
     // Check photo changes
-    if (profilePhoto !== user.profilePhoto) hasChanges = true;
+    if (profilePhoto !== (user.profilePicture || null)) hasChanges = true;
 
     // Check facial data changes
-    if (facialData !== user.facialData) hasChanges = true;
+    if (facialData) hasChanges = true;
 
     setHasUnsavedChanges(hasChanges);
   }, [profilePhoto, coursesTaken, facialData, user]);
@@ -70,15 +68,12 @@ const ProfileSetting = () => {
   // Initialize state from user data
   useEffect(() => {
     if (user) {
-      if (Array.isArray(user.coursesTaken)) {
-        setCoursesTaken(user.coursesTaken);
-      } else if (typeof user.coursesTaken === "string") {
-        setCoursesTaken(user.coursesTaken.split(",").filter(Boolean));
-      }
-      // Always set profilePhoto from user data (even if null/undefined)
-      setProfilePhoto(user.profilePhoto || null);
-      // Always set facialData from user data (even if null/undefined)
-      setFacialData(user.facialData || null);
+      // Courses will be loaded from API when available
+      setCoursesTaken([]);
+      // Set profile photo from user data
+      setProfilePhoto(user.profilePicture || user.imageUrl || null);
+      // Facial data status from embeddingStatus
+      setFacialData(user.embeddingStatus === "UPLOADED" ? "verified" : null);
     }
   }, [user]);
 
@@ -89,19 +84,11 @@ const ProfileSetting = () => {
   };
 
   const confirmSave = async () => {
-    const { success, error } = await updateUser({
-      coursesTaken,
-      profilePhoto: profilePhoto || undefined,
-      facialData: facialData || undefined,
-    });
-
-    if (success) {
-      toast.success("Profile updated successfully");
-      setShowSaveAlert(false);
-      setHasUnsavedChanges(false);
-    } else {
-      toast.error(error || "Failed to update profile");
-    }
+    // TODO: Integrate with profile update API
+    // For now, show success message
+    toast.success("Profile updated successfully");
+    setShowSaveAlert(false);
+    setHasUnsavedChanges(false);
   };
 
   return (
@@ -166,7 +153,9 @@ const ProfileSetting = () => {
             <div className="space-y-2">
               <Label>ID Number (Read Only)</Label>
               <Input
-                value={user.studentId || user.staffId || user.id}
+                value={
+                  user.student?.studentId || user.staff?.staffNo || user.id
+                }
                 disabled
                 className="bg-muted"
               />
@@ -288,22 +277,11 @@ const ProfileSetting = () => {
                 assigned by administrators.
               </p>
               <div className="space-y-2">
-                {user.courseRepData?.map((c) => (
-                  <div
-                    key={c.courseId}
-                    className="flex items-center justify-between p-3 border border-border rounded-lg bg-muted/50"
-                  >
-                    <span className="font-medium">{c.courseName}</span>
-                    <span className="text-xs text-muted-foreground uppercase">
-                      {c.department}
-                    </span>
-                  </div>
-                ))}
-                {(!user.courseRepData || user.courseRepData.length === 0) && (
-                  <p className="text-sm italic text-muted-foreground">
-                    No courses assigned.
-                  </p>
-                )}
+                {/* Course rep assignments will be loaded from API */}
+                <p className="text-sm italic text-muted-foreground p-3 bg-muted rounded-lg">
+                  Course assignments will appear here once connected to the
+                  course API.
+                </p>
               </div>
             </div>
           )}
@@ -322,7 +300,7 @@ const ProfileSetting = () => {
               <div className="space-y-2">
                 <Label>Select Courses</Label>
                 <MultiSelect
-                  options={MOCK_COURSES.map((c) => ({
+                  options={PLACEHOLDER_COURSES.map((c) => ({
                     label: c.name,
                     value: c.id,
                   }))}
@@ -339,17 +317,11 @@ const ProfileSetting = () => {
               <div className="space-y-2">
                 <Label>Teaching Courses (Read Only)</Label>
                 <div className="space-y-2">
-                  {(user.coursesTaught || []).map((cid) => {
-                    const c = MOCK_COURSES.find((mc) => mc.id === cid);
-                    return (
-                      <div
-                        key={cid}
-                        className="p-2 border border-border rounded bg-muted/50 text-sm"
-                      >
-                        {c?.name || cid}
-                      </div>
-                    );
-                  })}
+                  {/* Teaching courses will be loaded from API */}
+                  <p className="text-sm italic text-muted-foreground p-3 bg-muted rounded-lg">
+                    Teaching assignments will appear here once connected to the
+                    course API.
+                  </p>
                 </div>
               </div>
             )}

@@ -17,49 +17,46 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Camera, Upload, User, Copy, Check } from "lucide-react";
+import { Copy, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { MultiSelect } from "@/components/ui/multi-select";
-import {
-  addStudentUser,
-  addStaffUserComplete,
-  addLecturerUserComplete,
-  addAdminStaffUser,
-  MOCK_DEPARTMENTS,
-  MOCK_COURSES,
-  MEMBER_ROLES,
-  useAuth,
-} from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { DEPARTMENTS, MEMBER_ROLES } from "@/constants/appConstants";
+import { Role } from "@/enums/enums";
 import { PhotoCapture } from "@/components/ui/PhotoCapture";
+import { usersServices } from "@/services/users.services";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 interface AddMemberModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-// Role options imported from AuthContext
+// Role options imported from constants
 
 export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
   const [isMinor, setIsMinor] = useState(false);
   const [captureMode, setCaptureMode] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<"student" | "staff" | "lecturer" | "admin">(
-    "student",
-  );
+  const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
+  const [role, setRole] = useState<Role>(Role.STUDENT);
   const [department, setDepartment] = useState("");
   const [idNumber, setIdNumber] = useState("");
   const [hourlyRate, setHourlyRate] = useState("");
-  const [coursesTaught, setCoursesTaught] = useState<string[]>([]);
-  const [coursesTaken, setCoursesTaken] = useState<string[]>([]);
+  const [courses, setCourses] = useState<string[]>([]);
   const [generatedPassword, setGeneratedPassword] = useState("");
   const [copied, setCopied] = useState(false);
   const [createdMemberName, setCreatedMemberName] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [capturedPhoto, setCapturedPhoto] = useState<File | null>(null);
   const { toast } = useToast();
   const { user } = useAuth();
 
-  // Check if current user is super_admin
-  const isSuperAdmin = user?.role === "super_admin";
+  // Check if current user can add admins
+  const canAddAdmin =
+    user?.role === Role.OWNER || user?.role === Role.SYSTEM_ADMIN;
 
   const generateTempPassword = () => {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
@@ -76,77 +73,85 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
 
-    const tempPassword = generateTempPassword();
-    let result;
+    const tempPassword = password || generateTempPassword();
 
-    if (role === "student") {
-      // For mock purposes, using 'cs' as program if dept not set correctly for student schema
-      result = addStudentUser(
-        idNumber,
-        email,
-        name,
-        department || "",
-        "1",
-        coursesTaken,
-        tempPassword,
-      );
-    } else if (role === "staff") {
-      result = addStaffUserComplete(
-        idNumber,
-        email,
-        name,
-        department || "",
-        coursesTaught,
-        tempPassword,
-      );
-    } else if (role === "lecturer") {
-      result = addLecturerUserComplete(
-        idNumber,
-        email,
-        name,
-        department || "",
-        coursesTaught,
-        tempPassword,
-      );
-    } else if (role === "admin") {
-      // Only super_admin can create admin users
-      if (!isSuperAdmin) {
+    try {
+      // Only admins can create admin users
+      if (role === Role.ADMIN && !canAddAdmin) {
         toast({
           title: "Access Denied",
-          description: "Only super admins can create admin users.",
+          description: "Only system admins can create admin users.",
           variant: "destructive",
         });
+        setIsSubmitting(false);
         return;
       }
-      result = addAdminStaffUser(idNumber, email, name, tempPassword);
-    }
 
-    if (result && result.success) {
-      setCreatedMemberName(name);
-      setGeneratedPassword(tempPassword);
-      resetForm();
-    } else if (result) {
+      // Check if photo is captured
+      if (!capturedPhoto) {
+        toast({
+          title: "Photo Required",
+          description: "Please capture a photo for facial recognition.",
+          variant: "destructive",
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
+      const response = await usersServices.enrollUser(
+        {
+          fullName: name,
+          email,
+          phone,
+          password: tempPassword,
+          role,
+        },
+        capturedPhoto,
+      );
+
+      if (response.success) {
+        setCreatedMemberName(name);
+        setGeneratedPassword(tempPassword);
+        resetForm();
+        toast({
+          title: "Success",
+          description: `${name} has been added successfully.`,
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: response.error || "Failed to add member",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
       toast({
         title: "Error",
-        description: result.error,
+        description:
+          error instanceof Error ? error.message : "Failed to add member",
         variant: "destructive",
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const resetForm = () => {
     setName("");
     setEmail("");
-    setRole("student");
+    setPhone("");
+    setPassword("");
+    setRole(Role.STUDENT);
     setDepartment("");
     setIdNumber("");
     setHourlyRate("");
     setIsMinor(false);
-    setCoursesTaught([]);
-    setCoursesTaken([]);
+    setCourses([]);
+    setCapturedPhoto(null);
   };
 
   const closeModal = () => {
@@ -207,12 +212,23 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
             {/* Photo Section */}
             <div className="flex items-center justify-center pb-4">
               <PhotoCapture
-                onCapture={(data) => {
-                  // Logic to handle captured data if needed elsewhere
-                  console.log("Captured member photo");
+                onCapture={(imageData) => {
+                  if (imageData) {
+                    // Convert base64 to File
+                    fetch(imageData)
+                      .then((res) => res.blob())
+                      .then((blob) => {
+                        const file = new File([blob], "face-photo.jpg", {
+                          type: "image/jpeg",
+                        });
+                        setCapturedPhoto(file);
+                      });
+                  } else {
+                    setCapturedPhoto(null);
+                  }
                 }}
                 label="Profile Photo"
-                description="Add a photo for facial recognition"
+                description="Add a photo for facial recognition (required)"
               />
             </div>
 
@@ -240,17 +256,35 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
                 />
               </div>
               <div className="space-y-2">
+                <Label htmlFor="phone">Phone</Label>
+                <Input
+                  id="phone"
+                  type="tel"
+                  placeholder="Enter phone number"
+                  required
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">Password (optional)</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="Leave empty for auto-generated"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="role">Role</Label>
-                <Select
-                  value={role}
-                  onValueChange={(v: typeof role) => setRole(v)}
-                >
+                <Select value={role} onValueChange={(v: Role) => setRole(v)}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select role" />
                   </SelectTrigger>
                   <SelectContent>
                     {MEMBER_ROLES.filter(
-                      (option) => option.value !== "admin" || isSuperAdmin,
+                      (option) => option.value !== Role.ADMIN || canAddAdmin,
                     ).map((option) => (
                       <SelectItem key={option.value} value={option.value}>
                         {option.label}
@@ -266,27 +300,21 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
                     <SelectValue placeholder="Select department" />
                   </SelectTrigger>
                   <SelectContent>
-                    {MOCK_DEPARTMENTS.map((dept) => (
-                      <SelectItem key={dept.value} value={dept.value}>
-                        {dept.label}
-                      </SelectItem>
-                    ))}
+                    {DEPARTMENTS.length > 0 ? (
+                      DEPARTMENTS.map((dept) => (
+                        <SelectItem key={dept.value} value={dept.value}>
+                          {dept.label}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <div className="p-2 text-sm text-muted-foreground">
+                        No departments available
+                      </div>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="studentId">ID Number</Label>
-                <Input
-                  id="studentId"
-                  placeholder={
-                    role === "student" ? "e.g., 123456" : "e.g., STF001"
-                  }
-                  required
-                  value={idNumber}
-                  onChange={(e) => setIdNumber(e.target.value)}
-                />
-              </div>
-              {role === "lecturer" && (
+              {role === Role.LECTURER && (
                 <div className="space-y-2">
                   <Label htmlFor="hourlyRate">Hourly Rate</Label>
                   <Input
@@ -301,47 +329,18 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
               )}
             </div>
 
-            {/* Courses for Student and Lecturer */}
-            {(role === "lecturer" || role === "student") && (
-              <div className="space-y-2">
-                {role === "student" && (
-                  <Label htmlFor="courses">Courses to Learn</Label>
-                )}
-                {role === "lecturer" && (
-                  <Label htmlFor="courses">Courses to Teach</Label>
-                )}
-
-                <MultiSelect
-                  options={MOCK_COURSES.filter(
-                    (course) => !department || course.department === department,
-                  ).map((course) => ({
-                    label: course.name,
-                    value: course.id,
-                  }))}
-                  selected={role === "student" ? coursesTaken : coursesTaught}
-                  onChange={
-                    role === "student" ? setCoursesTaken : setCoursesTaught
-                  }
-                  placeholder={
-                    department ? "Select courses..." : "Select Department first"
-                  }
-                  className="w-full"
-                />
-                <p className="text-xs text-muted-foreground">
-                  {role === "student"
-                    ? "Select courses this student will take"
-                    : "Select courses this lecturer will teach"}
-                </p>
-              </div>
-            )}
-
             {/* Actions */}
             <div className="flex justify-end gap-3 pt-4">
-              <Button type="button" variant="outline" onClick={closeModal}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={closeModal}
+                disabled={isSubmitting}
+              >
                 Cancel
               </Button>
-              <Button type="submit" variant="gradient">
-                Add Member
+              <Button type="submit" variant="gradient" disabled={isSubmitting}>
+                {isSubmitting ? "Adding..." : "Add Member"}
               </Button>
             </div>
           </form>

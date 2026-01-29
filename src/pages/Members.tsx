@@ -22,17 +22,12 @@ import { ViewAttendanceModal } from "@/components/members/ViewAttendanceModal";
 import { EditMemberModal } from "@/components/members/EditMemberModal";
 import { DeleteMemberDialog } from "@/components/members/DeleteMemberDialog";
 import { Member } from "@/types/attendance";
-import {
-  useAuth,
-  getAllUsers,
-  deleteStudentUser,
-  deleteStaffUser,
-  deleteAdminStaffUser,
-  removeCourseRep,
-  MOCK_DEPARTMENTS,
-  MOCK_COURSES,
-  ROLE_FILTER_OPTIONS,
-} from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { usersServices } from "@/services/users.services";
+import { ROLE_FILTER_OPTIONS } from "@/constants/appConstants";
+import { Role } from "@/enums/enums";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { IUserPublic } from "@/interface/user.interface";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,8 +40,16 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 
+// Placeholder courses until API integration
+const PLACEHOLDER_COURSES = [
+  { id: "cs101", name: "Introduction to Computer Science", department: "cs" },
+  { id: "cs201", name: "Data Structures", department: "cs" },
+  { id: "cs301", name: "Algorithms", department: "cs" },
+];
+
 const Members = () => {
   const [members, setMembers] = useState<Member[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
   const [courseFilter, setCourseFilter] = useState<string>("all");
@@ -64,93 +67,74 @@ const Members = () => {
   const { user } = useAuth();
   const { toast } = useToast();
 
+  const loadMembers = async () => {
+    setLoading(true);
+    try {
+      const response = await usersServices.getAllUsers();
+      if (response.success && response.data?.users) {
+        const users = response.data.users;
+        // Map IUserPublic to Member
+        const mappedMembers: Member[] = users
+          .filter((u: IUserPublic) => {
+            // Filter members based on logged-in user role
+            if (!user) return false;
+
+            // Lecturers only see students in their courses (simplified - show all students for now)
+            if (user.role === Role.LECTURER) {
+              return u.role === Role.STUDENT || u.role === Role.REP;
+            }
+
+            // Students/Reps see other students in their courses (simplified - show students)
+            if (user.role === Role.REP || user.role === Role.STUDENT) {
+              return u.role === Role.STUDENT || u.role === Role.REP;
+            }
+
+            // Admin/SystemAdmin/Staff/Owner see all
+            return true;
+          })
+          .map((u: IUserPublic): Member => {
+            // Map Role enum to Member role type
+            const roleMap: Record<string, Member["role"]> = {
+              [Role.STUDENT]: "student",
+              [Role.REP]: "course_rep",
+              [Role.LECTURER]: "lecturer",
+              [Role.STAFF]: "staff",
+              [Role.ADMIN]: "admin",
+              [Role.SYSTEM_ADMIN]: "super_admin",
+              [Role.OWNER]: "super_admin",
+            };
+
+            return {
+              id: u.id,
+              name: u.name,
+              email: u.email,
+              role: roleMap[u.role] || "student",
+              department: undefined, // Department not available in current interfaces
+              studentId: u.student?.studentId || u.staff?.staffNo,
+              photoUrl: u.profilePicture || u.imageUrl || undefined,
+              isMinor: false,
+              createdAt: new Date(u.createdAt),
+              status: u.isActive ? "active" : "inactive",
+            };
+          });
+        setMembers(mappedMembers);
+      } else {
+        // Gracefully handle empty state
+        setMembers([]);
+      }
+    } catch (error) {
+      console.error("Failed to load members:", error);
+      setMembers([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load members on mount and when modals close
   useEffect(() => {
     loadMembers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addModalOpen, deleteDialogOpen, editModalOpen]);
-
-  const loadMembers = () => {
-    const users = getAllUsers();
-    // Map User to Member
-    const mappedMembers: Member[] = users
-      .filter((u) => {
-        // Filter members based on logged-in user role
-        if (!user) return false;
-
-        if (user.role === "lecturer") {
-          // Lecturer can only see students registered to their courses
-          // And fellow staff? "members-limited to only student registered to his or her courses"
-          // So we exclude admin/staff/lecturer from the list? Requirement says "only student".
-          if (u.role !== "student" && u.role !== "course_rep") return false;
-
-          // Check if student takes any of the lecturer's courses
-          const studentCourses = Array.isArray(u.coursesTaken)
-            ? u.coursesTaken
-            : typeof u.coursesTaken === "string"
-              ? u.coursesTaken.split(",").map((c) => c.trim())
-              : [];
-
-          const lecturerCourses = user.coursesTaught || [];
-          return studentCourses.some((c) => lecturerCourses.includes(c));
-        }
-
-        if (user.role === "course_rep" || user.role === "student") {
-          // Students/Reps see peers in their relevant courses
-          if (u.role !== "student" && u.role !== "course_rep") return false;
-
-          // For Course Reps: Courses they rep. For Students: Courses they take.
-          let relevantCourseIds: string[] = [];
-
-          if (user.role === "course_rep") {
-            relevantCourseIds =
-              user.courseRepData?.map((c) => c.courseId) || [];
-          } else {
-            relevantCourseIds = Array.isArray(user.coursesTaken)
-              ? user.coursesTaken
-              : typeof user.coursesTaken === "string"
-                ? user.coursesTaken.split(",").map((c) => c.trim())
-                : [];
-          }
-
-          const studentCourses = Array.isArray(u.coursesTaken)
-            ? u.coursesTaken
-            : typeof u.coursesTaken === "string"
-              ? u.coursesTaken.split(",").map((c) => c.trim())
-              : [];
-          return studentCourses.some((c) => relevantCourseIds.includes(c));
-        }
-
-        return true; // Admin/SuperAdmin/Staff see all (Staff visibility unclear but leaving as all for now per typical extensive access)
-      })
-      .map((u) => {
-        // Determine status: only students with registered courses are active
-        let status: "active" | "inactive" = "inactive";
-        if (u.role === "student") {
-          const courses = Array.isArray(u.coursesTaken)
-            ? u.coursesTaken
-            : typeof u.coursesTaken === "string"
-              ? u.coursesTaken
-                  .split(",")
-                  .map((c) => c.trim())
-                  .filter(Boolean)
-              : [];
-          status = courses.length > 0 ? "active" : "inactive";
-        }
-
-        return {
-          id: u.id,
-          name: u.name,
-          email: u.email,
-          role: u.role,
-          department: u.department,
-          studentId: u.studentId || u.staffId, // Map both to generic ID field if needed or keep separate
-          photoUrl: undefined, // Mock users don't have photoUrl yet
-          isMinor: false, // Default
-          createdAt: new Date(), // Mock date
-          status,
-        };
-      });
-    setMembers(mappedMembers);
-  };
 
   const handleViewAttendance = (member: Member) => {
     setSelectedMember(member);
@@ -181,42 +165,41 @@ const Members = () => {
     setDeleteEntirelyConfirmOpen(true);
   };
 
-  const confirmRemovePrivilege = () => {
+  const confirmRemovePrivilege = async () => {
     if (!selectedMember) return;
 
-    const success = removeCourseRep(selectedMember.id);
-
-    if (success) {
-      toast({
-        title: "Privilege Removed",
-        description: `${selectedMember.name} has been returned to student status. All data is safe.`,
-      });
-      loadMembers();
-      setRemovePrivilegeConfirmOpen(false);
-      setSelectedMember(null);
-    } else {
-      toast({
-        title: "Error",
-        description: "Could not remove course rep privilege.",
-        variant: "destructive",
-      });
-    }
+    // TODO: Implement remove course rep privilege via API
+    // For now, show a placeholder message
+    toast({
+      title: "Feature Coming Soon",
+      description:
+        "Course rep privilege removal will be available once the API is integrated.",
+    });
+    setRemovePrivilegeConfirmOpen(false);
+    setSelectedMember(null);
   };
 
-  const confirmDeleteEntirely = () => {
+  const confirmDeleteEntirely = async () => {
     if (!selectedMember) return;
 
-    const success = deleteStudentUser(selectedMember.id);
-
-    if (success) {
-      toast({
-        title: "Student Deleted",
-        description: `${selectedMember.name} has been permanently removed from the system.`,
-      });
-      loadMembers();
-      setDeleteEntirelyConfirmOpen(false);
-      setSelectedMember(null);
-    } else {
+    try {
+      const response = await usersServices.removeUser(selectedMember.email);
+      if (response.success) {
+        toast({
+          title: "Student Deleted",
+          description: `${selectedMember.name} has been permanently removed from the system.`,
+        });
+        loadMembers();
+        setDeleteEntirelyConfirmOpen(false);
+        setSelectedMember(null);
+      } else {
+        toast({
+          title: "Error",
+          description: response.error || "Could not delete student.",
+          variant: "destructive",
+        });
+      }
+    } catch {
       toast({
         title: "Error",
         description: "Could not delete student.",
@@ -225,34 +208,27 @@ const Members = () => {
     }
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!selectedMember) return;
 
-    let success = false;
-    if (
-      selectedMember.role === "student" ||
-      selectedMember.role === "course_rep"
-    ) {
-      success = deleteStudentUser(selectedMember.id);
-    } else if (
-      selectedMember.role === "staff" ||
-      selectedMember.role === "lecturer"
-    ) {
-      success = deleteStaffUser(selectedMember.id);
-    } else if (selectedMember.role === "admin") {
-      // If viewing admin staff (e.g. by super admin), allow delete
-      success = deleteAdminStaffUser(selectedMember.id);
-    }
-
-    if (success) {
-      toast({
-        title: "Member removed",
-        description: `${selectedMember.name} has been removed.`,
-      });
-      loadMembers();
-      setDeleteDialogOpen(false);
-      setSelectedMember(null);
-    } else {
+    try {
+      const response = await usersServices.removeUser(selectedMember.email);
+      if (response.success) {
+        toast({
+          title: "Member removed",
+          description: `${selectedMember.name} has been removed.`,
+        });
+        loadMembers();
+        setDeleteDialogOpen(false);
+        setSelectedMember(null);
+      } else {
+        toast({
+          title: "Error",
+          description: response.error || "Could not remove member.",
+          variant: "destructive",
+        });
+      }
+    } catch {
       toast({
         title: "Error",
         description: "Could not remove member.",
@@ -261,19 +237,37 @@ const Members = () => {
     }
   };
 
-  // Super admin and admin staff can add members
-  const canAddMembers = user?.role === "super_admin" || user?.role === "admin";
-  const isLecturer = user?.role === "lecturer";
+  // Permission checks using Role enum
+  const canAddMembers =
+    user?.role === Role.SYSTEM_ADMIN ||
+    user?.role === Role.OWNER ||
+    user?.role === Role.ADMIN;
+  const isLecturer = user?.role === Role.LECTURER;
 
   // Filter role options for lecturers - only show students and course reps
   const roleFilterOptions = isLecturer
     ? ROLE_FILTER_OPTIONS.filter(
         (option) =>
           option.value === "all" ||
-          option.value === "student" ||
-          option.value === "course_rep",
+          option.value === Role.STUDENT ||
+          option.value === Role.REP,
       )
     : ROLE_FILTER_OPTIONS;
+
+  // Map Role enum values to lowercase for comparison with Member.role
+  const getRoleFilterValue = (filterValue: string): string[] => {
+    if (filterValue === "all") return [];
+    const roleMap: Record<string, string[]> = {
+      [Role.STUDENT]: ["student", "course_rep"],
+      [Role.REP]: ["course_rep"],
+      [Role.LECTURER]: ["lecturer"],
+      [Role.STAFF]: ["staff"],
+      [Role.ADMIN]: ["admin"],
+      [Role.SYSTEM_ADMIN]: ["super_admin"],
+      [Role.OWNER]: ["super_admin"],
+    };
+    return roleMap[filterValue] || [filterValue];
+  };
 
   const filteredMembers = members.filter((member) => {
     const matchesSearch =
@@ -282,35 +276,13 @@ const Members = () => {
       (member.studentId &&
         member.studentId.toLowerCase().includes(searchQuery.toLowerCase()));
 
-    // Match role filter: "student" includes both plain students and course reps.
+    // Match role filter
+    const roleValues = getRoleFilterValue(roleFilter);
     const matchesRole =
-      roleFilter === "all" ||
-      (roleFilter === "student"
-        ? member.role === "student" || member.role === "course_rep"
-        : member.role === roleFilter);
+      roleFilter === "all" || roleValues.includes(member.role);
 
-    // Match course filter - check if member has this course
-    const matchesCourse =
-      courseFilter === "all" ||
-      (() => {
-        const users = getAllUsers();
-        const fullUser = users.find((u) => u.id === member.id);
-        if (!fullUser) return false;
-
-        // Check coursesTaught for staff/lecturer
-        if (fullUser.coursesTaught) {
-          return fullUser.coursesTaught.includes(courseFilter);
-        }
-        // Check coursesTaken for students
-        if (fullUser.coursesTaken) {
-          const courses =
-            typeof fullUser.coursesTaken === "string"
-              ? fullUser.coursesTaken.split(",")
-              : fullUser.coursesTaken;
-          return courses.includes(courseFilter);
-        }
-        return false;
-      })();
+    // Match course filter (simplified - courses API not yet integrated)
+    const matchesCourse = courseFilter === "all";
 
     return matchesSearch && matchesRole && matchesCourse;
   });
@@ -388,7 +360,7 @@ const Members = () => {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Courses</SelectItem>
-              {MOCK_COURSES.map((course) => (
+              {PLACEHOLDER_COURSES.map((course) => (
                 <SelectItem key={course.id} value={course.id}>
                   {course.name}
                 </SelectItem>
@@ -403,31 +375,51 @@ const Members = () => {
         </div>
       </div>
 
+      {/* Loading State */}
+      {loading && (
+        <div className="text-center py-12">
+          <p className="text-muted-foreground">Loading members...</p>
+        </div>
+      )}
+
       {/* Members Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
-        {filteredMembers.map((member) => (
-          <MemberCard
-            key={member.id}
-            member={member}
-            onEdit={isLecturer ? undefined : handleEditMember}
-            onDelete={isLecturer ? undefined : handleDeleteMember}
-            onViewAttendance={handleViewAttendance}
-          />
-        ))}
-      </div>
+      {!loading && filteredMembers.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+          {filteredMembers.map((member) => (
+            <MemberCard
+              key={member.id}
+              member={member}
+              onEdit={isLecturer ? undefined : handleEditMember}
+              onDelete={isLecturer ? undefined : handleDeleteMember}
+              onViewAttendance={handleViewAttendance}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Empty State */}
-      {filteredMembers.length === 0 && (
-        <div className="text-center py-12">
-          <p className="text-muted-foreground">
-            No members found matching your criteria.
-          </p>
-          {(searchQuery || roleFilter !== "all" || courseFilter !== "all") && (
-            <p className="text-sm text-muted-foreground mt-2">
-              Try adjusting your filters or search terms.
-            </p>
-          )}
-        </div>
+      {!loading && filteredMembers.length === 0 && (
+        <EmptyState
+          type={searchQuery || roleFilter !== "all" ? "search" : "members"}
+          title={
+            searchQuery || roleFilter !== "all"
+              ? "No results found"
+              : "No members yet"
+          }
+          message={
+            searchQuery || roleFilter !== "all"
+              ? "Try adjusting your filters or search terms."
+              : "Add your first member to get started."
+          }
+          action={
+            canAddMembers && !searchQuery && roleFilter === "all" ? (
+              <Button variant="gradient" onClick={() => setAddModalOpen(true)}>
+                <Plus className="w-4 h-4 mr-2" />
+                Add Member
+              </Button>
+            ) : undefined
+          }
+        />
       )}
 
       {/* Modals */}

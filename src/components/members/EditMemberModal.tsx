@@ -5,13 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import {
-  ROLE_FILTER_OPTIONS,
-  MOCK_DEPARTMENTS,
-  MOCK_COURSES,
-  getAllUsers,
-  updateUser,
-} from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { usersServices } from "@/services/users.services";
 import { MultiSelect } from "@/components/ui/multi-select";
 import {
   Dialog,
@@ -73,21 +68,6 @@ export const EditMemberModal = ({
 
   useEffect(() => {
     if (member) {
-      // Get full user data to access courses
-      const users = getAllUsers();
-      const fullUser = users.find((u) => u.id === member.id);
-
-      // Parse coursesTaken
-      let coursesTaken: string[] = [];
-      if (fullUser?.coursesTaken) {
-        coursesTaken = Array.isArray(fullUser.coursesTaken)
-          ? fullUser.coursesTaken
-          : fullUser.coursesTaken
-              .split(",")
-              .map((c) => c.trim())
-              .filter(Boolean);
-      }
-
       setFormData({
         name: member.name,
         email: member.email,
@@ -99,70 +79,53 @@ export const EditMemberModal = ({
         parentName: member.parentContact?.name || "",
         parentEmail: member.parentContact?.email || "",
         parentPhone: member.parentContact?.phone || "",
-        coursesTaken: coursesTaken,
-        coursesTaught: fullUser?.coursesTaught || [],
-        courseRepCourses: fullUser?.courseRepData?.map((c) => c.courseId) || [],
+        coursesTaken: [],
+        coursesTaught: [],
+        courseRepCourses: [],
       });
     }
   }, [member]);
 
   if (!member) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const updateResult = updateUser(member.id, {
-      name: formData.name,
-      email: formData.email,
-      role: formData.role,
-      department: formData.department,
-      studentId: formData.studentId || undefined,
-      coursesTaken:
-        formData.role === "student" ? formData.coursesTaken : undefined,
-      coursesTaught:
-        formData.role === "lecturer" || formData.role === "staff"
-          ? formData.coursesTaught
-          : undefined,
+    try {
+      const response = await usersServices.updateUserDetails({
+        fullName: formData.name,
+        email: formData.email,
+      });
 
-      courseRepData:
-        formData.role === "course_rep"
-          ? formData.courseRepCourses.map((id) => {
-              const course = MOCK_COURSES.find((c) => c.id === id);
-              return {
-                courseId: id,
-                courseName: course?.name || "",
-                department: course?.department || "",
-              };
-            })
-          : undefined,
-    });
+      if (!response.success) {
+        toast.error(response.error || "Could not update member");
+        return;
+      }
 
-    if (!updateResult.success) {
-      toast.error(updateResult.error || "Could not update member");
-      return;
+      const updatedMember: Member = {
+        ...member,
+        name: formData.name,
+        email: formData.email,
+        role: formData.role,
+        department: formData.department,
+        studentId: formData.studentId || undefined,
+        isMinor: formData.isMinor,
+        status: formData.status,
+        parentContact: formData.isMinor
+          ? {
+              name: formData.parentName,
+              email: formData.parentEmail,
+              phone: formData.parentPhone,
+            }
+          : undefined,
+      };
+
+      onSave?.(updatedMember);
+      toast.success("Member updated successfully");
+      onOpenChange(false);
+    } catch (error) {
+      toast.error("Failed to update member");
     }
-
-    const updatedMember: Member = {
-      ...member,
-      name: formData.name,
-      email: formData.email,
-      role: formData.role,
-      department: formData.department,
-      studentId: formData.studentId || undefined,
-      isMinor: formData.isMinor,
-      status: formData.status,
-      parentContact: formData.isMinor
-        ? {
-            name: formData.parentName,
-            email: formData.parentEmail,
-            phone: formData.parentPhone,
-          }
-        : undefined,
-    };
-
-    onSave?.(updatedMember);
-    toast.success("Member updated successfully");
-    onOpenChange(false);
   };
 
   return (
@@ -239,29 +202,20 @@ export const EditMemberModal = ({
                   <SelectValue placeholder="Select role" />
                 </SelectTrigger>
                 <SelectContent>
-                  {member.role === "student" || member.role === "course_rep"
-                    ? // Student can only be student or course_rep
-                      ROLE_FILTER_OPTIONS.filter(
-                        (opt) =>
-                          opt.value === "student" || opt.value === "course_rep",
-                      ).map((option) => (
-                        <SelectItem key={option.label} value={option.value}>
-                          {option.value.charAt(0).toUpperCase() +
-                            option.value.slice(1)}
-                        </SelectItem>
-                      ))
-                    : // Other roles can access all roles except student/course_rep
-                      ROLE_FILTER_OPTIONS.filter(
-                        (opt) =>
-                          opt.value !== "all" &&
-                          opt.value !== "student" &&
-                          opt.value !== "course_rep",
-                      ).map((option) => (
-                        <SelectItem key={option.label} value={option.value}>
-                          {option.value.charAt(0).toUpperCase() +
-                            option.value.slice(1)}
-                        </SelectItem>
-                      ))}
+                  {member.role === "student" || member.role === "course_rep" ? (
+                    // Student can only be student or course_rep
+                    <>
+                      <SelectItem value="student">Student</SelectItem>
+                      <SelectItem value="course_rep">Course Rep</SelectItem>
+                    </>
+                  ) : (
+                    // Other roles can access all roles except student/course_rep
+                    <>
+                      <SelectItem value="staff">Staff</SelectItem>
+                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="lecturer">Lecturer</SelectItem>
+                    </>
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -298,7 +252,7 @@ export const EditMemberModal = ({
             </div>
           </div>
 
-          {/* Courses for Student and Lecturer */}
+          {/* Courses for Student and Lecturer - TODO: Fetch from API */}
           {(formData.role === "lecturer" || formData.role === "student") && (
             <div className="space-y-2">
               {formData.role === "student" && (
@@ -308,58 +262,20 @@ export const EditMemberModal = ({
                 <Label htmlFor="courses">Courses Teaching</Label>
               )}
 
-              <MultiSelect
-                options={MOCK_COURSES.filter(
-                  (course) =>
-                    !formData.department ||
-                    course.department === formData.department,
-                ).map((course) => ({
-                  label: course.name,
-                  value: course.id,
-                }))}
-                selected={
-                  formData.role === "student"
-                    ? formData.coursesTaken
-                    : formData.coursesTaught
-                }
-                onChange={(selected) =>
-                  formData.role === "student"
-                    ? setFormData({ ...formData, coursesTaken: selected })
-                    : setFormData({ ...formData, coursesTaught: selected })
-                }
-                placeholder={
-                  formData.department
-                    ? "Select courses..."
-                    : "Select Department first"
-                }
-                className="w-full"
-              />
-              <p className="text-xs text-muted-foreground">
-                {formData.role === "student"
-                  ? "Courses this student is registered for"
-                  : "Courses this lecturer teaches"}
+              <p className="text-xs text-muted-foreground p-3 bg-muted rounded-md">
+                Course management will be available once connected to the course
+                API.
               </p>
             </div>
           )}
-          
-          {/* Courses for Course Rep */}
+
+          {/* Courses for Course Rep - TODO: Fetch from API */}
           {formData.role === "course_rep" && (
             <div className="space-y-2">
               <Label htmlFor="courseRepCourses">Courses Assigned as Rep</Label>
-              <MultiSelect
-                options={MOCK_COURSES.map((course) => ({
-                    label: course.name,
-                    value: course.id,
-                }))}
-                selected={formData.courseRepCourses}
-                onChange={(selected) =>
-                  setFormData({ ...formData, courseRepCourses: selected })
-                }
-                placeholder="Select courses..."
-                className="w-full"
-              />
-              <p className="text-xs text-muted-foreground">
-                Select the courses this student represents.
+              <p className="text-xs text-muted-foreground p-3 bg-muted rounded-md">
+                Course rep assignment will be available once connected to the
+                course API.
               </p>
             </div>
           )}
@@ -378,7 +294,7 @@ export const EditMemberModal = ({
           </DialogFooter>
         </form>
       </DialogContent>
-      
+
       <AlertDialog open={roleAlertOpen} onOpenChange={setRoleAlertOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -394,7 +310,9 @@ export const EditMemberModal = ({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setPendingRole(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel onClick={() => setPendingRole(null)}>
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => {

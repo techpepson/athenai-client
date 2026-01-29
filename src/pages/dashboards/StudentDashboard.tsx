@@ -1,14 +1,14 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   GraduationCap,
   BookOpen,
   CalendarClock,
-  TrendingUp,
-  CheckCircle,
-  Clock,
-  Users,
   CheckCircle2,
+  Clock,
   UserX,
+  BookX,
+  Calendar,
+  Loader2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { StatCard } from "@/components/dashboard/StatCard";
@@ -23,42 +23,38 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAuth } from "@/contexts/AuthContext";
+import { Role } from "@/enums/enums";
+import { coursesService, Course } from "@/services/courses.services";
 import { mockSessions, mockEarlyArrivals } from "@/data/mockData";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-
-interface Course {
-  id: string;
-  name: string;
-  department: string;
-}
 
 const StudentDashboard = () => {
   const { user } = useAuth();
   const [selectedCourse, setSelectedCourse] = useState<string>("all");
+  const [studentCourses, setStudentCourses] = useState<Course[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Mock courses - replace with actual API data
-  const studentCourses: Course[] = [
-    {
-      id: "COURSE001",
-      name: "Introduction to Computer Science",
-      department: "CSC",
-    },
-    {
-      id: "COURSE002",
-      name: "Data Structures and Algorithms",
-      department: "CSC",
-    },
-    {
-      id: "COURSE003",
-      name: "Web Development Fundamentals",
-      department: "CSC",
-    },
-    {
-      id: "COURSE004",
-      name: "Database Systems",
-      department: "CSC",
-    },
-  ];
+  // Check if user is a course rep based on role
+  const isCourseRep = user?.role === Role.REP;
+
+  // Load student's enrolled courses
+  useEffect(() => {
+    const loadCourses = async () => {
+      setLoading(true);
+      try {
+        const response = await coursesService.getStudentCourses();
+        if (response.success && response.data?.data) {
+          setStudentCourses(response.data.data);
+        } else {
+          setStudentCourses([]);
+        }
+      } catch {
+        setStudentCourses([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadCourses();
+  }, []);
 
   // Filter sessions based on course selection
   const filteredSessions = useMemo(() => {
@@ -90,15 +86,26 @@ const StudentDashboard = () => {
     });
 
     return stats;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [studentCourses]);
 
-  const firstName = user?.name.split(" ")[0] || "User";
+  const firstName = user?.name?.split(" ")[0] || "User";
   const welcomeMessage = `Welcome back ${firstName}!, here's your attendance overview`;
 
   const activeSessions = mockSessions.filter(
     (s) => s.status === "active" || s.status === "scheduled",
   );
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">Loading your dashboard...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 sm:space-y-6 animate-fade-in">
@@ -108,7 +115,7 @@ const StudentDashboard = () => {
           <h1 className="text-xl sm:text-2xl font-bold text-foreground">
             Dashboard
           </h1>
-          {user?.isCourseRep && (
+          {isCourseRep && (
             <Badge variant="secondary" className="gap-1 w-fit">
               <GraduationCap className="w-3 h-3" />
               Course Representative
@@ -131,7 +138,7 @@ const StudentDashboard = () => {
             <SelectItem value="all">All Courses</SelectItem>
             {studentCourses.map((course) => (
               <SelectItem key={course.id} value={course.id}>
-                {course.name} ({course.department})
+                {course.title} ({course.code})
               </SelectItem>
             ))}
           </SelectContent>
@@ -216,22 +223,34 @@ const StudentDashboard = () => {
             <BookOpen className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
           </div>
           <div className="space-y-2 sm:space-y-3 max-h-[280px] sm:max-h-[360px] overflow-y-auto scrollbar-hide">
-            {studentCourses.map((course) => (
-              <div
-                key={course.id}
-                className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
-              >
-                <div>
-                  <p className="text-sm font-medium">{course.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {course.department}
-                  </p>
-                </div>
-                <Badge variant="outline">
-                  {courseStats[course.id]?.count || 0} sessions
-                </Badge>
+            {studentCourses.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <BookX className="w-10 h-10 text-muted-foreground mb-3" />
+                <p className="text-sm font-medium text-muted-foreground">
+                  No courses enrolled
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  You haven't enrolled in any courses yet
+                </p>
               </div>
-            ))}
+            ) : (
+              studentCourses.map((course) => (
+                <div
+                  key={course.id}
+                  className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
+                >
+                  <div>
+                    <p className="text-sm font-medium">{course.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {course.code}
+                    </p>
+                  </div>
+                  <Badge variant="outline">
+                    {courseStats[course.id]?.count || 0} sessions
+                  </Badge>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>
@@ -251,11 +270,23 @@ const StudentDashboard = () => {
             </p>
           </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
-          {activeSessions.map((session) => (
-            <ActiveSessionCard key={session.id} session={session} />
-          ))}
-        </div>
+        {activeSessions.length === 0 ? (
+          <div className="bg-card rounded-lg sm:rounded-xl border border-border p-8 text-center">
+            <Calendar className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-foreground mb-2">
+              No active sessions
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              There are no sessions currently running or scheduled
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+            {activeSessions.map((session) => (
+              <ActiveSessionCard key={session.id} session={session} />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

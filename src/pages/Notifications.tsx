@@ -19,12 +19,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { Role } from "@/enums/enums";
 import {
-  useAuth,
-  getPermissionRequests,
-  respondToPermissionRequest,
+  notificationsService,
   PermissionRequest,
-} from "@/contexts/AuthContext";
+} from "@/services/notifications.services";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 const Notifications = () => {
   const { user } = useAuth();
@@ -34,8 +35,10 @@ const Notifications = () => {
   const [permissionRequests, setPermissionRequests] = useState<
     PermissionRequest[]
   >([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
 
-  const isSuperAdmin = user?.role === "super_admin";
+  const isSuperAdmin =
+    user?.role === Role.SYSTEM_ADMIN || user?.role === Role.OWNER;
 
   useEffect(() => {
     if (isSuperAdmin) {
@@ -43,16 +46,37 @@ const Notifications = () => {
     }
   }, [isSuperAdmin]);
 
-  const loadPermissionRequests = () => {
-    setPermissionRequests(getPermissionRequests("pending"));
+  const loadPermissionRequests = async () => {
+    setLoadingRequests(true);
+    try {
+      const response =
+        await notificationsService.getPermissionRequests("pending");
+      if (response.success && response.data) {
+        setPermissionRequests(response.data.requests || []);
+      } else {
+        // Gracefully handle empty/error state
+        setPermissionRequests([]);
+      }
+    } catch {
+      setPermissionRequests([]);
+    } finally {
+      setLoadingRequests(false);
+    }
   };
 
-  const handleRespondToRequest = (requestId: string, approved: boolean) => {
+  const handleRespondToRequest = async (
+    requestId: string,
+    approved: boolean,
+  ) => {
     if (!user) return;
 
-    const result = respondToPermissionRequest(requestId, approved, user.id);
+    const response = await notificationsService.respondToPermissionRequest(
+      requestId,
+      approved,
+      user.id,
+    );
 
-    if (result.success) {
+    if (response.success) {
       loadPermissionRequests();
       toast({
         title: approved ? "Request Approved" : "Request Denied",
@@ -63,7 +87,7 @@ const Notifications = () => {
     } else {
       toast({
         title: "Error",
-        description: result.error,
+        description: response.error || "Failed to respond to request",
         variant: "destructive",
       });
     }
@@ -277,12 +301,7 @@ const Notifications = () => {
             })}
 
             {filteredAlerts.length === 0 && (
-              <div className="text-center py-12 bg-card rounded-xl border border-border">
-                <Bell className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                <p className="text-muted-foreground">
-                  No notifications to show
-                </p>
-              </div>
+              <EmptyState type="notifications" title="No notifications" />
             )}
           </div>
         </TabsContent>
