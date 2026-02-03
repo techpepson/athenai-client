@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -22,6 +22,7 @@ import { useToast } from "@/hooks/use-toast";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { useAuth } from "@/contexts/AuthContext";
 import { DEPARTMENTS, MEMBER_ROLES } from "@/constants/appConstants";
+import { coursesService } from "@/services/courses.services";
 import { Role } from "@/enums/enums";
 import { PhotoCapture } from "@/components/ui/PhotoCapture";
 import { usersServices } from "@/services/users.services";
@@ -35,22 +36,27 @@ interface AddMemberModalProps {
 // Role options imported from constants
 
 export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
+  const [staffId, setStaffId] = useState("");
+  const [lecturerCreditHours, setLecturerCreditHours] = useState("");
+  const [allCourses, setAllCourses] = useState<
+    { label: string; value: string }[]
+  >([]);
+  const [isCoursesLoading, setIsCoursesLoading] = useState(false);
   const [isMinor, setIsMinor] = useState(false);
   const [captureMode, setCaptureMode] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<Role>(Role.STUDENT);
-  const [department, setDepartment] = useState("");
-  const [idNumber, setIdNumber] = useState("");
+  const [role, setRole] = useState<Role>(Role.LECTURER);
+  const [idNumber, setIdNumber] = useState(""); // Used for studentId, staffId, lecturerId
   const [hourlyRate, setHourlyRate] = useState("");
   const [courses, setCourses] = useState<string[]>([]);
   const [generatedPassword, setGeneratedPassword] = useState("");
   const [copied, setCopied] = useState(false);
   const [createdMemberName, setCreatedMemberName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [capturedPhoto, setCapturedPhoto] = useState<File | null>(null);
+  const [capturedPhotos, setCapturedPhotos] = useState<File[]>([]);
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -58,14 +64,24 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
   const canAddAdmin =
     user?.role === Role.OWNER || user?.role === Role.SYSTEM_ADMIN;
 
-  const generateTempPassword = () => {
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
-    let password = "";
-    for (let i = 0; i < 10; i++) {
-      password += chars.charAt(Math.floor(Math.random() * chars.length));
+  // Fetch all courses when role is LECTURER or STUDENT
+  useEffect(() => {
+    if (role === Role.LECTURER || role === Role.STUDENT) {
+      setIsCoursesLoading(true);
+      coursesService.getAllCourses().then((res) => {
+        if (res.success && res.data?.data) {
+          setAllCourses(
+            res.data.data.map((c) => ({ label: c.title, value: c.code })),
+          );
+        } else {
+          setAllCourses([]);
+        }
+        setIsCoursesLoading(false);
+      });
+    } else {
+      setAllCourses([]);
     }
-    return password;
-  };
+  }, [role]);
 
   const copyPassword = () => {
     navigator.clipboard.writeText(generatedPassword);
@@ -76,8 +92,6 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-
-    const tempPassword = password || generateTempPassword();
 
     try {
       // Only admins can create admin users
@@ -91,31 +105,46 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
         return;
       }
 
-      // Check if photo is captured
-      if (!capturedPhoto) {
+      // Check if 3 photos are captured
+      if (capturedPhotos.length < 3) {
         toast({
           title: "Photo Required",
-          description: "Please capture a photo for facial recognition.",
+          description: "Please capture 3 photos for facial recognition.",
           variant: "destructive",
         });
         setIsSubmitting(false);
         return;
       }
 
-      const response = await usersServices.enrollUser(
-        {
-          fullName: name,
-          email,
-          phone,
-          password: tempPassword,
-          role,
-        },
-        capturedPhoto,
-      );
+      // Build payload based on role
+      const payload: any = {
+        fullName: name,
+        email,
+        phone,
+        role,
+      };
+      if (role === Role.STUDENT) {
+        payload.studentId = idNumber;
+        payload.courses = courses;
+      } else if (role === Role.LECTURER) {
+        payload.lecturerId = idNumber;
+        payload.staffId = staffId;
+        payload.lecturerHourlyRate = parseFloat(hourlyRate) || 0;
+        payload.lecturerCreditHours = parseInt(lecturerCreditHours) || 0;
+        payload.courses = courses;
+      } else if (role === Role.STAFF) {
+        payload.staffId = staffId;
+      }
+      const response = await usersServices.enrollUser(payload, capturedPhotos);
 
       if (response.success) {
         setCreatedMemberName(name);
-        setGeneratedPassword(tempPassword);
+        // Use the tempPassword returned from the server
+        if (response.data?.tempPassword) {
+          setGeneratedPassword(response.data.tempPassword);
+        }
+        console.log("Member created:", response.data);
+        console.log(payload);
         resetForm();
         toast({
           title: "Success",
@@ -145,13 +174,15 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
     setEmail("");
     setPhone("");
     setPassword("");
-    setRole(Role.STUDENT);
-    setDepartment("");
+    setRole(Role.LECTURER);
+    // department removed
     setIdNumber("");
     setHourlyRate("");
+    setLecturerCreditHours("");
+    setStaffId("");
     setIsMinor(false);
     setCourses([]);
-    setCapturedPhoto(null);
+    setCapturedPhotos([]);
   };
 
   const closeModal = () => {
@@ -210,26 +241,44 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
         ) : (
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Photo Section */}
-            <div className="flex items-center justify-center pb-4">
+            <div className="flex flex-col items-center justify-center pb-4">
               <PhotoCapture
                 onCapture={(imageData) => {
-                  if (imageData) {
-                    // Convert base64 to File
+                  if (imageData && capturedPhotos.length < 3) {
                     fetch(imageData)
                       .then((res) => res.blob())
                       .then((blob) => {
-                        const file = new File([blob], "face-photo.jpg", {
-                          type: "image/jpeg",
+                        const file = new File(
+                          [blob],
+                          `face-photo-${capturedPhotos.length + 1}.jpg`,
+                          {
+                            type: "image/jpeg",
+                          },
+                        );
+                        setCapturedPhotos((prev) => {
+                          const arr = [...prev, file];
+                          return arr.slice(0, 3);
                         });
-                        setCapturedPhoto(file);
                       });
-                  } else {
-                    setCapturedPhoto(null);
                   }
                 }}
-                label="Profile Photo"
-                description="Add a photo for facial recognition (required)"
+                label={`Profile Photos (${capturedPhotos.length}/3)`}
+                description="Capture 3 photos for facial recognition (required)"
               />
+              <div className="flex gap-2 mt-2">
+                {[...Array(3)].map((_, idx) => (
+                  <span
+                    key={idx}
+                    className={`text-xs px-2 py-1 rounded border ${
+                      idx < capturedPhotos.length
+                        ? "bg-success/20 border-success text-success"
+                        : "bg-muted border-muted-foreground text-muted-foreground"
+                    }`}
+                  >
+                    {idx < capturedPhotos.length ? `Photo ${idx + 1}` : `Empty`}
+                  </span>
+                ))}
+              </div>
             </div>
 
             {/* Basic Info */}
@@ -283,49 +332,147 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
                     <SelectValue placeholder="Select role" />
                   </SelectTrigger>
                   <SelectContent>
-                    {MEMBER_ROLES.filter(
-                      (option) => option.value !== Role.ADMIN || canAddAdmin,
-                    ).map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
+                    {([...MEMBER_ROLES] as { value: Role; label: string }[])
+                      .filter((option) => option.value !== Role.STUDENT)
+                      .filter((option) => {
+                        // Only system admin or owner can add admin
+                        if (option.value === Role.ADMIN) {
+                          return canAddAdmin;
+                        }
+                        // System admin can add staff, lecturer, admin
+                        if (user?.role === Role.SYSTEM_ADMIN) {
+                          return (
+                            option.value === Role.STAFF ||
+                            option.value === Role.LECTURER ||
+                            option.value === Role.ADMIN
+                          );
+                        }
+                        // Owner can add all except student
+                        if (user?.role === Role.OWNER) {
+                          return true;
+                        }
+                        // Default: allow staff and lecturer
+                        return (
+                          option.value === Role.STAFF ||
+                          option.value === Role.LECTURER
+                        );
+                      })
+                      .map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="department">Department/Program</Label>
-                <Select value={department} onValueChange={setDepartment}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select department" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DEPARTMENTS.length > 0 ? (
-                      DEPARTMENTS.map((dept) => (
-                        <SelectItem key={dept.value} value={dept.value}>
-                          {dept.label}
-                        </SelectItem>
-                      ))
+              {/* Department/Program removed */}
+              {role === Role.STUDENT && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="studentId">Student ID Number</Label>
+                    <Input
+                      id="studentId"
+                      type="text"
+                      placeholder="Enter student ID number"
+                      required
+                      value={idNumber}
+                      onChange={(e) => setIdNumber(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Courses Offered</Label>
+                    {isCoursesLoading ? (
+                      <div className="text-sm text-muted-foreground">
+                        Loading courses...
+                      </div>
+                    ) : allCourses.length > 0 ? (
+                      <MultiSelect
+                        options={allCourses}
+                        selected={courses}
+                        onChange={setCourses}
+                        placeholder="Select courses"
+                      />
                     ) : (
-                      <div className="p-2 text-sm text-muted-foreground">
-                        No departments available
+                      <div className="text-sm text-muted-foreground">
+                        No courses available
                       </div>
                     )}
-                  </SelectContent>
-                </Select>
-              </div>
-              {role === Role.LECTURER && (
+                  </div>
+                </>
+              )}
+              {(role === Role.STAFF || role === Role.LECTURER) && (
                 <div className="space-y-2">
-                  <Label htmlFor="hourlyRate">Hourly Rate</Label>
+                  <Label
+                    htmlFor={role === Role.STAFF ? "staffId" : "lecturerId"}
+                  >
+                    {role === Role.STAFF
+                      ? "Staff ID Number"
+                      : "Lecturer ID Number"}
+                  </Label>
                   <Input
-                    id="hourlyRate"
-                    type="number"
-                    placeholder="e.g., 50"
+                    id={role === Role.STAFF ? "staffId" : "lecturerId"}
+                    type="text"
+                    placeholder={
+                      role === Role.STAFF
+                        ? "Enter staff ID number"
+                        : "Enter lecturer ID number"
+                    }
                     required
-                    value={hourlyRate}
-                    onChange={(e) => setHourlyRate(e.target.value)}
+                    value={role === Role.STAFF ? staffId : idNumber}
+                    onChange={(e) => {
+                      if (role === Role.STAFF) {
+                        setStaffId(e.target.value);
+                      } else {
+                        setIdNumber(e.target.value);
+                      }
+                    }}
                   />
                 </div>
+              )}
+              {role === Role.LECTURER && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="hourlyRate">Hourly Rate</Label>
+                    <Input
+                      id="hourlyRate"
+                      type="number"
+                      placeholder="e.g., 50"
+                      required
+                      value={hourlyRate}
+                      onChange={(e) => setHourlyRate(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="lecturerCreditHours">Credit Hours</Label>
+                    <Input
+                      id="lecturerCreditHours"
+                      type="number"
+                      placeholder="e.g., 12"
+                      required
+                      value={lecturerCreditHours}
+                      onChange={(e) => setLecturerCreditHours(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Courses to Teach</Label>
+                    {isCoursesLoading ? (
+                      <div className="text-sm text-muted-foreground">
+                        Loading courses...
+                      </div>
+                    ) : allCourses.length > 0 ? (
+                      <MultiSelect
+                        options={allCourses}
+                        selected={courses}
+                        onChange={setCourses}
+                        placeholder="Select courses"
+                      />
+                    ) : (
+                      <div className="text-sm text-muted-foreground">
+                        No courses available
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
             </div>
 

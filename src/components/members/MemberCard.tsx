@@ -1,6 +1,7 @@
 import { Member } from "@/types/attendance";
+import { Role } from "@/enums/enums";
 import { cn } from "@/lib/utils";
-import { Mail, Phone, MoreVertical, Shield } from "lucide-react";
+import { Mail, Phone, MoreVertical, Shield, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -14,6 +15,7 @@ interface MemberCardProps {
   onEdit?: (member: Member) => void;
   onDelete?: (member: Member) => void;
   onViewAttendance?: (member: Member) => void;
+  onDownloadReport?: (member: Member) => void;
 }
 
 export const MemberCard = ({
@@ -21,13 +23,26 @@ export const MemberCard = ({
   onEdit,
   onDelete,
   onViewAttendance,
+  onDownloadReport,
 }: MemberCardProps) => {
-  const roleColors = {
-    student: "bg-primary/20 text-primary",
-    staff: "bg-success/20 text-success",
-    admin: "bg-warning/20 text-warning",
-    course_rep: "bg-primary/20 text-primary border-primary/40",
-    lecturer: "bg-success/20 text-success",
+  const roleColors: Record<Role, string> = {
+    [Role.STUDENT]: "bg-primary/20 text-primary",
+    [Role.STAFF]: "bg-success/20 text-success",
+    [Role.ADMIN]: "bg-warning/20 text-warning",
+    [Role.REP]: "bg-primary/20 text-primary border-primary/40",
+    [Role.LECTURER]: "bg-success/20 text-success",
+    [Role.SYSTEM_ADMIN]: "bg-warning/20 text-warning",
+    [Role.OWNER]: "bg-warning/20 text-warning",
+  };
+
+  const roleLabels: Record<Role, string> = {
+    [Role.STUDENT]: "Student",
+    [Role.STAFF]: "Staff",
+    [Role.ADMIN]: "Admin",
+    [Role.REP]: "Course Rep",
+    [Role.LECTURER]: "Lecturer",
+    [Role.SYSTEM_ADMIN]: "System Admin",
+    [Role.OWNER]: "Owner",
   };
 
   return (
@@ -51,7 +66,7 @@ export const MemberCard = ({
               </span>
             </div>
           )}
-          {member.role === "student" && member.status === "active" && (
+          {member.role === Role.STUDENT && member.status === "active" && (
             <div className="absolute -bottom-1 -right-1 w-3 h-3 sm:w-4 sm:h-4 bg-success rounded-full border-2 border-card" />
           )}
         </div>
@@ -70,7 +85,7 @@ export const MemberCard = ({
                 roleColors[member.role],
               )}
             >
-              {member.role.charAt(0).toUpperCase() + member.role.slice(1)}
+              {roleLabels[member.role]}
             </span>
             <span className="text-[10px] sm:text-xs text-muted-foreground">
               {member.department}
@@ -103,6 +118,12 @@ export const MemberCard = ({
             {onViewAttendance && (
               <DropdownMenuItem onClick={() => onViewAttendance(member)}>
                 View Attendance
+              </DropdownMenuItem>
+            )}
+            {onDownloadReport && (
+              <DropdownMenuItem onClick={() => onDownloadReport(member)}>
+                <Download className="w-4 h-4 mr-2" />
+                Download Report
               </DropdownMenuItem>
             )}
             {onDelete && (

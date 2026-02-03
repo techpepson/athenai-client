@@ -8,7 +8,6 @@ export interface EarlyArrival {
   memberId: string;
   memberName: string;
   photoUrl?: string;
-  department: string;
   checkInTime: Date;
   scheduledTime: Date;
   minutesEarly: number;
@@ -121,9 +120,7 @@ export const EarlyArrivalsCard = ({ arrivals }: EarlyArrivalsCardProps) => {
                     {getRankBadge(index)}
                   </span>
                 </div>
-                <p className="text-[10px] sm:text-xs text-muted-foreground truncate">
-                  {arrival.department}
-                </p>
+                {/* department removed */}
               </div>
 
               <div className="flex-shrink-0 text-right">

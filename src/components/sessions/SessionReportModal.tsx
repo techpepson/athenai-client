@@ -4,8 +4,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { AttendanceSession, AttendanceRecord } from "@/types/attendance";
-import { mockRecords, mockMembers } from "@/data/mockData";
+import {
+  AttendanceSession,
+  SessionAttendanceRecord,
+  ExpectedAttendee,
+} from "@/types/attendance";
 import {
   Table,
   TableBody,
@@ -29,8 +32,6 @@ import {
   Share2,
   FileSpreadsheet,
   FileText,
-  LogIn,
-  LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -40,11 +41,36 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 interface SessionReportModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   session: AttendanceSession | null;
+}
+
+// Internal record type for display
+interface DisplayRecord {
+  id: string;
+  memberId: string;
+  memberName: string;
+  studentId?: string;
+  email?: string;
+  department?: string;
+  checkInTime: Date;
+  status: "present" | "late" | "absent" | "checked_in";
+  verificationMethod: "facial" | "qr" | "manual";
+  confidence?: number;
+}
+
+// Internal absent member type for display
+interface AbsentMember {
+  id: string;
+  name: string;
+  studentId?: string;
+  email?: string;
+  department?: string;
 }
 
 export const SessionReportModal = ({
@@ -54,21 +80,58 @@ export const SessionReportModal = ({
 }: SessionReportModalProps) => {
   if (!session) return null;
 
-  // Get records for this session
-  const sessionRecords = mockRecords.filter((r) => r.sessionId === session.id);
+  // Map session attendance records to display format
+  const sessionRecords: DisplayRecord[] = (session.attendances || []).map(
+    (a) => {
+      // Map API status to display status
+      let displayStatus: DisplayRecord["status"] = "present";
+      const apiStatus = a.status?.toUpperCase();
+      if (apiStatus === "LATE") {
+        displayStatus = "late";
+      } else if (apiStatus === "CHECKED_IN") {
+        displayStatus = "checked_in";
+      } else if (apiStatus === "ABSENT") {
+        displayStatus = "absent";
+      } else if (apiStatus === "PRESENT") {
+        displayStatus = "present";
+      }
 
-  // Get all expected members (for demo, use all members from the same department or all)
-  const expectedMembers = session.department
-    ? mockMembers.filter((m) => m.department === session.department)
-    : mockMembers;
+      return {
+        id: a.id,
+        memberId: a.userId,
+        memberName: a.userName || "Unknown",
+        studentId: a.studentId,
+        email: a.userEmail,
+        department: a.department,
+        checkInTime: a.checkInTime || a.timestamp,
+        status: displayStatus,
+        verificationMethod:
+          (a.source?.toLowerCase() as "facial" | "qr" | "manual") || "manual",
+        confidence: a.confidence ? Math.round(a.confidence * 100) : undefined,
+      };
+    },
+  );
+
+  // Get IDs of users who checked in
+  const checkedInUserIds = new Set(sessionRecords.map((r) => r.memberId));
+
+  // Calculate absent members from expected attendees
+  const absentMembers: AbsentMember[] = (session.expectedAttendees || [])
+    .filter((e) => !checkedInUserIds.has(e.userId))
+    .map((e) => ({
+      id: e.id,
+      name: e.name,
+      studentId: e.studentId,
+      email: e.email,
+      department: e.department,
+    }));
 
   // Categorize attendees
   const presentRecords = sessionRecords.filter((r) => r.status === "present");
-  const lateRecords = sessionRecords.filter((r) => r.status === "late");
-  const checkedInIds = sessionRecords.map((r) => r.memberId);
-  const absentMembers = expectedMembers.filter(
-    (m) => !checkedInIds.includes(m.id),
+  const checkedInRecords = sessionRecords.filter(
+    (r) => r.status === "checked_in",
   );
+  const lateRecords = sessionRecords.filter((r) => r.status === "late");
 
   const stats = [
     {
@@ -102,16 +165,20 @@ export const SessionReportModal = ({
       ? Math.round((session.presentCount / session.expectedCount) * 100)
       : 0;
 
-  const getStatusBadge = (status: AttendanceRecord["status"]) => {
+  // Ensure attendanceRate is not NaN
+  const safeAttendanceRate = isNaN(attendanceRate) ? 0 : attendanceRate;
+
+  const getStatusBadge = (status: DisplayRecord["status"]) => {
     const variants = {
       present: "bg-success/20 text-success border-success/30",
+      checked_in: "bg-blue-500/20 text-blue-500 border-blue-500/30",
       late: "bg-warning/20 text-warning border-warning/30",
       absent: "bg-destructive/20 text-destructive border-destructive/30",
     };
     return variants[status];
   };
 
-  const getMethodBadge = (method: AttendanceRecord["verificationMethod"]) => {
+  const getMethodBadge = (method: DisplayRecord["verificationMethod"]) => {
     const variants = {
       facial: "bg-primary/20 text-primary border-primary/30",
       qr: "bg-accent/20 text-accent-foreground border-accent/30",
@@ -133,7 +200,7 @@ export const SessionReportModal = ({
       `✅ Present: ${presentRecords.length}`,
       `⏰ Late: ${lateRecords.length}`,
       `❌ Absent: ${absentMembers.length}`,
-      `📈 Attendance Rate: ${attendanceRate}%`,
+      `📈 Attendance Rate: ${safeAttendanceRate}%`,
       "",
       `*Attendees:*`,
       ...sessionRecords.map((r) => `• ${r.memberName} - ${r.status}`),
@@ -142,7 +209,203 @@ export const SessionReportModal = ({
   };
 
   const handleExportPDF = () => {
-    toast.success("PDF report downloaded!");
+    try {
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+
+      // Title
+      doc.setFontSize(20);
+      doc.setFont("helvetica", "bold");
+      doc.text("Session Attendance Report", pageWidth / 2, 20, {
+        align: "center",
+      });
+
+      // Session Info
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.text(session.name, pageWidth / 2, 35, { align: "center" });
+
+      if (session.courseName) {
+        doc.setFontSize(11);
+        doc.setFont("helvetica", "normal");
+        doc.text(`Course: ${session.courseName}`, pageWidth / 2, 43, {
+          align: "center",
+        });
+      }
+
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      let infoY = session.courseName ? 55 : 50;
+      doc.text(`Date: ${session.startTime.toLocaleDateString()}`, 14, infoY);
+      doc.text(
+        `Start Time: ${session.startTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`,
+        14,
+        infoY + 7,
+      );
+      doc.text(
+        `End Time: ${session.endTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`,
+        14,
+        infoY + 14,
+      );
+      if (session.location) {
+        doc.text(`Location: ${session.location}`, 14, infoY + 21);
+        infoY += 7;
+      }
+      doc.text(
+        `Session Type: ${session.type.charAt(0).toUpperCase() + session.type.slice(1)}`,
+        14,
+        infoY + 21,
+      );
+      doc.text(
+        `Mode: ${session.attendanceType === "checkin" ? "Check-in" : "Check-out"}`,
+        14,
+        infoY + 28,
+      );
+
+      // Summary Box
+      const summaryY = infoY + 40;
+      doc.setFillColor(245, 245, 245);
+      doc.roundedRect(14, summaryY, pageWidth - 28, 35, 3, 3, "F");
+
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
+      doc.text("Attendance Summary", 20, summaryY + 10);
+
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      const col1X = 20;
+      const col2X = 70;
+      const col3X = 120;
+      const col4X = 155;
+      const summaryTextY = summaryY + 22;
+
+      doc.text(`Total Expected: ${session.expectedCount}`, col1X, summaryTextY);
+      doc.text(`Present: ${presentRecords.length}`, col2X, summaryTextY);
+      doc.text(`Late: ${lateRecords.length}`, col3X, summaryTextY);
+      doc.text(`Absent: ${absentMembers.length}`, col4X, summaryTextY);
+
+      doc.setFont("helvetica", "bold");
+      doc.text(
+        `Attendance Rate: ${safeAttendanceRate}%`,
+        col1X,
+        summaryTextY + 8,
+      );
+
+      // Attendees Table (Present & Late)
+      const tableStartY = summaryY + 50;
+      if (sessionRecords.length > 0) {
+        doc.setFontSize(12);
+        doc.setFont("helvetica", "bold");
+        doc.text("Attendees (Present & Late)", 14, tableStartY);
+
+        autoTable(doc, {
+          startY: tableStartY + 5,
+          head: [
+            [
+              "#",
+              "Student ID",
+              "Name",
+              "Check-in Time",
+              "Status",
+              "Confidence",
+            ],
+          ],
+          body: sessionRecords.map((r, index) => [
+            (index + 1).toString(),
+            r.studentId || "-",
+            r.memberName,
+            r.checkInTime.toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+            r.status.charAt(0).toUpperCase() + r.status.slice(1),
+            r.confidence ? `${r.confidence}%` : "-",
+          ]),
+          theme: "striped",
+          headStyles: { fillColor: [59, 130, 246] },
+          styles: { fontSize: 9 },
+          columnStyles: {
+            0: { cellWidth: 10 },
+            1: { cellWidth: 30 },
+            2: { cellWidth: 50 },
+            3: { cellWidth: 30 },
+            4: { cellWidth: 25 },
+            5: { cellWidth: 25 },
+          },
+        });
+      }
+
+      // Absentees Table
+      if (absentMembers.length > 0) {
+        const finalY =
+          (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable
+            ?.finalY || tableStartY + 10;
+
+        // Check if we need a new page
+        if (finalY > 240) {
+          doc.addPage();
+          doc.setFontSize(12);
+          doc.setFont("helvetica", "bold");
+          doc.text("Absentees", 14, 20);
+
+          autoTable(doc, {
+            startY: 25,
+            head: [["#", "Student ID", "Name", "Email", "Department"]],
+            body: absentMembers.map((m, index) => [
+              (index + 1).toString(),
+              m.studentId || "-",
+              m.name,
+              m.email || "-",
+              m.department || "-",
+            ]),
+            theme: "striped",
+            headStyles: { fillColor: [239, 68, 68] },
+            styles: { fontSize: 9 },
+          });
+        } else {
+          doc.setFontSize(12);
+          doc.setFont("helvetica", "bold");
+          doc.text("Absentees", 14, finalY + 15);
+
+          autoTable(doc, {
+            startY: finalY + 20,
+            head: [["#", "Student ID", "Name", "Email", "Department"]],
+            body: absentMembers.map((m, index) => [
+              (index + 1).toString(),
+              m.studentId || "-",
+              m.name,
+              m.email || "-",
+              m.department || "-",
+            ]),
+            theme: "striped",
+            headStyles: { fillColor: [239, 68, 68] },
+            styles: { fontSize: 9 },
+          });
+        }
+      }
+
+      // Footer
+      const pageCount = doc.internal.pages.length - 1;
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.text(
+          `Generated on ${new Date().toLocaleString()} - Page ${i} of ${pageCount}`,
+          pageWidth / 2,
+          doc.internal.pageSize.getHeight() - 10,
+          { align: "center" },
+        );
+      }
+
+      // Save the PDF
+      const fileName = `${session.name.replace(/[^a-z0-9]/gi, "_")}_attendance_report_${new Date().toISOString().split("T")[0]}.pdf`;
+      doc.save(fileName);
+      toast.success("PDF report downloaded!");
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      toast.error("Failed to generate PDF report");
+    }
   };
 
   const handleExportExcel = () => {
@@ -228,14 +491,14 @@ export const SessionReportModal = ({
             <span
               className={cn(
                 "font-bold",
-                attendanceRate >= 80
+                safeAttendanceRate >= 80
                   ? "text-success"
-                  : attendanceRate >= 60
+                  : safeAttendanceRate >= 60
                     ? "text-warning"
                     : "text-destructive",
               )}
             >
-              {attendanceRate}%
+              {safeAttendanceRate}%
             </span>
           </div>
         </div>
@@ -256,10 +519,13 @@ export const SessionReportModal = ({
 
         {/* Tabs for different views */}
         <Tabs defaultValue="all" className="w-full">
-          <TabsList className="bg-muted border border-border">
+          <TabsList className="bg-muted border border-border flex-wrap h-auto">
             <TabsTrigger value="all">All ({sessionRecords.length})</TabsTrigger>
             <TabsTrigger value="present">
               Present ({presentRecords.length})
+            </TabsTrigger>
+            <TabsTrigger value="checked_in">
+              Checked In ({checkedInRecords.length})
             </TabsTrigger>
             <TabsTrigger value="late">Late ({lateRecords.length})</TabsTrigger>
             <TabsTrigger value="absent">
@@ -279,6 +545,22 @@ export const SessionReportModal = ({
           <TabsContent value="present" className="mt-4">
             <AttendanceTable
               records={presentRecords}
+              getStatusBadge={getStatusBadge}
+              getMethodBadge={getMethodBadge}
+              attendanceType={session.attendanceType}
+            />
+          </TabsContent>
+
+          <TabsContent value="checked_in" className="mt-4">
+            {checkedInRecords.length > 0 && (
+              <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg text-sm text-blue-600 dark:text-blue-400">
+                <strong>Note:</strong> These members have checked in but have
+                not checked out yet. They need to checkout to be marked as fully
+                present.
+              </div>
+            )}
+            <AttendanceTable
+              records={checkedInRecords}
               getStatusBadge={getStatusBadge}
               getMethodBadge={getMethodBadge}
               attendanceType={session.attendanceType}
@@ -351,9 +633,9 @@ export const SessionReportModal = ({
 };
 
 interface AttendanceTableProps {
-  records: AttendanceRecord[];
-  getStatusBadge: (status: AttendanceRecord["status"]) => string;
-  getMethodBadge: (method: AttendanceRecord["verificationMethod"]) => string;
+  records: DisplayRecord[];
+  getStatusBadge: (status: DisplayRecord["status"]) => string;
+  getMethodBadge: (method: DisplayRecord["verificationMethod"]) => string;
   attendanceType: "checkin" | "checkout";
 }
 
@@ -377,6 +659,7 @@ const AttendanceTable = ({
         <TableHeader>
           <TableRow className="bg-muted/50">
             <TableHead>Member</TableHead>
+            <TableHead>Student ID</TableHead>
             <TableHead>
               {attendanceType === "checkin"
                 ? "Check-in Time"
@@ -389,13 +672,11 @@ const AttendanceTable = ({
         </TableHeader>
         <TableBody>
           {records.map((record) => {
-            const member = mockMembers.find((m) => m.id === record.memberId);
             return (
               <TableRow key={record.id}>
                 <TableCell>
                   <div className="flex items-center gap-3">
                     <Avatar className="w-8 h-8">
-                      <AvatarImage src={member?.photoUrl} />
                       <AvatarFallback className="bg-primary/20 text-primary text-xs">
                         {record.memberName
                           .split(" ")
@@ -407,13 +688,11 @@ const AttendanceTable = ({
                       <p className="font-medium text-foreground">
                         {record.memberName}
                       </p>
-                      {member?.studentId && (
-                        <p className="text-xs text-muted-foreground">
-                          {member.studentId}
-                        </p>
-                      )}
                     </div>
                   </div>
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {record.studentId || "-"}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {record.checkInTime.toLocaleTimeString([], {
@@ -455,7 +734,7 @@ const AttendanceTable = ({
 };
 
 interface AbsentTableProps {
-  members: typeof mockMembers;
+  members: AbsentMember[];
 }
 
 const AbsentTable = ({ members }: AbsentTableProps) => {
@@ -473,8 +752,8 @@ const AbsentTable = ({ members }: AbsentTableProps) => {
         <TableHeader>
           <TableRow className="bg-muted/50">
             <TableHead>Member</TableHead>
+            <TableHead>Student ID</TableHead>
             <TableHead>Department</TableHead>
-            <TableHead>Role</TableHead>
             <TableHead>Contact</TableHead>
           </TableRow>
         </TableHeader>
@@ -484,7 +763,6 @@ const AbsentTable = ({ members }: AbsentTableProps) => {
               <TableCell>
                 <div className="flex items-center gap-3">
                   <Avatar className="w-8 h-8">
-                    <AvatarImage src={member.photoUrl} />
                     <AvatarFallback className="bg-destructive/20 text-destructive text-xs">
                       {member.name
                         .split(" ")
@@ -494,24 +772,17 @@ const AbsentTable = ({ members }: AbsentTableProps) => {
                   </Avatar>
                   <div>
                     <p className="font-medium text-foreground">{member.name}</p>
-                    {member.studentId && (
-                      <p className="text-xs text-muted-foreground">
-                        {member.studentId}
-                      </p>
-                    )}
                   </div>
                 </div>
               </TableCell>
               <TableCell className="text-muted-foreground">
-                {member.department}
-              </TableCell>
-              <TableCell>
-                <Badge variant="outline" className="text-xs capitalize">
-                  {member.role}
-                </Badge>
+                {member.studentId || "-"}
               </TableCell>
               <TableCell className="text-muted-foreground">
-                {member.email}
+                {member.department || "-"}
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                {member.email || "-"}
               </TableCell>
             </TableRow>
           ))}

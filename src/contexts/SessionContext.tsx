@@ -1,6 +1,5 @@
 import { createContext, useContext, useState, ReactNode } from "react";
 import { AttendanceSession } from "@/types/attendance";
-import { mockSessions } from "@/data/mockData";
 
 interface SessionContextType {
   sessions: AttendanceSession[];
@@ -17,7 +16,7 @@ const SessionContext = createContext<SessionContextType | undefined>(undefined);
 
 export const SessionProvider = ({ children }: { children: ReactNode }) => {
   // Initialize with mock data - will be replaced with API call later
-  const [sessions, setSessions] = useState<AttendanceSession[]>(mockSessions);
+  const [sessions, setSessions] = useState<AttendanceSession[]>([]);
 
   const addSession = (session: AttendanceSession) => {
     setSessions((prev) => [session, ...prev]);

@@ -1,13 +1,17 @@
-import { Navigate, useLocation } from 'react-router-dom';
-import { useAuth, UserRole } from '@/contexts/AuthContext';
-import { Loader2 } from 'lucide-react';
+import { Navigate, useLocation } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { Role } from "@/enums/enums";
+import { Loader2 } from "lucide-react";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  allowedRoles?: UserRole[];
+  allowedRoles?: Role[];
 }
 
-export const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
+export const ProtectedRoute = ({
+  children,
+  allowedRoles,
+}: ProtectedRouteProps) => {
   const { user, isLoading } = useAuth();
   const location = useLocation();
 
@@ -23,8 +27,10 @@ export const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) 
     return <Navigate to="/auth" state={{ from: location }} replace />;
   }
 
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
-    return <Navigate to="/dashboard" replace />;
+  if (allowedRoles && !allowedRoles.includes(user.role as Role)) {
+    // Redirect to dashboard with appropriate role prefix
+    const rolePrefix = `/${user.role.toLowerCase()}`;
+    return <Navigate to={`${rolePrefix}/dashboard`} replace />;
   }
 
   return <>{children}</>;

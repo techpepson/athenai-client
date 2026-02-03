@@ -1,17 +1,51 @@
 import { AttendanceSession } from "@/types/attendance";
 import { cn } from "@/lib/utils";
-import { Clock, MapPin, Users, Play, Pause, CheckCircle } from "lucide-react";
+import {
+  Clock,
+  MapPin,
+  Users,
+  Play,
+  Pause,
+  CheckCircle,
+  Eye,
+  Trash2,
+  RefreshCw,
+  LogIn,
+  LogOut,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { User } from "@/contexts/AuthContext";
 import { Role } from "@/enums/enums";
+import { useNavigate } from "react-router-dom";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface SessionCardProps {
   session: AttendanceSession;
   onStart?: (session: AttendanceSession) => void;
   onEnd?: (session: AttendanceSession) => void;
   onViewReport?: (session: AttendanceSession) => void;
+  onDelete?: (session: AttendanceSession) => void;
+  onToggleMode?: (session: AttendanceSession) => void;
   user: User | null;
+  isTogglingMode?: boolean;
+  isDeleting?: boolean;
 }
 
 export const SessionCard = ({
@@ -19,9 +53,33 @@ export const SessionCard = ({
   onStart,
   onEnd,
   onViewReport,
+  onDelete,
+  onToggleMode,
   user,
+  isTogglingMode = false,
+  isDeleting = false,
 }: SessionCardProps) => {
-  const progress = (session.presentCount / session.expectedCount) * 100;
+  const navigate = useNavigate();
+
+  // Check if session mode can be toggled (only CHECK_IN -> CHECK_OUT allowed by backend)
+  // Backend allows toggle only within 15 mins after end time
+  const canToggleMode = () => {
+    if (session.status !== "active") return false;
+    if (session.attendanceType === "checkout") return false; // Already in CHECK_OUT
+
+    const GRACE_MINUTES = 15;
+    const now = Date.now();
+    const endTime = new Date(session.endTime).getTime();
+    const graceDeadline = endTime + GRACE_MINUTES * 60 * 1000;
+
+    return now <= graceDeadline;
+  };
+
+  // Calculate progress safely to avoid NaN
+  const progress =
+    session.expectedCount > 0
+      ? Math.round((session.presentCount / session.expectedCount) * 100)
+      : 0;
 
   const typeColors = {
     class: "bg-primary/20 text-primary border-primary/30",
@@ -37,6 +95,40 @@ export const SessionCard = ({
   };
 
   const StatusIcon = statusIcons[session.status];
+
+  // Check if user is admin
+  const isAdmin = user?.role === Role.ADMIN || user?.role === Role.SYSTEM_ADMIN;
+
+  // Check if user is the creator of this session
+  const isCreator = user?.id === session.createdBy;
+
+  // User can manage session if they created it (LECTURER or REP who created it)
+  const canManageSession =
+    isCreator && (user?.role === Role.LECTURER || user?.role === Role.REP);
+
+  // Handle show live (navigate to kiosk with session)
+  const handleShowLive = () => {
+    // Store session info in localStorage for kiosk mode
+    localStorage.setItem(
+      "activeKioskSession",
+      JSON.stringify({
+        id: session.id,
+        name: session.name,
+        courseId: session.courseId,
+        courseName: session.courseName,
+        courseCode: session.courseCode,
+        type: session.type,
+        attendanceType: session.attendanceType,
+        location: session.location,
+        startTime: session.startTime,
+        endTime: session.endTime,
+        expectedCount: session.expectedCount,
+        presentCount: session.presentCount,
+      }),
+    );
+    // Navigate to kiosk mode with session ID in URL
+    navigate(`/kiosk/${session.id}`);
+  };
 
   return (
     <div
@@ -79,9 +171,9 @@ export const SessionCard = ({
         {session.name}
       </h3>
 
-      {session.department && (
+      {session.courseName && (
         <p className="text-sm text-muted-foreground mb-3">
-          {session.department}
+          {session.courseName}
         </p>
       )}
 
@@ -120,46 +212,174 @@ export const SessionCard = ({
         <div className="flex items-center justify-between text-xs mb-1">
           <span className="text-muted-foreground">Attendance Progress</span>
           <span className="font-medium text-foreground">
-            {Math.round(progress)}%
+            {isNaN(progress) ? 0 : progress}%
           </span>
         </div>
-        <Progress value={progress} className="h-2" />
+        <Progress value={isNaN(progress) ? 0 : progress} className="h-2" />
       </div>
 
       {/* Actions */}
-      <div className="flex gap-2">
-        {session.status === "scheduled" && (
+      <div className="flex gap-2 flex-wrap">
+        {/* Active session - creator can show live and end session */}
+        {session.status === "active" && canManageSession && (
+          <>
+            <Button
+              className="flex-1"
+              variant="gradient"
+              size="sm"
+              onClick={handleShowLive}
+            >
+              <Eye className="w-4 h-4 mr-2" />
+              Show Live
+            </Button>
+            <Button
+              className="flex-1"
+              variant="outline"
+              size="sm"
+              onClick={() => onEnd?.(session)}
+            >
+              <Pause className="w-4 h-4 mr-2" />
+              End Session
+            </Button>
+          </>
+        )}
+
+        {/* Active session - non-creator, non-admin users can view live */}
+        {session.status === "active" && !canManageSession && !isAdmin && (
           <Button
             className="flex-1"
             variant="gradient"
-            onClick={() => onStart?.(session)}
-            disabled={user?.role === Role.STUDENT}
+            size="sm"
+            onClick={handleShowLive}
           >
-            <Play className="w-4 h-4 mr-2" />
-            Start Session
+            <Eye className="w-4 h-4 mr-2" />
+            Show Live
           </Button>
         )}
-        {session.status === "active" && (
-          <Button
-            className="flex-1"
-            variant="outline"
-            onClick={() => onEnd?.(session)}
-            disabled={user?.role === Role.STUDENT}
-          >
-            <Pause className="w-4 h-4 mr-2" />
-            End Session
-          </Button>
-        )}
+
+        {/* Completed session - everyone can view report */}
         {session.status === "completed" && (
           <Button
             className="flex-1"
             variant="outline"
             onClick={() => onViewReport?.(session)}
           >
-            View Report
+            {isAdmin ? "Download Report" : "View Report"}
           </Button>
         )}
       </div>
+
+      {/* Secondary Actions - Toggle Mode & Delete (only for session creator) */}
+      {canManageSession && session.status === "active" && (
+        <div className="flex gap-2 mt-3 pt-3 border-t border-border">
+          {/* Toggle Mode Button */}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => onToggleMode?.(session)}
+                  disabled={!canToggleMode() || isTogglingMode}
+                >
+                  {isTogglingMode ? (
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  ) : session.attendanceType === "checkin" ? (
+                    <LogOut className="w-4 h-4 mr-2" />
+                  ) : (
+                    <LogIn className="w-4 h-4 mr-2" />
+                  )}
+                  {session.attendanceType === "checkin"
+                    ? "Switch to Check-Out"
+                    : "Check-Out Mode"}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {!canToggleMode()
+                  ? session.attendanceType === "checkout"
+                    ? "Session is already in Check-Out mode"
+                    : "Can only switch to Check-Out within 15 mins after session end time"
+                  : "Switch session to Check-Out mode for students to mark their departure"}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          {/* Delete Button with Confirmation */}
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" size="sm" disabled={isDeleting}>
+                {isDeleting ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Session</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to delete "{session.name}"? This action
+                  cannot be undone and will remove all attendance records
+                  associated with this session.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => onDelete?.(session)}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      )}
+
+      {/* Delete option for completed sessions (creator only) */}
+      {canManageSession && session.status === "completed" && (
+        <div className="flex gap-2 mt-3 pt-3 border-t border-border justify-end">
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                disabled={isDeleting}
+              >
+                {isDeleting ? (
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4 mr-2" />
+                )}
+                Delete Session
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Session</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to delete "{session.name}"? This action
+                  cannot be undone and will remove all attendance records
+                  associated with this session.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => onDelete?.(session)}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      )}
     </div>
   );
 };

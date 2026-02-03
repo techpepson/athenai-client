@@ -180,7 +180,7 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
             />
           )}
 
-          {canSeeMembers && !isStudent && (
+          {canSeeMembers && !isStudent && !isCourseRep && (
             <NavItem
               to={`${rolePrefix}/members`}
               icon={<Users className="w-5 h-5" />}
@@ -188,6 +188,15 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
               collapsed={collapsed}
             />
           )}
+          {/* Members tab commented out for reps - uncomment when ready */}
+          {/* {isCourseRep && (
+            <NavItem
+              to={`${rolePrefix}/members`}
+              icon={<Users className="w-5 h-5" />}
+              label="Members"
+              collapsed={collapsed}
+            />
+          )} */}
 
           {canSeeSessions &&
             !isStudent /* Hide Sessions for pure Students (Course Rep is distinct var here if logic holds, but wait. isStudent is true for CourseRep? Let's check logic: isStudent = user.role === 'student'. CourseRep is 'course_rep'. User said 'Studdnet = ... session- see but cant start'. User later said 'if student is class rep show session... if not dont'. So plain 'student' role hides sessions. */ && (
@@ -199,16 +208,7 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
               />
             )}
 
-          {isCourseRep || isSuperAdmin // Kiosk only for CourseRep or SuperAdmin
-            ? canRunSessions && (
-                <NavItem
-                  to="/kiosk"
-                  icon={<Camera className="w-5 h-5" />}
-                  label="Kiosk Mode"
-                  collapsed={collapsed}
-                />
-              )
-            : null}
+          {/* Kiosk mode removed for all roles */}
 
           {canSeeAnalytics && (
             <NavItem
@@ -282,10 +282,10 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
           {user && !collapsed && (
             <div className="px-3 py-2 rounded-lg bg-sidebar-accent/50">
               <p className="text-sm font-medium text-sidebar-foreground truncate">
-                {user.name}
+                {user.name || "User"}
               </p>
               <p className="text-xs text-sidebar-foreground/50 capitalize">
-                {user.role.replace("_", " ")}
+                {user.role?.replace("_", " ") || "Guest"}
               </p>
             </div>
           )}
@@ -384,7 +384,7 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
             />
           )}
 
-          {canSeeMembers && !isStudent && (
+          {canSeeMembers && !isStudent && !isCourseRep && (
             <NavItem
               to={`${rolePrefix}/members`}
               icon={<Users className="w-5 h-5" />}
@@ -393,6 +393,16 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
               onClick={onClose}
             />
           )}
+          {/* Members tab commented out for reps - uncomment when ready */}
+          {/* {isCourseRep && (
+            <NavItem
+              to={`${rolePrefix}/members`}
+              icon={<Users className="w-5 h-5" />}
+              label="Members"
+              collapsed={false}
+              onClick={onClose}
+            />
+          )} */}
 
           {canSeeSessions && !isStudent && (
             <NavItem
@@ -404,9 +414,9 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
             />
           )}
 
-          {(isCourseRep || isSuperAdmin) && canRunSessions && (
+          {isCourseRep && canRunSessions && (
             <NavItem
-              to="/kiosk"
+              to={`${rolePrefix}/sessions`}
               icon={<Camera className="w-5 h-5" />}
               label="Kiosk Mode"
               collapsed={false}

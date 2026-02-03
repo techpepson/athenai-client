@@ -1,18 +1,25 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Users,
   BookOpen,
-  TrendingUp,
   CalendarClock,
   BarChart3,
   CheckCircle2,
   Clock,
   UserX,
+  CalendarX2,
+  Calendar,
+  Award,
+  Loader2,
+  BookX,
 } from "lucide-react";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { AttendanceChart } from "@/components/dashboard/AttendanceChart";
 import { ActiveSessionCard } from "@/components/dashboard/ActiveSessionCard";
-import { EarlyArrivalsCard } from "@/components/dashboard/EarlyArrivalsCard";
+import {
+  EarlyArrivalsCard,
+  EarlyArrival,
+} from "@/components/dashboard/EarlyArrivalsCard";
 import {
   Select,
   SelectContent,
@@ -21,110 +28,224 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAuth } from "@/contexts/AuthContext";
-import { mockSessions, mockEarlyArrivals } from "@/data/mockData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-
-interface Course {
-  id: string;
-  name: string;
-  department: string;
-  totalStudents: number;
-  totalSessions: number;
-}
+import {
+  Session,
+  SessionStatus,
+  SessionType,
+  SessionMode,
+  AttendanceStatus,
+  getAllSessionsAdmin,
+} from "@/services/sessions.service";
+import {
+  getAllAttendancesAdmin,
+  AttendanceRecord,
+} from "@/services/attendance.services";
+import { usersServices } from "@/services/users.services";
+import { coursesService, Course } from "@/services/courses.services";
 
 const AdminDashboard = () => {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [filterType, setFilterType] = useState<string>("all");
   const [selectedCourse, setSelectedCourse] = useState<string>("all");
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [allCourses, setAllCourses] = useState<Course[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [allAttendances, setAllAttendances] = useState<
+    AttendanceRecord[] | null
+  >(null);
+  const [earlyArrivals, setEarlyArrivals] = useState<
+    Omit<EarlyArrival, "department">[]
+  >([]);
+  const [totalMembers, setTotalMembers] = useState(0);
 
-  // Mock courses data - replace with actual API
-  const allCourses: Course[] = useMemo(
-    () => [
-      {
-        id: "COURSE001",
-        name: "Introduction to Computer Science",
-        department: "CSC",
-        totalStudents: 150,
-        totalSessions: 24,
-      },
-      {
-        id: "COURSE002",
-        name: "Data Structures and Algorithms",
-        department: "CSC",
-        totalStudents: 120,
-        totalSessions: 24,
-      },
-      {
-        id: "COURSE003",
-        name: "Web Development Fundamentals",
-        department: "CSC",
-        totalStudents: 95,
-        totalSessions: 20,
-      },
-      {
-        id: "COURSE004",
-        name: "Database Systems",
-        department: "CSC",
-        totalStudents: 110,
-        totalSessions: 24,
-      },
-      {
-        id: "COURSE005",
-        name: "Software Engineering Principles",
-        department: "CSC",
-        totalStudents: 100,
-        totalSessions: 20,
-      },
-    ],
-    [],
-  );
+  // Fetch sessions, courses, and attendances from API
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      try {
+        const [
+          sessionsResponse,
+          coursesResponse,
+          allAttendancesResponse,
+          usersResponse,
+        ] = await Promise.all([
+          getAllSessionsAdmin(token),
+          coursesService.getAllCourses(),
+          getAllAttendancesAdmin(token),
+          usersServices.getAllUsers(),
+        ]);
+        if (sessionsResponse.success && sessionsResponse.data?.data) {
+          setSessions(sessionsResponse.data.data);
+        } else {
+          setSessions([]);
+        }
+        if (coursesResponse.success && coursesResponse.data?.data) {
+          setAllCourses(coursesResponse.data.data);
+        } else {
+          setAllCourses([]);
+        }
+        let attendances: AttendanceRecord[] = [];
+        if (allAttendancesResponse.success && allAttendancesResponse.data) {
+          attendances = allAttendancesResponse.data;
+          setAllAttendances(attendances);
+        } else {
+          setAllAttendances([]);
+        }
+        // Calculate total members (excluding admins)
+        if (usersResponse.success && usersResponse.data?.users) {
+          const nonAdminUsers = usersResponse.data.users.filter(
+            (u) => u.role !== "ADMIN" && u.role !== "SYSTEM_ADMIN",
+          );
+          setTotalMembers(nonAdminUsers.length);
+        }
+
+        // Early Arrivals: filter for today, before or within 5 mins after session start
+        let usersMap: Record<
+          string,
+          { name: string; profilePicture?: string }
+        > = {};
+        if (usersResponse.success && usersResponse.data?.users) {
+          usersMap = usersResponse.data.users.reduce(
+            (acc, u) => {
+              acc[u.id] = {
+                name: u.name,
+                profilePicture: u.profilePicture || u.imageUrl,
+              };
+              return acc;
+            },
+            {} as Record<string, { name: string; profilePicture?: string }>,
+          );
+        }
+        const now = new Date();
+        const todayStr = now.toISOString().slice(0, 10);
+        // Find attendances for today, with checkInTime before or within 5 mins after session start
+        const filtered = attendances
+          .filter((a) => {
+            if (!a.checkInTime || !a.session || !a.userId) return false;
+            const checkIn = new Date(a.checkInTime);
+            const sessionStart = a.session.startTime
+              ? new Date(a.session.startTime)
+              : null;
+            if (!sessionStart) return false;
+            // Only today
+            if (checkIn.toISOString().slice(0, 10) !== todayStr) return false;
+            // Early or within 5 mins after start
+            const diffMins =
+              (checkIn.getTime() - sessionStart.getTime()) / 60000;
+            return diffMins <= 5;
+          })
+          .sort((a, b) => {
+            // Earliest first
+            const aCheck = new Date(a.checkInTime!);
+            const bCheck = new Date(b.checkInTime!);
+            return aCheck.getTime() - bCheck.getTime();
+          })
+          .slice(0, 4)
+          .map((a) => {
+            const user = usersMap[a.userId] || { name: "Unknown" };
+            const sessionStart = a.session?.startTime
+              ? new Date(a.session.startTime)
+              : new Date();
+            const checkIn = a.checkInTime
+              ? new Date(a.checkInTime)
+              : new Date();
+            const minutesEarly = Math.max(
+              0,
+              Math.round((sessionStart.getTime() - checkIn.getTime()) / 60000),
+            );
+            return {
+              id: a.id,
+              memberId: a.userId,
+              memberName: user.name,
+              photoUrl: user.profilePicture,
+              checkInTime: checkIn,
+              scheduledTime: sessionStart,
+              minutesEarly,
+            };
+          });
+        setEarlyArrivals(filtered);
+      } catch (error) {
+        console.error("Failed to fetch data:", error);
+        setSessions([]);
+        setAllCourses([]);
+        setAllAttendances([]);
+        setEarlyArrivals([]);
+        setTotalMembers(0);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [token]);
 
   // Filter sessions based on course selection
   const filteredSessions = useMemo(() => {
     if (selectedCourse === "all") {
-      return mockSessions.filter((s) => s.type === "class");
+      return sessions.filter((s) => s.type === SessionType.CLASS);
     }
-    return mockSessions.filter(
-      (s) => s.courseId === selectedCourse && s.type === "class",
+    return sessions.filter(
+      (s) => s.courseId === selectedCourse && s.type === SessionType.CLASS,
     );
-  }, [selectedCourse]);
+  }, [selectedCourse, sessions]);
 
   // Calculate overall statistics
-  const totalMembers = allCourses.reduce(
-    (acc, course) => acc + course.totalStudents,
-    0,
-  );
-  const activeSessions = filteredSessions.filter(
-    (s) => s.status === "active" || s.status === "scheduled",
+  const activeSessionsCount = sessions.filter(
+    (s) =>
+      s.status === SessionStatus.OPEN || s.status === SessionStatus.SCHEDULED,
   ).length;
+  // Only count PRESENT (fully completed) as attended
   const todayAttendance = filteredSessions.reduce(
-    (acc, s) => acc + s.presentCount,
+    (acc, s) =>
+      acc +
+      (s.attendances?.filter((a) => a.status === AttendanceStatus.PRESENT)
+        .length || 0),
     0,
   );
   const totalExpected = filteredSessions.reduce(
-    (acc, s) => acc + s.expectedCount,
+    (acc, s) => acc + (s.attendances?.length || 0),
     0,
   );
   const attendanceRate =
     totalExpected > 0 ? Math.round((todayAttendance / totalExpected) * 100) : 0;
-  const lateArrivals = Math.floor(filteredSessions.length * 0.08);
-  const absentees = totalExpected - todayAttendance;
+  const lateArrivals = filteredSessions.reduce(
+    (acc, s) =>
+      acc +
+      (s.attendances?.filter((a) => a.status === AttendanceStatus.LATE)
+        .length || 0),
+    0,
+  );
+  const absentees = filteredSessions.reduce(
+    (acc, s) =>
+      acc +
+      (s.attendances?.filter((a) => a.status === AttendanceStatus.ABSENT)
+        .length || 0),
+    0,
+  );
 
   // Course details for selected course or all courses
   const courseDetails = useMemo(() => {
     if (selectedCourse === "all") {
       return allCourses.map((course) => {
-        const courseSessions = mockSessions.filter(
-          (s) => s.courseId === course.id && s.type === "class",
+        const courseSessions = sessions.filter(
+          (s) => s.courseId === course.id && s.type === SessionType.CLASS,
         );
+        // Only count PRESENT (fully completed) as present
         const totalPresent = courseSessions.reduce(
-          (acc, s) => acc + s.presentCount,
+          (acc, s) =>
+            acc +
+            (s.attendances?.filter((a) => a.status === AttendanceStatus.PRESENT)
+              .length || 0),
           0,
         );
         const totalExpected = courseSessions.reduce(
-          (acc, s) => acc + s.expectedCount,
+          (acc, s) => acc + (s.attendances?.length || 0),
           0,
         );
         const attendanceRate =
@@ -138,6 +259,8 @@ const AdminDashboard = () => {
           totalPresent,
           totalExpected,
           attendanceRate,
+          totalStudents: course.enrollments?.length || 0,
+          totalSessions: courseSessions.length,
         };
       });
     }
@@ -145,15 +268,19 @@ const AdminDashboard = () => {
     const course = allCourses.find((c) => c.id === selectedCourse);
     if (!course) return [];
 
-    const courseSessions = mockSessions.filter(
-      (s) => s.courseId === selectedCourse && s.type === "class",
+    const courseSessions = sessions.filter(
+      (s) => s.courseId === selectedCourse && s.type === SessionType.CLASS,
     );
+    // Only count PRESENT (fully completed) as present
     const totalPresent = courseSessions.reduce(
-      (acc, s) => acc + s.presentCount,
+      (acc, s) =>
+        acc +
+        (s.attendances?.filter((a) => a.status === AttendanceStatus.PRESENT)
+          .length || 0),
       0,
     );
     const totalExpected = courseSessions.reduce(
-      (acc, s) => acc + s.expectedCount,
+      (acc, s) => acc + (s.attendances?.length || 0),
       0,
     );
     const attendanceRate =
@@ -166,16 +293,77 @@ const AdminDashboard = () => {
         totalPresent,
         totalExpected,
         attendanceRate,
+        totalStudents: course.enrollments?.length || 0,
+        totalSessions: courseSessions.length,
       },
     ];
-  }, [selectedCourse, allCourses]);
+  }, [selectedCourse, allCourses, sessions]);
 
   const firstName = user?.name.split(" ")[0] || "User";
   const welcomeMessage = `Welcome back ${firstName}, here's the attendance overview`;
 
-  const activeSessionsList = mockSessions.filter(
-    (s) => s.status === "active" || s.status === "scheduled",
-  );
+  // Helper to map SessionType to AttendanceSession type
+  const mapSessionType = (
+    type: SessionType,
+  ): "class" | "exam" | "event" | "shift" => {
+    switch (type) {
+      case SessionType.CLASS:
+      case SessionType.LAB:
+      case SessionType.TUTORIAL:
+        return "class";
+      case SessionType.EXAM:
+        return "exam";
+      case SessionType.EVENT:
+        return "event";
+      case SessionType.WORKSHIFT:
+        return "shift";
+      default:
+        return "class";
+    }
+  };
+
+  const activeSessionsList = sessions
+    .filter(
+      (s) =>
+        s.status === SessionStatus.OPEN || s.status === SessionStatus.SCHEDULED,
+    )
+    .map((s) => {
+      // Ensure startTime and endTime are Date objects
+      let startTime = s.startTime;
+      let endTime = s.endTime || s.startTime;
+      if (typeof startTime === "string" || typeof startTime === "number") {
+        startTime = new Date(startTime);
+      }
+      if (typeof endTime === "string" || typeof endTime === "number") {
+        endTime = new Date(endTime);
+      }
+      return {
+        id: s.id,
+        name: s.name,
+        courseId: s.courseId || "",
+        courseName: s.course?.title || "Unknown Course",
+        createdBy: s.createdBy?.name || "Unknown",
+        type: mapSessionType(s.type),
+        status:
+          s.status === SessionStatus.OPEN
+            ? ("active" as const)
+            : s.status === SessionStatus.SCHEDULED
+              ? ("scheduled" as const)
+              : ("completed" as const),
+        attendanceType:
+          s.mode === SessionMode.CHECK_IN
+            ? ("checkin" as const)
+            : ("checkout" as const),
+        location: s.location,
+        startTime,
+        endTime,
+        // Only count PRESENT (fully completed) as present
+        presentCount:
+          s.attendances?.filter((a) => a.status === AttendanceStatus.PRESENT)
+            .length || 0,
+        expectedCount: s.attendances?.length || 0,
+      };
+    });
 
   return (
     <div className="space-y-4 sm:space-y-6 animate-fade-in">
@@ -215,7 +403,7 @@ const AdminDashboard = () => {
               <SelectItem value="all">All Courses</SelectItem>
               {allCourses.map((course) => (
                 <SelectItem key={course.id} value={course.id}>
-                  {course.name} ({course.department})
+                  {course.title} ({course.code})
                 </SelectItem>
               ))}
             </SelectContent>
@@ -224,44 +412,50 @@ const AdminDashboard = () => {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2 sm:gap-3 md:gap-4">
-        <StatCard
-          title="Total Members"
-          value={totalMembers.toLocaleString()}
-          icon={Users}
-          trend={{ value: 12, isPositive: true }}
-        />
-        <StatCard
-          title="Active Sessions"
-          value={activeSessions}
-          icon={CalendarClock}
-          variant="primary"
-        />
-        <StatCard
-          title="Today's Attendance"
-          value={todayAttendance.toLocaleString()}
-          icon={CheckCircle2}
-          variant="success"
-        />
-        <StatCard
-          title="Attendance Rate"
-          value={`${attendanceRate}%`}
-          icon={CheckCircle2}
-          trend={{ value: 2.4, isPositive: true }}
-        />
-        <StatCard
-          title="Late Arrivals"
-          value={lateArrivals}
-          icon={Clock}
-          variant="warning"
-        />
-        <StatCard
-          title="Absentees"
-          value={absentees}
-          icon={UserX}
-          variant="destructive"
-        />
-      </div>
+      {loading ? (
+        <div className="flex items-center justify-center p-8">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2 sm:gap-3 md:gap-4">
+          <StatCard
+            title="Total Members"
+            value={totalMembers.toLocaleString()}
+            icon={Users}
+            trend={{ value: 12, isPositive: true }}
+          />
+          <StatCard
+            title="Active Sessions"
+            value={activeSessionsCount}
+            icon={CalendarClock}
+            variant="primary"
+          />
+          <StatCard
+            title="Today's Attendance"
+            value={todayAttendance.toLocaleString()}
+            icon={CheckCircle2}
+            variant="success"
+          />
+          <StatCard
+            title="Attendance Rate"
+            value={`${attendanceRate}%`}
+            icon={CheckCircle2}
+            trend={{ value: 2.4, isPositive: true }}
+          />
+          <StatCard
+            title="Late Arrivals"
+            value={lateArrivals}
+            icon={Clock}
+            variant="warning"
+          />
+          <StatCard
+            title="Absentees"
+            value={absentees}
+            icon={UserX}
+            variant="destructive"
+          />
+        </div>
+      )}
 
       {/* Main Content - Tabs */}
       <Tabs defaultValue="overview" className="w-full">
@@ -295,7 +489,69 @@ const AdminDashboard = () => {
                   </div>
                 </div>
               </div>
-              <AttendanceChart />
+              {/* Build weekly attendance from allAttendances */}
+              {(() => {
+                if (!allAttendances || allAttendances.length === 0) {
+                  return (
+                    <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
+                      <BookX className="w-10 h-10 mb-2" />
+                      <div>No attendance data for this week.</div>
+                    </div>
+                  );
+                }
+                // Build last 7 days keys
+                const now = new Date();
+                const last7Days = [];
+                for (let i = 6; i >= 0; i--) {
+                  const d = new Date(now);
+                  d.setDate(now.getDate() - i);
+                  last7Days.push({
+                    key: d.toLocaleDateString(undefined, { weekday: "short" }),
+                    date: d,
+                  });
+                }
+                // Group attendances by day
+                const weeklyAttendanceData = last7Days.map(({ key, date }) => {
+                  // Filter attendances for this day
+                  const dayAttendances = allAttendances.filter((a) => {
+                    const checkIn = a.checkInTime
+                      ? new Date(a.checkInTime)
+                      : null;
+                    if (!checkIn) return false;
+                    return (
+                      checkIn.getFullYear() === date.getFullYear() &&
+                      checkIn.getMonth() === date.getMonth() &&
+                      checkIn.getDate() === date.getDate()
+                    );
+                  });
+                  // Count present and late - only PRESENT (fully completed) counts
+                  let present = 0;
+                  let late = 0;
+                  dayAttendances.forEach((a) => {
+                    if (a.status === "PRESENT") {
+                      present++;
+                    } else if (a.status === "LATE") {
+                      late++;
+                    }
+                    // CHECKED_IN without checkout doesn't count as present
+                  });
+                  return { day: key, present, late };
+                });
+                // If all days are empty, show empty state
+                if (
+                  weeklyAttendanceData.every(
+                    (d) => d.present === 0 && d.late === 0,
+                  )
+                ) {
+                  return (
+                    <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
+                      <BookX className="w-10 h-10 mb-2" />
+                      <div>No attendance data for this week.</div>
+                    </div>
+                  );
+                }
+                return <AttendanceChart data={weeklyAttendanceData} />;
+              })()}
             </div>
 
             <Card>
@@ -311,7 +567,9 @@ const AdminDashboard = () => {
                     Avg Students/Course
                   </p>
                   <p className="text-lg font-bold">
-                    {Math.round(totalMembers / allCourses.length)}
+                    {allCourses.length > 0
+                      ? Math.round(totalMembers / allCourses.length)
+                      : 0}
                   </p>
                 </div>
                 <div className="p-3 rounded-lg bg-muted/50">
@@ -319,12 +577,15 @@ const AdminDashboard = () => {
                   <p className="text-lg font-bold">{allCourses.length}</p>
                 </div>
                 <div className="p-3 rounded-lg bg-muted/50">
-                  <p className="text-xs text-muted-foreground">System Status</p>
+                  <p className="text-xs text-muted-foreground">
+                    Attendance Rate
+                  </p>
                   <Badge
                     variant={attendanceRate > 85 ? "default" : "secondary"}
                     className="mt-1"
                   >
-                    {attendanceRate > 85 ? "Healthy" : "Needs Attention"}
+                    {attendanceRate > 85 ? "Perfect" : "Normal"} (
+                    {attendanceRate}%)
                   </Badge>
                 </div>
               </CardContent>
@@ -352,9 +613,9 @@ const AdminDashboard = () => {
                   >
                     <div className="flex items-start justify-between mb-3">
                       <div>
-                        <p className="font-medium">{course.name}</p>
+                        <p className="font-medium">{course.title}</p>
                         <p className="text-sm text-muted-foreground">
-                          {course.department}
+                          {course.code}
                         </p>
                       </div>
                       <Badge
@@ -421,7 +682,7 @@ const AdminDashboard = () => {
                         className="flex items-center justify-between p-2 rounded-lg bg-muted/50"
                       >
                         <span className="text-sm font-medium truncate">
-                          {course.name}
+                          {course.title}
                         </span>
                         <Badge variant="default">
                           {course.attendanceRate}%
@@ -449,7 +710,7 @@ const AdminDashboard = () => {
                         className="flex items-center justify-between p-2 rounded-lg bg-muted/50"
                       >
                         <span className="text-sm font-medium truncate">
-                          {course.name}
+                          {course.title}
                         </span>
                         <Badge variant="secondary">
                           {course.attendanceRate}%
@@ -464,7 +725,7 @@ const AdminDashboard = () => {
       </Tabs>
 
       {/* Early Arrivals Rewards Section */}
-      <EarlyArrivalsCard arrivals={mockEarlyArrivals} />
+      <EarlyArrivalsCard arrivals={earlyArrivals} />
 
       {/* Active Sessions */}
       <div>
@@ -479,11 +740,25 @@ const AdminDashboard = () => {
             </p>
           </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
-          {activeSessionsList.map((session) => (
-            <ActiveSessionCard key={session.id} session={session} />
-          ))}
-        </div>
+        {activeSessionsList.length === 0 ? (
+          <Card className="border-dashed">
+            <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+              <CalendarX2 className="w-12 h-12 text-muted-foreground/50 mb-4" />
+              <h3 className="text-lg font-medium text-muted-foreground mb-2">
+                No Active Sessions
+              </h3>
+              <p className="text-sm text-muted-foreground max-w-sm">
+                There are no active or upcoming sessions at the moment.
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+            {activeSessionsList.map((session) => (
+              <ActiveSessionCard key={session.id} session={session} />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -6,6 +6,7 @@ import {
   Upload,
   Download,
   Building2,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +25,7 @@ import { DeleteMemberDialog } from "@/components/members/DeleteMemberDialog";
 import { Member } from "@/types/attendance";
 import { useAuth } from "@/contexts/AuthContext";
 import { usersServices } from "@/services/users.services";
+import { coursesService, Lecturer } from "@/services/courses.services";
 import { ROLE_FILTER_OPTIONS } from "@/constants/appConstants";
 import { Role } from "@/enums/enums";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -39,14 +41,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { utilServices, MemberPDFData } from "@/services/utils.services";
+import { getAllAttendancesAdmin } from "@/services/attendance.services";
 
 // Placeholder courses until API integration
-const PLACEHOLDER_COURSES = [
-  { id: "cs101", name: "Introduction to Computer Science", department: "cs" },
-  { id: "cs201", name: "Data Structures", department: "cs" },
-  { id: "cs301", name: "Algorithms", department: "cs" },
-];
-
 const Members = () => {
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,64 +62,216 @@ const Members = () => {
   const [deleteEntirelyConfirmOpen, setDeleteEntirelyConfirmOpen] =
     useState(false);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
-  const { user } = useAuth();
+  const [isExporting, setIsExporting] = useState(false);
+  const [attendanceRates, setAttendanceRates] = useState<
+    Record<string, number>
+  >({});
+  const { user, token } = useAuth();
   const { toast } = useToast();
 
   const loadMembers = async () => {
     setLoading(true);
     try {
       const response = await usersServices.getAllUsers();
-      if (response.success && response.data?.users) {
-        const users = response.data.users;
-        // Map IUserPublic to Member
-        const mappedMembers: Member[] = users
-          .filter((u: IUserPublic) => {
-            // Filter members based on logged-in user role
-            if (!user) return false;
-
-            // Lecturers only see students in their courses (simplified - show all students for now)
-            if (user.role === Role.LECTURER) {
-              return u.role === Role.STUDENT || u.role === Role.REP;
-            }
-
-            // Students/Reps see other students in their courses (simplified - show students)
-            if (user.role === Role.REP || user.role === Role.STUDENT) {
-              return u.role === Role.STUDENT || u.role === Role.REP;
-            }
-
-            // Admin/SystemAdmin/Staff/Owner see all
-            return true;
-          })
-          .map((u: IUserPublic): Member => {
-            // Map Role enum to Member role type
-            const roleMap: Record<string, Member["role"]> = {
-              [Role.STUDENT]: "student",
-              [Role.REP]: "course_rep",
-              [Role.LECTURER]: "lecturer",
-              [Role.STAFF]: "staff",
-              [Role.ADMIN]: "admin",
-              [Role.SYSTEM_ADMIN]: "super_admin",
-              [Role.OWNER]: "super_admin",
-            };
-
-            return {
-              id: u.id,
-              name: u.name,
-              email: u.email,
-              role: roleMap[u.role] || "student",
-              department: undefined, // Department not available in current interfaces
-              studentId: u.student?.studentId || u.staff?.staffNo,
-              photoUrl: u.profilePicture || u.imageUrl || undefined,
-              isMinor: false,
-              createdAt: new Date(u.createdAt),
-              status: u.isActive ? "active" : "inactive",
-            };
-          });
-        setMembers(mappedMembers);
-      } else {
-        // Gracefully handle empty state
+      if (!response.success || !response.data?.users) {
         setMembers([]);
+        setLoading(false);
+        return;
       }
+      const users = response.data.users;
+      let filteredUsers: IUserPublic[] = users;
+
+      // Lecturer: only see students/reps in their courses
+      if (user?.role === Role.LECTURER) {
+        const coursesRes = await coursesService.getLecturerCourses();
+        console.log("Lecturer courses response:", coursesRes);
+
+        if (coursesRes.success && coursesRes.data?.data) {
+          filteredUsers = users.filter((u) => {
+            if (
+              (u.role === Role.STUDENT || u.role === Role.REP) &&
+              u.student?.id
+            ) {
+              // Check if student is enrolled in any of the lecturer's courses
+              // CourseEnrollment.studentId references Student.id (the cuid), not studentId string
+              const isEnrolled = coursesRes.data?.data.some((course) =>
+                course.enrollments?.some(
+                  (enr: { studentId: string }) =>
+                    enr.studentId === u.student?.id,
+                ),
+              );
+              return isEnrolled;
+            }
+            return false;
+          });
+        } else {
+          filteredUsers = [];
+        }
+      }
+      // Rep: only see lecturers for their courses
+      else if (user?.role === Role.REP) {
+        // First get the courses the rep is enrolled in
+        const studentCoursesRes = await coursesService.getStudentCourses();
+        console.log("Rep enrolled courses response:", studentCoursesRes);
+
+        if (
+          studentCoursesRes.success &&
+          studentCoursesRes.data?.data &&
+          studentCoursesRes.data.data.length > 0
+        ) {
+          const enrolledCourseIds = new Set(
+            studentCoursesRes.data.data.map((c) => c.id),
+          );
+          console.log(
+            "Rep enrolled course IDs:",
+            Array.from(enrolledCourseIds),
+          );
+
+          // Now get ALL courses to find lecturers for those courses
+          const allCoursesRes = await coursesService.getAllCourses();
+          console.log("All courses response:", allCoursesRes);
+
+          if (
+            allCoursesRes.success &&
+            allCoursesRes.data?.data &&
+            allCoursesRes.data.data.length > 0
+          ) {
+            // Collect ALL possible lecturer identifiers from courses the rep is enrolled in
+            const lecturerIdentifiers = new Set<string>();
+
+            allCoursesRes.data.data.forEach((course) => {
+              if (enrolledCourseIds.has(course.id)) {
+                console.log(
+                  "Course:",
+                  course.code,
+                  "Full lecturer data:",
+                  JSON.stringify(course.lecturers, null, 2),
+                );
+                if (course.lecturers && Array.isArray(course.lecturers)) {
+                  course.lecturers.forEach((lect: Lecturer) => {
+                    // Add all possible ID fields to match against
+                    if (lect.id) lecturerIdentifiers.add(lect.id);
+                    if (lect.userId) lecturerIdentifiers.add(lect.userId);
+                    // Check nested user object
+                    if (lect.user?.id) lecturerIdentifiers.add(lect.user.id);
+                  });
+                }
+              }
+            });
+
+            console.log(
+              "All lecturer identifiers found:",
+              Array.from(lecturerIdentifiers),
+            );
+
+            // Filter users to only include lecturers that match ANY identifier
+            filteredUsers = users.filter((u) => {
+              if (u.role !== Role.LECTURER) return false;
+
+              // Check ALL possible matching fields
+              const matchById = lecturerIdentifiers.has(u.id);
+              const matchByLecturerId = u.lecturer?.id
+                ? lecturerIdentifiers.has(u.lecturer.id)
+                : false;
+              const matchByLecturerUserId = u.lecturer?.userId
+                ? lecturerIdentifiers.has(u.lecturer.userId)
+                : false;
+
+              const isMatch =
+                matchById || matchByLecturerId || matchByLecturerUserId;
+              console.log(
+                "User:",
+                u.name,
+                "| u.id:",
+                u.id,
+                "| lecturer.id:",
+                u.lecturer?.id,
+                "| lecturer.userId:",
+                u.lecturer?.userId,
+                "| Match:",
+                isMatch,
+              );
+              return isMatch;
+            });
+
+            console.log("Final filtered lecturers for rep:", filteredUsers);
+          } else {
+            console.log(
+              "getAllCourses failed or returned empty data:",
+              allCoursesRes,
+            );
+            filteredUsers = [];
+          }
+        } else {
+          console.log(
+            "getStudentCourses failed or returned empty data:",
+            studentCoursesRes,
+          );
+          filteredUsers = [];
+        }
+      }
+      // Student: only see other students/reps in their courses
+      else if (user?.role === Role.STUDENT) {
+        const studentCoursesRes = await coursesService.getStudentCourses();
+        filteredUsers = users.filter((u) => {
+          if (
+            (u.role === Role.STUDENT || u.role === Role.REP) &&
+            u.student?.studentId
+          ) {
+            // Check if student is enrolled in any of the current student's courses
+            return studentCoursesRes.data?.data.some((course) =>
+              course.enrollments?.some(
+                (enr: { studentId: string }) =>
+                  enr.studentId === u.student?.studentId,
+              ),
+            );
+          }
+          return false;
+        });
+      }
+      // Admin: cannot see other admins or system admins
+      else if (user?.role === Role.ADMIN) {
+        filteredUsers = users.filter(
+          (u) => u.role !== Role.ADMIN && u.role !== Role.SYSTEM_ADMIN,
+        );
+      }
+      // System admins (super admins), staff, owner: see all
+
+      const mappedMembers: Member[] = filteredUsers.map(
+        (u: IUserPublic): Member => {
+          // Get appropriate ID based on role
+          let idNumber: string | undefined;
+          if (u.role === Role.STUDENT || u.role === Role.REP) {
+            idNumber = u.student?.studentId;
+          } else if (u.role === Role.LECTURER) {
+            idNumber = u.lecturer?.staffNo || undefined;
+          } else if (u.role === Role.STAFF) {
+            idNumber = u.staff?.staffNo;
+          } else if (u.role === Role.ADMIN || u.role === Role.SYSTEM_ADMIN) {
+            idNumber = u.admin?.adminNo;
+          }
+
+          return {
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            role: u.role,
+            phone: u.phone || undefined,
+            department: undefined,
+            studentId: idNumber,
+            photoUrl: u.profilePicture || u.imageUrl || undefined,
+            isMinor: false,
+            createdAt: new Date(u.createdAt),
+            status: u.isActive ? "active" : "inactive",
+            // Lecturer-specific fields
+            hourlyRate: u.lecturer?.hourlyRate,
+            creditHours: u.lecturer?.creditHours,
+            // Note: coursesTaught and coursesEnrolled need to be fetched separately
+            // as they are not included in the getAllUsers response
+          };
+        },
+      );
+      setMembers(mappedMembers);
     } catch (error) {
       console.error("Failed to load members:", error);
       setMembers([]);
@@ -130,15 +280,179 @@ const Members = () => {
     }
   };
 
-  // Load members on mount and when modals close
+  // Load attendance rates for all users
+  const loadAttendanceRates = async (userIds: string[]) => {
+    if (!token || userIds.length === 0) return;
+    try {
+      const response = await getAllAttendancesAdmin(token);
+      if (response.success && response.data) {
+        const rates: Record<string, number> = {};
+
+        // Group attendances by userId
+        const attendancesByUser: Record<string, { status: string }[]> = {};
+        response.data.forEach((att: { userId: string; status: string }) => {
+          if (!attendancesByUser[att.userId]) {
+            attendancesByUser[att.userId] = [];
+          }
+          attendancesByUser[att.userId].push({ status: att.status });
+        });
+
+        // Calculate rate for each user - default to 0 if no attendances found
+        userIds.forEach((userId) => {
+          const userAttendances = attendancesByUser[userId] || [];
+          if (userAttendances.length > 0) {
+            const stats =
+              utilServices.calculateAttendanceStats(userAttendances);
+            rates[userId] = stats.attendanceRate;
+          } else {
+            // No attendance records = 0% (not N/A)
+            rates[userId] = 0;
+          }
+        });
+
+        setAttendanceRates(rates);
+      } else {
+        // If API fails, set all users to 0%
+        const rates: Record<string, number> = {};
+        userIds.forEach((userId) => {
+          rates[userId] = 0;
+        });
+        setAttendanceRates(rates);
+      }
+    } catch (error) {
+      console.error("Failed to load attendance rates:", error);
+      // On error, set all users to 0%
+      const rates: Record<string, number> = {};
+      userIds.forEach((userId) => {
+        rates[userId] = 0;
+      });
+      setAttendanceRates(rates);
+    }
+  };
+
+  // Load members on mount, when modals close, or when user changes
   useEffect(() => {
-    loadMembers();
+    if (user) {
+      loadMembers();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [addModalOpen, deleteDialogOpen, editModalOpen]);
+  }, [addModalOpen, deleteDialogOpen, editModalOpen, user?.role]);
+
+  // Load attendance rates when members change or token becomes available
+  useEffect(() => {
+    if (members.length > 0 && token) {
+      loadAttendanceRates(members.map((m) => m.id));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [members, token]);
+
+  const handleExportPDF = async () => {
+    setIsExporting(true);
+    try {
+      const pdfData: MemberPDFData[] = filteredMembers.map((m) => ({
+        name: m.name,
+        email: m.email,
+        role: m.role,
+        idNumber: m.studentId || "-",
+        status: m.status,
+        attendanceRate: `${attendanceRates[m.id] ?? 0}%`,
+        createdAt: m.createdAt ? m.createdAt.toLocaleDateString() : "-",
+      }));
+
+      utilServices.exportMembersToPDF(pdfData, "Members Report");
+      toast({
+        title: "Export Successful",
+        description: `Exported ${pdfData.length} members to PDF.`,
+      });
+    } catch (error) {
+      console.error("Export failed:", error);
+      toast({
+        title: "Export Failed",
+        description: "Could not export members to PDF.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const handleViewAttendance = (member: Member) => {
     setSelectedMember(member);
     setViewAttendanceOpen(true);
+  };
+
+  const handleDownloadReport = async (member: Member) => {
+    try {
+      if (!token) {
+        toast({
+          title: "Error",
+          description: "Please log in to download reports.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Fetch all attendances and filter for this member
+      const response = await getAllAttendancesAdmin(token);
+      if (!response.success || !response.data) {
+        toast({
+          title: "Error",
+          description: "Could not fetch attendance data.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Filter attendance records for this member
+      const memberAttendances = response.data.filter(
+        (att) => att.userId === member.id,
+      );
+
+      // Calculate stats
+      const stats = utilServices.calculateAttendanceStats(memberAttendances);
+
+      // Format attendance records for PDF
+      const formattedRecords = memberAttendances.map((att) => ({
+        sessionName: att.session?.name || "Unknown Session",
+        courseName: att.session?.course?.title || att.session?.course?.code,
+        date: att.session?.startTime
+          ? new Date(att.session.startTime).toLocaleDateString()
+          : att.checkInTime
+            ? new Date(att.checkInTime).toLocaleDateString()
+            : "-",
+        status: att.status,
+        checkInTime: att.checkInTime
+          ? new Date(att.checkInTime).toLocaleTimeString()
+          : "-",
+        checkOutTime: att.checkOutTime
+          ? new Date(att.checkOutTime).toLocaleTimeString()
+          : "-",
+      }));
+
+      // Export to PDF
+      utilServices.exportIndividualAttendanceReportToPDF(
+        {
+          name: member.name,
+          email: member.email,
+          role: member.role,
+          idNumber: member.studentId,
+        },
+        formattedRecords,
+        stats,
+      );
+
+      toast({
+        title: "Report Downloaded",
+        description: `Attendance report for ${member.name} has been downloaded.`,
+      });
+    } catch (error) {
+      console.error("Failed to download report:", error);
+      toast({
+        title: "Error",
+        description: "Could not download attendance report.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleEditMember = (member: Member) => {
@@ -148,7 +462,7 @@ const Members = () => {
 
   const handleDeleteMember = (member: Member) => {
     setSelectedMember(member);
-    if (member.role === "course_rep") {
+    if (member.role === Role.REP) {
       setCourseRepActionDialogOpen(true);
     } else {
       setDeleteDialogOpen(true);
@@ -243,8 +557,10 @@ const Members = () => {
     user?.role === Role.OWNER ||
     user?.role === Role.ADMIN;
   const isLecturer = user?.role === Role.LECTURER;
+  const isRep = user?.role === Role.REP;
 
   // Filter role options for lecturers - only show students and course reps
+  // For reps - only show lecturers
   const roleFilterOptions = isLecturer
     ? ROLE_FILTER_OPTIONS.filter(
         (option) =>
@@ -252,21 +568,25 @@ const Members = () => {
           option.value === Role.STUDENT ||
           option.value === Role.REP,
       )
-    : ROLE_FILTER_OPTIONS;
+    : isRep
+      ? ROLE_FILTER_OPTIONS.filter(
+          (option) => option.value === "all" || option.value === Role.LECTURER,
+        )
+      : ROLE_FILTER_OPTIONS;
 
-  // Map Role enum values to lowercase for comparison with Member.role
-  const getRoleFilterValue = (filterValue: string): string[] => {
+  // Map Role enum values for comparison with Member.role
+  const getRoleFilterValue = (filterValue: string): Role[] => {
     if (filterValue === "all") return [];
-    const roleMap: Record<string, string[]> = {
-      [Role.STUDENT]: ["student", "course_rep"],
-      [Role.REP]: ["course_rep"],
-      [Role.LECTURER]: ["lecturer"],
-      [Role.STAFF]: ["staff"],
-      [Role.ADMIN]: ["admin"],
-      [Role.SYSTEM_ADMIN]: ["super_admin"],
-      [Role.OWNER]: ["super_admin"],
+    const roleMap: Record<string, Role[]> = {
+      [Role.STUDENT]: [Role.STUDENT, Role.REP],
+      [Role.REP]: [Role.REP],
+      [Role.LECTURER]: [Role.LECTURER],
+      [Role.STAFF]: [Role.STAFF],
+      [Role.ADMIN]: [Role.ADMIN],
+      [Role.SYSTEM_ADMIN]: [Role.SYSTEM_ADMIN],
+      [Role.OWNER]: [Role.OWNER],
     };
-    return roleMap[filterValue] || [filterValue];
+    return roleMap[filterValue] || [filterValue as Role];
   };
 
   const filteredMembers = members.filter((member) => {
@@ -300,15 +620,27 @@ const Members = () => {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          {canAddMembers && (
+          {/* {canAddMembers && (
             <Button variant="outline" size="sm" className="sm:size-default">
               <Upload className="w-4 h-4 sm:mr-2" />
               <span className="hidden sm:inline">Import CSV</span>
             </Button>
-          )}
-          <Button variant="outline" size="sm" className="sm:size-default">
-            <Download className="w-4 h-4 sm:mr-2" />
-            <span className="hidden sm:inline">Export</span>
+          )} */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="sm:size-default"
+            onClick={handleExportPDF}
+            disabled={isExporting || members.length === 0}
+          >
+            {isExporting ? (
+              <Loader2 className="w-4 h-4 sm:mr-2 animate-spin" />
+            ) : (
+              <Download className="w-4 h-4 sm:mr-2" />
+            )}
+            <span className="hidden sm:inline">
+              {isExporting ? "Exporting..." : "Export PDF"}
+            </span>
           </Button>
           {canAddMembers && (
             <Button
@@ -360,11 +692,6 @@ const Members = () => {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Courses</SelectItem>
-              {PLACEHOLDER_COURSES.map((course) => (
-                <SelectItem key={course.id} value={course.id}>
-                  {course.name}
-                </SelectItem>
-              ))}
             </SelectContent>
           </Select>
 
@@ -389,9 +716,10 @@ const Members = () => {
             <MemberCard
               key={member.id}
               member={member}
-              onEdit={isLecturer ? undefined : handleEditMember}
-              onDelete={isLecturer ? undefined : handleDeleteMember}
+              onEdit={isLecturer || isRep ? undefined : handleEditMember}
+              onDelete={isLecturer || isRep ? undefined : handleDeleteMember}
               onViewAttendance={handleViewAttendance}
+              onDownloadReport={isRep ? handleDownloadReport : undefined}
             />
           ))}
         </div>

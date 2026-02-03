@@ -8,6 +8,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { SessionProvider } from "@/contexts/SessionContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { MainLayout } from "@/components/layout/MainLayout";
+import { Role } from "@/enums/enums";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Members from "./pages/Members";
@@ -56,7 +57,13 @@ const App = () => (
                     <Route
                       path="admins"
                       element={
-                        <ProtectedRoute allowedRoles={["super_admin", "admin"]}>
+                        <ProtectedRoute
+                          allowedRoles={[
+                            Role.OWNER,
+                            Role.SYSTEM_ADMIN,
+                            Role.ADMIN,
+                          ]}
+                        >
                           <AdminManagement />
                         </ProtectedRoute>
                       }
@@ -64,7 +71,13 @@ const App = () => (
                     <Route
                       path="staff"
                       element={
-                        <ProtectedRoute allowedRoles={["super_admin", "admin"]}>
+                        <ProtectedRoute
+                          allowedRoles={[
+                            Role.OWNER,
+                            Role.SYSTEM_ADMIN,
+                            Role.ADMIN,
+                          ]}
+                        >
                           <StaffManagement />
                         </ProtectedRoute>
                       }
@@ -74,10 +87,10 @@ const App = () => (
                       element={
                         <ProtectedRoute
                           allowedRoles={[
-                            "super_admin",
-                            "staff",
-                            "admin",
-                            "lecturer",
+                            Role.OWNER,
+                            Role.SYSTEM_ADMIN,
+                            Role.ADMIN,
+                            Role.LECTURER,
                           ]}
                         >
                           <CourseRepManagement />
@@ -87,14 +100,14 @@ const App = () => (
                     <Route
                       path="payroll"
                       element={
-                        <ProtectedRoute allowedRoles={["lecturer"]}>
+                        <ProtectedRoute allowedRoles={[Role.LECTURER]}>
                           <Payroll />
                         </ProtectedRoute>
                       }
                     />
                   </Route>
                 </Route>
-                <Route path="/kiosk" element={<Kiosk />} />
+                <Route path="/kiosk/:sessionId" element={<Kiosk />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </BrowserRouter>

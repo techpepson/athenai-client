@@ -3,14 +3,13 @@ import {
   Plus,
   Trash2,
   UserCheck,
-  Copy,
-  Check,
   GraduationCap,
   ArrowRight,
   Search,
   BookOpen,
   Pencil,
   Filter,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,27 +42,37 @@ import { useToast } from "@/hooks/use-toast";
 import { usersServices } from "@/services/users.services";
 import { coursesService, Course } from "@/services/courses.services";
 import { Role } from "@/enums/enums";
-import { IUserPublic } from "@/interface/user.interface";
 import { Badge } from "@/components/ui/badge";
 import { EditMemberModal } from "@/components/members/EditMemberModal";
 import { Member } from "@/types/attendance";
-import { EmptyState } from "@/components/ui/EmptyState";
+import { useAuth } from "@/contexts/AuthContext";
 
 // Simplified User type for this component
 interface CourseRepUser {
-  id: string;
+  id: string; // User ID
+  studentTableId?: string; // Student table ID (needed for API calls)
   name: string;
   email: string;
   role: string;
-  studentId?: string;
+  studentId?: string; // Student number/matric
   courseRepData?: Array<{
     courseId: string;
     courseName: string;
-    department: string;
+    courseCode: string;
   }>;
 }
 
+// Student type for selection
+interface StudentOption {
+  id: string; // User ID
+  studentTableId: string; // Student table ID (needed for API calls)
+  name: string;
+  email: string;
+  studentNo?: string;
+}
+
 const CourseRepManagement = () => {
+  const { token } = useAuth();
   const [courseRepList, setCourseRepList] = useState<CourseRepUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -74,15 +83,20 @@ const CourseRepManagement = () => {
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [courseRepSearch, setCourseRepSearch] = useState("");
   const [courseRepCourseFilter, setCourseRepCourseFilter] = useState("all");
+  const [isAssigning, setIsAssigning] = useState(false);
+  const [isRemoving, setIsRemoving] = useState(false);
+  const [selectedCourseForRemoval, setSelectedCourseForRemoval] = useState<
+    string | null
+  >(null);
 
   // Wizard State - Simplified to 2 steps
   const [step, setStep] = useState(1);
   const [selectedCourse, setSelectedCourse] = useState("");
   const [studentSearch, setStudentSearch] = useState("");
-  const [selectedStudent, setSelectedStudent] = useState<CourseRepUser | null>(
+  const [selectedStudent, setSelectedStudent] = useState<StudentOption | null>(
     null,
   );
-  const [availableStudents, setAvailableStudents] = useState<CourseRepUser[]>(
+  const [availableStudents, setAvailableStudents] = useState<StudentOption[]>(
     [],
   );
   const [allCourses, setAllCourses] = useState<Course[]>([]);
@@ -90,15 +104,21 @@ const CourseRepManagement = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    loadCourseReps();
+    if (token) {
+      loadCourseReps();
+    }
     loadCourses();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
 
   const loadCourses = async () => {
     try {
       const response = await coursesService.getAllCourses();
-      if (response.success && response.data?.data) {
-        setAllCourses(response.data.data);
+      if (response.success && response.data) {
+        const coursesData = Array.isArray(response.data)
+          ? response.data
+          : response.data.data || [];
+        setAllCourses(coursesData);
       } else {
         setAllCourses([]);
       }
@@ -117,45 +137,72 @@ const CourseRepManagement = () => {
     }
   }, [addModalOpen]);
 
-  // Load students for search
+  // Load students for search (only students who are not already reps)
   useEffect(() => {
-    if (step === 2) {
+    if (step === 2 && selectedCourse) {
       const loadStudents = async () => {
         const response = await usersServices.getAllUsers();
         if (response.success && response.data?.users) {
+          // Get students who are enrolled in the selected course but not already reps
           const students = response.data.users
-            .filter((u) => u.role === Role.STUDENT)
+            .filter((u) => u.role === Role.STUDENT && u.student)
             .map((u) => ({
               id: u.id,
+              studentTableId: u.student!.id,
               name: u.name,
               email: u.email,
-              role: u.role,
-              studentId: u.student?.studentId,
+              studentNo: u.student?.studentId || u.student?.matricNo,
             }));
           setAvailableStudents(students);
         }
       };
       loadStudents();
     }
-  }, [step]);
+  }, [step, selectedCourse]);
 
   const loadCourseReps = async () => {
+    if (!token) return;
+
     setLoading(true);
     try {
-      const response = await usersServices.getAllUsers();
-      if (response.success && response.data?.users) {
-        // Filter users with REP role
-        const reps = response.data.users
-          .filter((u) => u.role === Role.REP)
-          .map((u) => ({
-            id: u.id,
-            name: u.name,
-            email: u.email,
-            role: u.role,
-            studentId: u.student?.studentId,
-            courseRepData: [], // Course assignments will come from API
-          }));
-        setCourseRepList(reps);
+      // Use the dedicated fetch-reps endpoint to get course reps with their course assignments
+      const response = await usersServices.fetchCourseReps(token);
+
+      if (response.success && response.data?.reps) {
+        // Transform the response data to match our CourseRepUser interface
+        const reps: CourseRepUser[] = response.data.reps.map((rep) => {
+          return {
+            id: rep.student?.user?.id || rep.studentId,
+            studentTableId: rep.studentId,
+            name: rep.student?.user?.name || "Unknown",
+            email: rep.student?.user?.email || "",
+            role: Role.REP,
+            studentId: rep.student?.studentId || rep.student?.matricNo,
+            courseRepData: [
+              {
+                courseId: rep.course?.id || rep.courseId,
+                courseName: rep.course?.title || "Unknown Course",
+                courseCode: rep.course?.code || "",
+              },
+            ],
+          };
+        });
+
+        // Group reps by user ID to combine their course assignments
+        const groupedReps = reps.reduce((acc, rep) => {
+          const existing = acc.find((r) => r.id === rep.id);
+          if (existing && rep.courseRepData) {
+            existing.courseRepData = [
+              ...(existing.courseRepData || []),
+              ...rep.courseRepData,
+            ];
+          } else {
+            acc.push(rep);
+          }
+          return acc;
+        }, [] as CourseRepUser[]);
+
+        setCourseRepList(groupedReps);
       } else {
         setCourseRepList([]);
       }
@@ -167,35 +214,129 @@ const CourseRepManagement = () => {
   };
 
   const handleAssign = async () => {
-    if (!selectedStudent || !selectedCourse) return;
+    if (!selectedStudent || !selectedCourse || !token) {
+      toast({
+        title: "Error",
+        description: "Please select both a course and a student",
+        variant: "destructive",
+      });
+      return;
+    }
 
-    // TODO: Integrate with assignRep API
-    toast({
-      title: "Feature Coming Soon",
-      description:
-        "Course rep assignment will be available once the API is integrated.",
-    });
-    setAddModalOpen(false);
+    setIsAssigning(true);
+    try {
+      // Use the student table ID (not user ID) for the API call
+      const response = await usersServices.assignRep(
+        selectedCourse,
+        selectedStudent.studentTableId,
+        token,
+      );
+
+      if (response.success) {
+        toast({
+          title: "Success",
+          description: `${selectedStudent.name} has been assigned as course representative`,
+        });
+        setAddModalOpen(false);
+        loadCourseReps(); // Refresh the list
+      } else {
+        toast({
+          title: "Error",
+          description:
+            response.error || "Failed to assign course representative",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred",
+        variant: "destructive",
+      });
+    } finally {
+      setIsAssigning(false);
+    }
   };
 
   const handleRemoveCourseRep = async () => {
-    if (selectedCourseRep) {
-      // TODO: Integrate with removeCourseRep API
-      toast({
-        title: "Feature Coming Soon",
-        description:
-          "Course rep removal will be available once the API is integrated.",
-      });
+    if (!selectedCourseRep || !token) {
+      setDeleteDialogOpen(false);
+      return;
     }
-    setDeleteDialogOpen(false);
-    setSelectedCourseRep(null);
+
+    // If we have a specific course to remove from, use that
+    // Otherwise, we need to remove from all courses (or show an error)
+    if (!selectedCourseRep.studentTableId) {
+      toast({
+        title: "Error",
+        description: "Student information not found",
+        variant: "destructive",
+      });
+      setDeleteDialogOpen(false);
+      setSelectedCourseRep(null);
+      return;
+    }
+
+    // If the rep has course data, remove from the selected course
+    // Otherwise, we need to get the course info first
+    const courseId =
+      selectedCourseForRemoval ||
+      selectedCourseRep.courseRepData?.[0]?.courseId;
+
+    if (!courseId) {
+      toast({
+        title: "Error",
+        description:
+          "No course assignment found for this representative. They may need to be removed manually from the database.",
+        variant: "destructive",
+      });
+      setDeleteDialogOpen(false);
+      setSelectedCourseRep(null);
+      return;
+    }
+
+    setIsRemoving(true);
+    try {
+      const response = await usersServices.removeCourseRep(
+        courseId,
+        selectedCourseRep.studentTableId,
+        token,
+      );
+
+      if (response.success) {
+        toast({
+          title: "Success",
+          description: `${selectedCourseRep.name} has been removed as course representative`,
+        });
+        loadCourseReps(); // Refresh the list
+      } else {
+        toast({
+          title: "Error",
+          description:
+            response.error || "Failed to remove course representative",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRemoving(false);
+      setDeleteDialogOpen(false);
+      setSelectedCourseRep(null);
+      setSelectedCourseForRemoval(null);
+    }
   };
 
   const filteredStudents = availableStudents
     .filter(
       (s) =>
         s.name.toLowerCase().includes(studentSearch.toLowerCase()) ||
-        s.email.toLowerCase().includes(studentSearch.toLowerCase()),
+        s.email.toLowerCase().includes(studentSearch.toLowerCase()) ||
+        s.studentNo?.toLowerCase().includes(studentSearch.toLowerCase()),
     )
     .slice(0, 5); // Limit results
 
@@ -357,17 +498,29 @@ const CourseRepManagement = () => {
                       </Badge>
                     </div>
 
+                    {rep.studentId && (
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        ID: {rep.studentId}
+                      </p>
+                    )}
+
                     <div className="flex flex-wrap items-center gap-2 mt-1">
-                      {rep.courseRepData?.map((data, idx) => (
-                        <Badge
-                          key={idx}
-                          variant="outline"
-                          className="text-[10px] font-normal gap-1"
-                        >
-                          <BookOpen className="w-3 h-3" />
-                          {data.courseName}
-                        </Badge>
-                      ))}
+                      {rep.courseRepData && rep.courseRepData.length > 0 ? (
+                        rep.courseRepData.map((data, idx) => (
+                          <Badge
+                            key={idx}
+                            variant="outline"
+                            className="text-[10px] font-normal gap-1"
+                          >
+                            <BookOpen className="w-3 h-3" />
+                            {data.courseName || data.courseCode}
+                          </Badge>
+                        ))
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic">
+                          No course assignment data
+                        </span>
+                      )}
                     </div>
 
                     <p className="text-xs text-muted-foreground mt-1">
@@ -386,8 +539,6 @@ const CourseRepManagement = () => {
                         name: rep.name,
                         email: rep.email,
                         role: rep.role as Member["role"],
-                        department:
-                          rep.courseRepData?.[0]?.department || "Unknown",
                         studentId: rep.studentId,
                         isMinor: false,
                         createdAt: new Date(),
@@ -405,6 +556,12 @@ const CourseRepManagement = () => {
                     className="text-destructive hover:text-destructive hover:bg-destructive/10"
                     onClick={() => {
                       setSelectedCourseRep(rep);
+                      // If rep has courses, pre-select the first one for removal
+                      if (rep.courseRepData && rep.courseRepData.length > 0) {
+                        setSelectedCourseForRemoval(
+                          rep.courseRepData[0].courseId,
+                        );
+                      }
                       setDeleteDialogOpen(true);
                     }}
                   >
@@ -483,7 +640,8 @@ const CourseRepManagement = () => {
                         >
                           <div className="font-medium">{student.name}</div>
                           <div className="text-xs text-muted-foreground">
-                            {student.email}
+                            {student.email}{" "}
+                            {student.studentNo && `• ${student.studentNo}`}
                           </div>
                         </div>
                       ))
@@ -533,9 +691,18 @@ const CourseRepManagement = () => {
               <Button
                 variant="gradient"
                 onClick={handleAssign}
-                disabled={!selectedStudent}
+                disabled={!selectedStudent || isAssigning}
               >
-                Assign <Check className="w-4 h-4 ml-2" />
+                {isAssigning ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Assigning...
+                  </>
+                ) : (
+                  <>
+                    Assign <UserCheck className="w-4 h-4 ml-2" />
+                  </>
+                )}
               </Button>
             )}
           </DialogFooter>
@@ -560,16 +727,48 @@ const CourseRepManagement = () => {
             <AlertDialogTitle>Remove Course Representative?</AlertDialogTitle>
             <AlertDialogDescription>
               This will remove {selectedCourseRep?.name} from the course rep
-              role.
+              role and change their role back to student.
             </AlertDialogDescription>
           </AlertDialogHeader>
+
+          {/* If rep has multiple courses, let user select which one to remove from */}
+          {selectedCourseRep?.courseRepData &&
+            selectedCourseRep.courseRepData.length > 1 && (
+              <div className="py-4">
+                <Label>Select course to remove from:</Label>
+                <Select
+                  value={selectedCourseForRemoval || ""}
+                  onValueChange={setSelectedCourseForRemoval}
+                >
+                  <SelectTrigger className="mt-2">
+                    <SelectValue placeholder="Select course..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {selectedCourseRep.courseRepData.map((course) => (
+                      <SelectItem key={course.courseId} value={course.courseId}>
+                        {course.courseName} ({course.courseCode})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={isRemoving}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleRemoveCourseRep}
+              disabled={isRemoving}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Remove Role
+              {isRemoving ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Removing...
+                </>
+              ) : (
+                "Remove Role"
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

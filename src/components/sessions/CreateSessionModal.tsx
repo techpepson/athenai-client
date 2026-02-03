@@ -19,13 +19,29 @@ import { toast } from "sonner";
 import { User } from "@/contexts/AuthContext";
 import { AttendanceSession } from "@/types/attendance";
 import { Role } from "@/enums/enums";
+import { Loader2 } from "lucide-react";
+import { coursesService } from "@/services/courses.services";
+import { usersServices } from "@/services/users.services";
+import {
+  createSession,
+  SessionType,
+  SessionMode,
+  CreateSessionPayload,
+} from "@/services/sessions.service";
 
-// Placeholder courses until API is integrated
-const PLACEHOLDER_COURSES = [
-  { id: "cs101", name: "Introduction to Computer Science", department: "cs" },
-  { id: "cs201", name: "Data Structures", department: "cs" },
-  { id: "cs301", name: "Algorithms", department: "cs" },
-];
+interface Course {
+  id: string;
+  code: string;
+  title: string;
+}
+
+interface LecturerOption {
+  id: string; // Lecturer table id
+  userId: string;
+  name: string;
+  email: string;
+  staffNo?: string;
+}
 
 interface CreateSessionModalProps {
   open: boolean;
@@ -41,74 +57,199 @@ export const CreateSessionModal = ({
   onCreateSession,
 }: CreateSessionModalProps) => {
   const [selectedCourse, setSelectedCourse] = useState("");
-  const [sessionType, setSessionType] = useState<
-    "class" | "exam" | "event" | "shift"
-  >("class");
+  const [selectedLecturer, setSelectedLecturer] = useState("");
+  const [sessionName, setSessionName] = useState("");
+  const [sessionType, setSessionType] = useState<SessionType>(
+    SessionType.CLASS,
+  );
   const [location, setLocation] = useState("");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
-  const [expectedCount, setExpectedCount] = useState("");
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [lecturers, setLecturers] = useState<LecturerOption[]>([]);
+  const [isLoadingCourses, setIsLoadingCourses] = useState(false);
+  const [isLoadingLecturers, setIsLoadingLecturers] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Pre-fill for Course Rep or Lecturer with single course
-  // TODO: Implement course pre-fill once course data is available from API
+  const isLecturer = user?.role === Role.LECTURER;
+  const isRep = user?.role === Role.REP;
+
+  // Fetch courses for lecturers when modal opens
   useEffect(() => {
-    if (open) {
-      // Course pre-fill will be implemented when course API is integrated
-      // For now, users must manually select their course
+    if (open && isLecturer) {
+      setIsLoadingCourses(true);
+      coursesService
+        .getLecturerCourses()
+        .then((res) => {
+          if (res.success && res.data?.data) {
+            setCourses(res.data.data);
+          } else {
+            setCourses([]);
+          }
+        })
+        .catch((error) => {
+          console.error("Failed to load courses:", error);
+          setCourses([]);
+        })
+        .finally(() => setIsLoadingCourses(false));
     }
-  }, [open, user]);
+  }, [open, isLecturer]);
+
+  // Fetch lecturers for course reps when modal opens
+  useEffect(() => {
+    if (open && isRep) {
+      setIsLoadingLecturers(true);
+      usersServices
+        .getAllUsers()
+        .then((res) => {
+          if (res.success && res.data?.users) {
+            // Filter only lecturers and map to the format we need
+            const lecturerUsers = res.data.users
+              .filter((u) => u.role === Role.LECTURER && u.lecturer?.id)
+              .map((u) => ({
+                id: u.lecturer!.id,
+                userId: u.id,
+                name: u.name,
+                email: u.email,
+                staffNo: u.lecturer?.staffNo || undefined,
+              }));
+            setLecturers(lecturerUsers);
+          } else {
+            setLecturers([]);
+          }
+        })
+        .catch((error) => {
+          console.error("Failed to load lecturers:", error);
+          setLecturers([]);
+        })
+        .finally(() => setIsLoadingLecturers(false));
+    }
+  }, [open, isRep]);
 
   // Reset form when modal closes
   useEffect(() => {
     if (!open) {
       setSelectedCourse("");
-      setSessionType("class");
+      setSelectedLecturer("");
+      setSessionName("");
+      setSessionType(SessionType.CLASS);
       setLocation("");
       setStartTime("");
       setEndTime("");
-      setExpectedCount("");
     }
   }, [open]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Get token from localStorage
+  const getToken = (): string | null => {
+    return localStorage.getItem("accessToken");
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const course = PLACEHOLDER_COURSES.find((c) => c.id === selectedCourse);
-
-    const newSession: AttendanceSession = {
-      id: `session-${Date.now()}`,
-      name: course?.name || "New Session",
-      type: sessionType,
-      attendanceType: "checkin",
-      startTime: new Date(startTime),
-      endTime: new Date(endTime),
-      status: new Date(startTime) <= new Date() ? "active" : "scheduled",
-      location: location || undefined,
-      expectedCount: parseInt(expectedCount) || 0,
-      presentCount: 0,
-      courseId: selectedCourse,
-      courseName: course?.name,
-      createdBy: user?.id,
-      createdByRole:
-        user?.role?.toLowerCase() as AttendanceSession["createdByRole"],
-    };
-
-    if (onCreateSession) {
-      onCreateSession(newSession);
+    const token = getToken();
+    if (!token) {
+      toast.error("You must be logged in to create a session");
+      return;
     }
 
-    toast.success("Session created successfully!");
-    onOpenChange(false);
+    // Validate based on role
+    if (isLecturer && !selectedCourse) {
+      toast.error("Please select a course");
+      return;
+    }
+
+    if (isRep && !selectedLecturer) {
+      toast.error("Please select a lecturer");
+      return;
+    }
+
+    if (!sessionName.trim()) {
+      toast.error("Please enter a session name");
+      return;
+    }
+
+    if (!startTime || !endTime) {
+      toast.error("Please set start and end times");
+      return;
+    }
+
+    const startDate = new Date(startTime);
+    const endDate = new Date(endTime);
+
+    if (endDate <= startDate) {
+      toast.error("End time must be after start time");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const payload: CreateSessionPayload = {
+        name: sessionName,
+        type: sessionType,
+        mode: SessionMode.CHECK_IN,
+        location: location || undefined,
+        startTime: startDate.toISOString(),
+        endTime: endDate.toISOString(),
+      };
+
+      // Add courseId for lecturers, lecturerId for reps
+      if (isLecturer) {
+        payload.courseId = selectedCourse;
+      } else if (isRep) {
+        payload.lecturerId = selectedLecturer;
+      }
+
+      const response = await createSession(payload, token);
+
+      if (response.success && response.data) {
+        const course = courses.find((c) => c.id === selectedCourse);
+        const lecturer = lecturers.find((l) => l.id === selectedLecturer);
+
+        // Create local session object for immediate UI update
+        const newSession: AttendanceSession = {
+          id: response.data.data?.id || `session-${Date.now()}`,
+          name: sessionName,
+          type:
+            sessionType === SessionType.CLASS
+              ? "class"
+              : sessionType === SessionType.EXAM
+                ? "exam"
+                : sessionType === SessionType.EVENT
+                  ? "event"
+                  : "shift",
+          attendanceType: "checkin",
+          startTime: startDate,
+          endTime: endDate,
+          status: startDate <= new Date() ? "active" : "scheduled",
+          location: location || undefined,
+          expectedCount: 0,
+          presentCount: 0,
+          courseId: selectedCourse || undefined,
+          courseName:
+            course?.title ||
+            (isRep ? `Session for ${lecturer?.name}` : undefined),
+          createdBy: user?.id,
+          createdByRole: user?.role,
+        };
+
+        if (onCreateSession) {
+          onCreateSession(newSession);
+        }
+
+        toast.success("Session created successfully!");
+        onOpenChange(false);
+      } else {
+        toast.error(response.error || "Failed to create session");
+      }
+    } catch (error) {
+      console.error("Error creating session:", error);
+      toast.error("Failed to create session");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
-
-  const isCourseRep = false; // TODO: Check from user roles
-
-  // Get available courses based on user role - using placeholder for now
-  const getAvailableCourses = () => {
-    return PLACEHOLDER_COURSES;
-  };
-
-  const availableCourses = getAvailableCourses();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -120,44 +261,117 @@ export const CreateSessionModal = ({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Course Selection */}
+          {/* Session Name */}
           <div className="space-y-2">
-            <Label htmlFor="course">Course</Label>
-            <Select
-              value={selectedCourse}
-              onValueChange={setSelectedCourse}
-              disabled={availableCourses.length <= 1}
+            <Label htmlFor="sessionName">Session Name</Label>
+            <Input
+              id="sessionName"
+              placeholder="e.g., Week 5 Lecture"
+              value={sessionName}
+              onChange={(e) => setSessionName(e.target.value)}
               required
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select course" />
-              </SelectTrigger>
-              <SelectContent>
-                {availableCourses.map((course) => (
-                  <SelectItem key={course.id} value={course.id}>
-                    {course.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            />
           </div>
+
+          {/* Course Selection - Only for Lecturers */}
+          {isLecturer && (
+            <div className="space-y-2">
+              <Label htmlFor="course">Course</Label>
+              {isLoadingCourses ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground p-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Loading your courses...
+                </div>
+              ) : (
+                <Select
+                  value={selectedCourse}
+                  onValueChange={setSelectedCourse}
+                  required
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a course you teach" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {courses.length > 0 ? (
+                      courses.map((course) => (
+                        <SelectItem key={course.id} value={course.id}>
+                          {course.code} - {course.title}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="" disabled>
+                        No courses assigned to you
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              )}
+              {courses.length === 0 && !isLoadingCourses && (
+                <p className="text-xs text-muted-foreground">
+                  You need to be assigned to courses before creating sessions.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Lecturer Selection - Only for Course Reps */}
+          {isRep && (
+            <div className="space-y-2">
+              <Label htmlFor="lecturer">Lecturer</Label>
+              {isLoadingLecturers ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground p-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Loading lecturers...
+                </div>
+              ) : (
+                <Select
+                  value={selectedLecturer}
+                  onValueChange={setSelectedLecturer}
+                  required
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select lecturer for this session" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {lecturers.length > 0 ? (
+                      lecturers.map((lecturer) => (
+                        <SelectItem key={lecturer.id} value={lecturer.id}>
+                          {lecturer.name}{" "}
+                          {lecturer.staffNo ? `(${lecturer.staffNo})` : ""}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="" disabled>
+                        No lecturers found
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Select the lecturer you are creating this session for.
+              </p>
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="sessionType">Session Type</Label>
             <Select
               value={sessionType}
-              onValueChange={(value: "class" | "exam" | "event" | "shift") =>
-                setSessionType(value)
-              }
+              onValueChange={(value) => setSessionType(value as SessionType)}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select type" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="class">Class</SelectItem>
-                <SelectItem value="exam">Examination</SelectItem>
-                <SelectItem value="event">Event</SelectItem>
-                <SelectItem value="shift">Work Shift</SelectItem>
+                <SelectItem value={SessionType.CLASS}>Class</SelectItem>
+                <SelectItem value={SessionType.EXAM}>Examination</SelectItem>
+                <SelectItem value={SessionType.LAB}>Lab</SelectItem>
+                <SelectItem value={SessionType.TUTORIAL}>Tutorial</SelectItem>
+                <SelectItem value={SessionType.EVENT}>Event</SelectItem>
+                <SelectItem value={SessionType.WORKSHIFT}>
+                  Work Shift
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -195,29 +409,34 @@ export const CreateSessionModal = ({
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="expectedCount">Expected Attendees</Label>
-            <Input
-              id="expectedCount"
-              type="number"
-              placeholder="e.g., 45"
-              min="1"
-              required
-              value={expectedCount}
-              onChange={(e) => setExpectedCount(e.target.value)}
-            />
-          </div>
-
           <div className="flex justify-end gap-3 pt-4">
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
+              disabled={isSubmitting}
             >
               Cancel
             </Button>
-            <Button type="submit" variant="gradient">
-              Create Session
+            <Button
+              type="submit"
+              variant="gradient"
+              disabled={
+                isSubmitting ||
+                isLoadingCourses ||
+                isLoadingLecturers ||
+                (isLecturer && courses.length === 0) ||
+                (isRep && lecturers.length === 0)
+              }
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                "Create Session"
+              )}
             </Button>
           </div>
         </form>

@@ -128,7 +128,8 @@ export interface IUpdateUserInput {
 
 export interface UsersDto {
   role: Role;
-  fullName: string;
+  name?: string; // Backend expects 'name' for updateUserDetails
+  fullName?: string; // Used for enrollment
   profilePicture?: string;
   lecturerHourlyRate?: number;
   lecturerCreditHours?: number;
@@ -141,6 +142,7 @@ export interface UsersDto {
   courses?: string[];
   programOfStudy?: string;
   level?: string;
+  status?: string; // For account status updates
 }
 
 export interface CreateAdminPayload {
@@ -229,6 +231,27 @@ export interface FetchStudentsResponse {
       name: string;
     };
   })[];
+}
+
+export interface FetchCourseRepsResponse {
+  reps: Array<{
+    id: string;
+    studentId: string;
+    courseId: string;
+    assignedAt: Date;
+    student: IStudent & {
+      user: {
+        id: string;
+        email: string;
+        name: string;
+      };
+    };
+    course: {
+      id: string;
+      title: string;
+      code: string;
+    };
+  }>;
 }
 
 export interface UpdateThresholdsResponse {

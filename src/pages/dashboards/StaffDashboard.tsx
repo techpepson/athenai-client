@@ -6,6 +6,7 @@ import {
   Calendar,
   CheckCircle2,
   Clock,
+  CalendarX2,
 } from "lucide-react";
 import { StatCard } from "@/components/dashboard/StatCard";
 import {
@@ -16,15 +17,23 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAuth } from "@/contexts/AuthContext";
-import { mockSessions } from "@/data/mockData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  Session,
+  SessionStatus,
+  AttendanceStatus,
+} from "@/services/sessions.service";
 
 const StaffDashboard = () => {
   const { user } = useAuth();
   const [selectedMonth, setSelectedMonth] = useState<string>(
     new Date().toISOString().slice(0, 7),
   );
+
+  // Sessions state - empty for now, will be populated from API
+  // Using useState to avoid useMemo dependency issues
+  const [sessions] = useState<Session[]>([]);
 
   const months = [
     { value: "2024-01", label: "January 2024" },
@@ -43,22 +52,29 @@ const StaffDashboard = () => {
 
   // Filter sessions by month
   const filteredSessions = useMemo(() => {
-    return mockSessions.filter((session) => {
+    return sessions.filter((session) => {
       const sessionMonth = new Date(session.startTime)
         .toISOString()
         .slice(0, 7);
-      return sessionMonth === selectedMonth && session.status === "completed";
+      return (
+        sessionMonth === selectedMonth &&
+        session.status === SessionStatus.CLOSED
+      );
     });
-  }, [selectedMonth]);
+  }, [selectedMonth, sessions]);
 
   // Calculate attendance statistics
   const totalSessions = filteredSessions.length;
+  // Only count PRESENT (fully completed) as present
   const totalPresent = filteredSessions.reduce(
-    (acc, s) => acc + s.presentCount,
+    (acc, s) =>
+      acc +
+      (s.attendances?.filter((a) => a.status === AttendanceStatus.PRESENT)
+        .length || 0),
     0,
   );
   const totalExpected = filteredSessions.reduce(
-    (acc, s) => acc + s.expectedCount,
+    (acc, s) => acc + (s.attendances?.length || 0),
     0,
   );
   const attendanceRate =
@@ -81,8 +97,14 @@ const StaffDashboard = () => {
       if (!trend[day]) {
         trend[day] = { present: 0, expected: 0 };
       }
-      trend[day].present += session.presentCount;
-      trend[day].expected += session.expectedCount;
+      // Only count PRESENT (fully completed) as present
+      const presentCount =
+        session.attendances?.filter(
+          (a) => a.status === AttendanceStatus.PRESENT,
+        ).length || 0;
+      const expectedCount = session.attendances?.length || 0;
+      trend[day].present += presentCount;
+      trend[day].expected += expectedCount;
     });
     return trend;
   }, [filteredSessions]);
@@ -100,7 +122,7 @@ const StaffDashboard = () => {
           Welcome back {firstName}!, here's your attendance overview
         </p>
         <p className="text-xs sm:text-sm text-muted-foreground mt-2">
-          Staff ID: {user?.staffId || "N/A"}
+          Staff ID: {user?.staff?.staffNo || "N/A"}
         </p>
       </div>
 

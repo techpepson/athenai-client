@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { StudentForm } from "@/components/auth/StudentForm";
 import { StaffForm } from "@/components/auth/StaffForm";
 import { KioskScanner } from "@/components/ui/kiosk-scanner";
+import comasLogo from "../../public/logo.jpg";
 
 const Auth = () => {
   const [email, setEmail] = useState("");
@@ -280,7 +281,7 @@ const Auth = () => {
             /* Login Visual */
             <>
               <img
-                src="/loginImage.jpg"
+                src={comasLogo}
                 alt="Login Visual"
                 className="w-full h-full object-cover"
               />

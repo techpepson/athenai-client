@@ -3,12 +3,24 @@ import { UtilServices } from "./utils.services";
 
 // ==================== Course Types ====================
 
+export interface LecturerUser {
+  id: string;
+  email: string;
+  name: string;
+  phone?: string;
+  profilePicture?: string;
+  imageUrl?: string;
+  isActive?: boolean;
+  createdAt?: string;
+}
+
 export interface Lecturer {
   id: string;
   userId: string;
   staffNo?: string;
-  hourlyRate: number;
-  creditHours: number;
+  hourlyRate?: number;
+  creditHours?: number;
+  user?: LecturerUser;
 }
 
 export interface Course {
@@ -39,10 +51,16 @@ export interface GetStudentCoursesResponse {
   data: Course[];
 }
 
+export interface GetLecturerCoursesResponse {
+  success: boolean;
+  data: Course[];
+}
+
 export interface AddCoursePayload {
   courseCode: string;
   title: string;
   description: string;
+  creditHours?: number;
   lecturerId?: string;
 }
 
@@ -55,6 +73,7 @@ export interface UpdateCoursePayload {
   courseCode?: string;
   title?: string;
   description?: string;
+  creditHours?: number;
   lecturerId?: string;
 }
 
@@ -72,6 +91,10 @@ export interface RemoveStudentCourseResponse {
   message: string;
 }
 
+export interface RemoveLecturerCourseResponse {
+  message: string;
+}
+
 export interface GetDepartmentsResponse {
   departments: Department[];
 }
@@ -81,10 +104,8 @@ export interface AddDepartmentResponse {
   message: string;
 }
 
-// ==================== Local Storage Keys ====================
 const DEPARTMENTS_KEY = "app_departments";
 
-// ==================== Default Data ====================
 const DEFAULT_DEPARTMENTS: Department[] = [
   { label: "Computer Science", value: "cs" },
   { label: "Engineering", value: "eng" },
@@ -94,15 +115,10 @@ const DEFAULT_DEPARTMENTS: Department[] = [
   { label: "Science", value: "sci" },
 ];
 
-// ==================== Courses Service ====================
-
 class CoursesService {
   private readonly basePath = "/courses";
   private utilService = new UtilServices();
 
-  /**
-   * Get all departments (from localStorage for now, will use API later)
-   */
   getDepartments(): Department[] {
     try {
       const stored = localStorage.getItem(DEPARTMENTS_KEY);
@@ -120,9 +136,6 @@ class CoursesService {
     }
   }
 
-  /**
-   * Add a new department (localStorage for now)
-   */
   addDepartment(label: string, value: string): boolean {
     try {
       const departments = this.getDepartments();
@@ -138,13 +151,6 @@ class CoursesService {
     }
   }
 
-  // ==================== API Methods ====================
-
-  /**
-   * Fetch all courses from API
-   * GET /courses/all
-   * Requires: Auth (ADMIN, SYSTEM_ADMIN, LECTURER, STUDENT)
-   */
   async getAllCourses(): Promise<ApiResponse<GetCoursesResponse>> {
     try {
       const token = await this.utilService.getTokenFromLocalStorage();
@@ -164,11 +170,6 @@ class CoursesService {
     }
   }
 
-  /**
-   * Get courses for the current student
-   * GET /courses/student-courses
-   * Requires: Auth (ADMIN, SYSTEM_ADMIN, LECTURER, STUDENT, REP)
-   */
   async getStudentCourses(): Promise<ApiResponse<GetStudentCoursesResponse>> {
     try {
       const token = await this.utilService.getTokenFromLocalStorage();
@@ -184,6 +185,32 @@ class CoursesService {
           error instanceof Error
             ? error.message
             : "Failed to fetch student courses",
+        status: 0,
+        success: false,
+      };
+    }
+  }
+
+  /**
+   * Get courses taught by the current lecturer
+   * GET /courses/lecturer-courses
+   * Requires: Auth (ADMIN, SYSTEM_ADMIN, LECTURER)
+   */
+  async getLecturerCourses(): Promise<ApiResponse<GetLecturerCoursesResponse>> {
+    try {
+      const token = await this.utilService.getTokenFromLocalStorage();
+      const response = await api.get<GetLecturerCoursesResponse>(
+        `${this.basePath}/lecturer-courses`,
+        token,
+      );
+      return response;
+    } catch (error) {
+      return {
+        data: null,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to fetch lecturer courses",
         status: 0,
         success: false,
       };
@@ -302,15 +329,34 @@ class CoursesService {
     }
   }
 
-  // ==================== Legacy Methods (for backward compatibility) ====================
-
   /**
-   * Get courses synchronously (returns empty array, use getAllCourses() instead)
-   * @deprecated Use getAllCourses() instead
+   * Remove a lecturer from a course
+   * GET /courses/remove-lecturer-course?courseId=xxx&lecturerId=xxx
+   * Requires: Auth (ADMIN, SYSTEM_ADMIN, LECTURER)
    */
-  getCourses(): Course[] {
-    // Return empty array - components should use async getAllCourses()
-    return [];
+  async removeLecturerFromCourse(
+    courseId: string,
+    lecturerId: string,
+  ): Promise<ApiResponse<RemoveLecturerCourseResponse>> {
+    try {
+      const token = await this.utilService.getTokenFromLocalStorage();
+      const response = await api.get<RemoveLecturerCourseResponse>(
+        `${this.basePath}/remove-lecturer-course`,
+        token,
+        { params: { courseId, lecturerId } },
+      );
+      return response;
+    } catch (error) {
+      return {
+        data: null,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to remove lecturer from course",
+        status: 0,
+        success: false,
+      };
+    }
   }
 }
 

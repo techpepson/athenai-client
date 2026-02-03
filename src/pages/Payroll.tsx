@@ -3,255 +3,231 @@ import {
   TrendingUp,
   Clock,
   DollarSign,
-  CheckCircle,
-  Calendar,
+  Loader2,
+  GraduationCap,
+  ClipboardCheck,
 } from "lucide-react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useAuth } from "@/contexts/AuthContext";
-import { coursesService, Course } from "@/services/courses.services";
 import { PayrollStatsCard } from "@/components/staff/PayrollStatsCard";
-
-interface Session {
-  id: string;
-  staffId: string;
-  staffName: string;
-  department: string;
-  courseId: string;
-  courseName: string;
-  date: string;
-  clockIn: string;
-  clockOut: string;
-  hoursWorked: number;
-  hourlyRate: number;
-  earnings: number;
-  paymentStatus: "pending" | "paid";
-}
-
-// Placeholder - will be replaced with API data
-const PLACEHOLDER_SESSIONS: Session[] = [];
+import {
+  getLecturerEarnings,
+  LecturerEarning,
+} from "@/services/payroll.service";
+import { Role } from "@/enums/enums";
 
 const Payroll = () => {
-  const { user } = useAuth();
-  const [sessions] = useState<Session[]>(PLACEHOLDER_SESSIONS);
-  const [selectedCourse, setSelectedCourse] = useState<string>("all");
-  const [selectedMonth, setSelectedMonth] = useState<string>("2026-01");
-  const [allCourses, setAllCourses] = useState<Course[]>([]);
+  const { user, token } = useAuth();
+  const [lecturerData, setLecturerData] = useState<LecturerEarning | null>(
+    null,
+  );
+  const [loading, setLoading] = useState(true);
+
+  const isLecturer = user?.role === Role.LECTURER;
 
   useEffect(() => {
-    const loadCourses = async () => {
+    const loadPayrollData = async () => {
+      if (!token || !isLecturer) {
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
       try {
-        const response = await coursesService.getAllCourses();
-        if (response.success && response.data?.data) {
-          setAllCourses(response.data.data);
+        // Fetch lecturer earnings (calculated from attendance records)
+        const earningsResponse = await getLecturerEarnings(token);
+
+        if (earningsResponse.success && earningsResponse.data?.result) {
+          // Find this lecturer's earnings by matching email
+          const myEarnings = earningsResponse.data.result.find(
+            (e) => e.email === user?.email,
+          );
+          if (myEarnings) {
+            setLecturerData(myEarnings);
+          }
         }
-      } catch {
-        setAllCourses([]);
+      } catch (error) {
+        console.error("Failed to load payroll data:", error);
+      } finally {
+        setLoading(false);
       }
     };
-    loadCourses();
-  }, []);
 
-  // Get courses taught by the current lecturer
-  // TODO: Fetch lecturer's assigned courses from API
-  const coursesTaught: string[] = []; // Placeholder - will be fetched from lecturer-course assignments API
-  const lecturerCourses = allCourses.filter((course) =>
-    coursesTaught.includes(course.id),
-  );
+    loadPayrollData();
+  }, [token, user?.email, isLecturer]);
 
-  // Filter sessions for this lecturer's courses only
-  const filteredSessions = sessions.filter((session) => {
-    // Only show sessions for courses this lecturer teaches
-    const isLecturerCourse = coursesTaught.includes(session.courseId);
-    if (!isLecturerCourse) return false;
+  if (!isLecturer) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
+        <GraduationCap className="w-16 h-16 text-muted-foreground/50 mb-4" />
+        <h2 className="text-xl font-semibold text-foreground mb-2">
+          Lecturer Access Only
+        </h2>
+        <p className="text-muted-foreground max-w-md">
+          This page is only accessible to lecturers. Please contact an
+          administrator if you believe you should have access.
+        </p>
+      </div>
+    );
+  }
 
-    const matchesCourse =
-      selectedCourse === "all" || session.courseId === selectedCourse;
-    const matchesMonth = session.date.startsWith(selectedMonth);
-
-    return matchesCourse && matchesMonth;
-  });
-
-  // Calculate statistics
-  const calculateStats = () => {
-    return {
-      totalSessions: filteredSessions.length,
-      totalHours: filteredSessions.reduce((sum, s) => sum + s.hoursWorked, 0),
-      pendingPayment: filteredSessions
-        .filter((s) => s.paymentStatus === "pending")
-        .reduce((sum, s) => sum + s.earnings, 0),
-      paidThisMonth: filteredSessions
-        .filter((s) => s.paymentStatus === "paid")
-        .reduce((sum, s) => sum + s.earnings, 0),
-    };
-  };
-
-  const stats = calculateStats();
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">Loading payroll data...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Payroll</h1>
+        <h1 className="text-2xl font-bold text-foreground">My Payroll</h1>
         <p className="text-muted-foreground mt-1">
-          Track your teaching hours and earnings
+          Track your attendance hours and earnings
         </p>
       </div>
 
-      {/* Filters - Only Course dropdown and Date filter */}
-      <div className="flex items-center gap-4 bg-card p-4 rounded-xl border border-border flex-wrap">
-        <Select value={selectedCourse} onValueChange={setSelectedCourse}>
-          <SelectTrigger className="w-52">
-            <SelectValue placeholder="All My Courses" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All My Courses</SelectItem>
-            {lecturerCourses.map((course) => (
-              <SelectItem key={course.id} value={course.id}>
-                {course.title}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      {/* Lecturer Info Card */}
+      {lecturerData && (
+        <div className="bg-gradient-to-r from-primary/10 to-primary/5 rounded-xl border border-primary/20 p-6">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
+                <GraduationCap className="w-6 h-6 text-primary" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">
+                  {lecturerData.name}
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  {lecturerData.staffNo || "No Staff ID"} • {lecturerData.email}
+                </p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-sm text-muted-foreground">Hourly Rate</p>
+              <p className="text-2xl font-bold text-primary">
+                ${lecturerData.hourlyRate.toFixed(2)}/hr
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
-        <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-          <SelectTrigger className="w-40">
-            <Calendar className="w-4 h-4 mr-2" />
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="2026-01">January 2026</SelectItem>
-            <SelectItem value="2025-12">December 2025</SelectItem>
-            <SelectItem value="2025-11">November 2025</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Stats Cards - Without Total Staff card */}
+      {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         <PayrollStatsCard
-          label="Total Hours This Month"
-          value={`${stats.totalHours.toFixed(1)}h`}
+          label="Total Hours Attended"
+          value={`${lecturerData?.totalHours.toFixed(1) || 0}h`}
           icon={Clock}
           variant="primary"
         />
         <PayrollStatsCard
-          label="Pending Payments"
-          value={`$${stats.pendingPayment.toFixed(2)}`}
+          label="Hourly Rate"
+          value={`$${lecturerData?.hourlyRate.toFixed(2) || 0}`}
           icon={DollarSign}
           variant="warning"
         />
         <PayrollStatsCard
-          label="Paid This Month"
-          value={`$${stats.paidThisMonth.toFixed(2)}`}
-          icon={CheckCircle}
+          label="Total Earnings"
+          value={`$${lecturerData?.earnings.toFixed(2) || 0}`}
+          icon={TrendingUp}
           variant="success"
         />
       </div>
 
-      {/* Monthly Payroll Overview */}
+      {/* Earnings Summary */}
       <div className="bg-card rounded-xl border border-border overflow-hidden">
         <div className="p-6 border-b border-border">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-primary" />
-              <h2 className="text-lg font-semibold text-foreground">
-                Monthly Payroll Overview
-              </h2>
-            </div>
-            <div className="text-sm text-muted-foreground">
-              {filteredSessions.length} session(s) found
+          <div className="flex items-center gap-2">
+            <ClipboardCheck className="w-5 h-5 text-primary" />
+            <h2 className="text-lg font-semibold text-foreground">
+              Attendance-Based Earnings
+            </h2>
+          </div>
+          <p className="text-sm text-muted-foreground mt-1">
+            Your earnings are calculated from your check-in and check-out times
+            at attended sessions.
+          </p>
+        </div>
+
+        {lecturerData ? (
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-muted/30 rounded-lg p-6">
+                <h3 className="text-sm font-medium text-muted-foreground mb-2">
+                  How Your Earnings Are Calculated
+                </h3>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-foreground">
+                      Total Hours Attended
+                    </span>
+                    <span className="font-semibold text-foreground">
+                      {lecturerData.totalHours}h
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-foreground">× Hourly Rate</span>
+                    <span className="font-semibold text-foreground">
+                      ${lecturerData.hourlyRate.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="border-t border-border pt-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-foreground font-medium">
+                        Total Earnings
+                      </span>
+                      <span className="font-bold text-xl text-emerald-600">
+                        ${lecturerData.earnings.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-primary/5 rounded-lg p-6">
+                <h3 className="text-sm font-medium text-muted-foreground mb-4">
+                  Earnings Breakdown
+                </h3>
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="text-muted-foreground">
+                        Hours Worked
+                      </span>
+                      <span className="text-foreground font-medium">
+                        {lecturerData.totalHours}h
+                      </span>
+                    </div>
+                    <div className="w-full bg-muted rounded-full h-2">
+                      <div
+                        className="bg-primary h-2 rounded-full"
+                        style={{
+                          width: `${Math.min((lecturerData.totalHours / 100) * 100, 100)}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Earnings are based on completed attendance records where you
+                    have both checked in and checked out of a session.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  Date
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  Module
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  Hours Worked
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  Earnings
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  Status
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {filteredSessions
-                .sort(
-                  (a, b) =>
-                    new Date(b.date).getTime() - new Date(a.date).getTime(),
-                )
-                .map((session) => (
-                  <tr
-                    key={session.id}
-                    className="hover:bg-muted/30 transition-colors"
-                  >
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-3">
-                        <Calendar className="w-4 h-4 text-muted-foreground" />
-                        <div className="text-sm text-foreground">
-                          {new Date(session.date).toLocaleDateString()}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="px-3 py-1 bg-primary/10 text-primary text-xs rounded-full font-medium">
-                        {session.courseName}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2 text-sm text-foreground">
-                        <Clock className="w-4 h-4 text-muted-foreground" />
-                        {session.hoursWorked}h
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-semibold text-emerald-600">
-                        ${session.earnings.toFixed(2)}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {session.paymentStatus === "pending" ? (
-                        <span className="px-3 py-1 bg-amber-500/10 text-amber-600 text-xs rounded-full font-medium">
-                          Pending
-                        </span>
-                      ) : (
-                        <span className="px-3 py-1 bg-emerald-500/10 text-emerald-600 text-xs rounded-full font-medium">
-                          Paid
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
-
-        {filteredSessions.length === 0 && (
+        ) : (
           <div className="p-12 text-center">
-            <Clock className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+            <ClipboardCheck className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-medium text-foreground mb-2">
-              No sessions found
+              No attendance records found
             </h3>
             <p className="text-muted-foreground">
-              {lecturerCourses.length === 0
-                ? "You don't have any courses assigned yet."
-                : "No sessions match your current filters."}
+              Attend sessions and check in/out to start earning.
             </p>
           </div>
         )}

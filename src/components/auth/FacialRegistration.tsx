@@ -13,7 +13,7 @@ import * as faceapi from "face-api.js";
 import { KioskScanner } from "@/components/ui/kiosk-scanner";
 
 interface FacialRegistrationProps {
-  onCapture: (imageData: string | null) => void;
+  onCapture: (imageData: string[] | null) => void;
   className?: string;
 }
 
@@ -24,7 +24,7 @@ export const FacialRegistration = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
-  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [capturedImages, setCapturedImages] = useState<string[] | null>(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isModelLoading, setIsModelLoading] = useState(false);
   const [detectionError, setDetectionError] = useState<string | null>(null);
@@ -42,7 +42,6 @@ export const FacialRegistration = ({
           faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
           faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
         ]);
-        console.log("Face API models loaded");
       } catch (err) {
         console.error("Error loading face-api models:", err);
         setDetectionError(
@@ -154,22 +153,37 @@ export const FacialRegistration = ({
     }
   }, [isCameraOpen, isModelLoading]);
 
+  // Helper to capture a single frame
+  const captureFrame = () => {
+    if (!videoRef.current) return null;
+    const video = videoRef.current;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const context = canvas.getContext("2d");
+    if (context) {
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL("image/jpeg", 0.9);
+    }
+    return null;
+  };
+
+  // Capture 3 photos within 300ms
   const capturePhoto = useCallback(() => {
-    if (videoRef.current) {
-      const video = videoRef.current;
-      const canvas = document.createElement("canvas");
+    if (!videoRef.current) return;
+    const images: string[] = [];
+    let count = 0;
 
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-
-      const context = canvas.getContext("2d");
-      if (context) {
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
-        setCapturedImage(dataUrl);
-        onCapture(dataUrl);
-
-        // Stop camera directly to avoid stale closure on stopCamera function
+    const takePhoto = () => {
+      const img = captureFrame();
+      if (img) images.push(img);
+      count++;
+      if (count < 3) {
+        setTimeout(takePhoto, 100); // 3 photos in 300ms
+      } else {
+        setCapturedImages(images);
+        onCapture(images);
+        // Stop camera
         if (stream) {
           stream.getTracks().forEach((track) => track.stop());
           setStream(null);
@@ -177,11 +191,12 @@ export const FacialRegistration = ({
         setIsCameraOpen(false);
         setFaceDetected(false);
       }
-    }
+    };
+    takePhoto();
   }, [onCapture, stream]);
 
   const retakePhoto = () => {
-    setCapturedImage(null);
+    setCapturedImages(null);
     onCapture(null);
     startCamera();
   };
@@ -205,7 +220,7 @@ export const FacialRegistration = ({
             ? "success"
             : isCameraOpen
               ? "scanning"
-              : capturedImage
+              : capturedImages
                 ? "success"
                 : "idle"
         }
@@ -214,7 +229,7 @@ export const FacialRegistration = ({
             ? "Face Detected"
             : isCameraOpen
               ? "Searching for face..."
-              : capturedImage
+              : capturedImages
                 ? "Identity Verified"
                 : undefined
         }
@@ -260,13 +275,18 @@ export const FacialRegistration = ({
         )}
 
         {/* Captured Image View */}
-        {!isCameraOpen && capturedImage ? (
+        {!isCameraOpen && capturedImages ? (
           <div className="relative w-full h-full animate-in fade-in zoom-in-95 duration-300">
-            <img
-              src={capturedImage}
-              alt="Captured Face"
-              className="w-full h-full object-cover"
-            />
+            <div className="flex flex-row gap-2 justify-center items-center">
+              {capturedImages.map((img, idx) => (
+                <img
+                  key={idx}
+                  src={img}
+                  alt={`Captured Face ${idx + 1}`}
+                  className="w-1/3 h-full object-cover rounded-md border"
+                />
+              ))}
+            </div>
             <div className="absolute inset-0 bg-black/30 flex items-center justify-center backdrop-blur-[2px]">
               <div className="bg-background/95 backdrop-blur-xl text-foreground px-6 py-4 rounded-2xl shadow-2xl flex flex-col items-center gap-2 border border-success/30 animate-in slide-in-from-bottom-5">
                 <div className="w-12 h-12 rounded-full bg-success/20 flex items-center justify-center mb-1">
@@ -274,7 +294,7 @@ export const FacialRegistration = ({
                 </div>
                 <span className="font-bold text-lg">Identity Verified</span>
                 <p className="text-xs text-muted-foreground">
-                  Photo captured successfully
+                  3 Photos captured successfully
                 </p>
               </div>
             </div>
@@ -345,14 +365,14 @@ export const FacialRegistration = ({
           </>
         )}
 
-        {!isCameraOpen && capturedImage && (
+        {!isCameraOpen && capturedImages && (
           <Button
             variant="outline"
             onClick={retakePhoto}
             className="w-full h-12 rounded-xl border-2 text-base font-medium hover:bg-muted"
           >
             <RefreshCw className="w-4 h-4 mr-2" />
-            Retake Photo
+            Retake Photos
           </Button>
         )}
       </div>

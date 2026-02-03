@@ -12,6 +12,7 @@ import {
   CreateAdminPayload,
   CreateAdminResponse,
   FetchStudentsResponse,
+  FetchCourseRepsResponse,
   ThresholdsPayload,
   UpdateThresholdsResponse,
   GetUserResponse,
@@ -32,11 +33,10 @@ class UsersServices {
    */
   async enrollUser(
     payload: Partial<UsersDto>,
-    faceImage: File,
+    faceImages: File[],
   ): Promise<ApiResponse<EnrollUserResponse>> {
     try {
       const formData = new FormData();
-
       const token = await this.utilService.getTokenFromLocalStorage();
 
       // Append all payload fields to FormData
@@ -50,8 +50,10 @@ class UsersServices {
         }
       });
 
-      // Append the face image
-      formData.append("face", faceImage);
+      // Append all face images as 'faces[]'
+      faceImages.forEach((file) => {
+        formData.append("faces", file);
+      });
 
       const response = await api.upload<EnrollUserResponse>(
         `${this.basePath}/enroll`,
@@ -344,22 +346,46 @@ class UsersServices {
   }
 
   /**
+   * Fetch all course representatives with their assigned courses
+   * GET /users/fetch-reps
+   * Requires: Auth (ADMIN, SYSTEM_ADMIN, LECTURER)
+   */
+  async fetchCourseReps(
+    token: string,
+  ): Promise<ApiResponse<FetchCourseRepsResponse>> {
+    try {
+      const response = await api.get<FetchCourseRepsResponse>(
+        `${this.basePath}/fetch-reps`,
+        token,
+      );
+      return response;
+    } catch (error) {
+      return {
+        data: null,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to fetch course reps",
+        status: 0,
+        success: false,
+      };
+    }
+  }
+
+  /**
    * Create an admin user
-   * POST /users/create-admin?secretCode=xxx
-   * No auth required (uses secret code)
+   * POST /users/create-admin
+   * Requires: Auth (SYSTEM_ADMIN only)
    */
   async createAdmin(
     payload: CreateAdminPayload,
-    secretCode?: string,
   ): Promise<ApiResponse<CreateAdminResponse>> {
     try {
       const token = await this.utilService.getTokenFromLocalStorage();
-      const params = secretCode ? { secretCode } : undefined;
       const response = await api.post<CreateAdminResponse>(
         `${this.basePath}/create-admin`,
         payload,
         token,
-        params ? { params } : undefined,
       );
       return response;
     } catch (error) {

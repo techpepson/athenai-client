@@ -70,15 +70,6 @@ const AdminManagement = () => {
     }
   };
 
-  const generateTempPassword = () => {
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
-    let password = "";
-    for (let i = 0; i < 10; i++) {
-      password += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return password;
-  };
-
   const handleAddStaff = async () => {
     if (
       !newStaffName.trim() ||
@@ -94,7 +85,6 @@ const AdminManagement = () => {
     }
 
     setIsSubmitting(true);
-    const tempPassword = generateTempPassword();
 
     try {
       const response = await usersServices.createAdmin({
@@ -104,7 +94,10 @@ const AdminManagement = () => {
       });
 
       if (response.success) {
-        setGeneratedPassword(tempPassword);
+        // Use the tempPassword returned from the server
+        if (response.data?.data?.tempPassword) {
+          setGeneratedPassword(response.data.data.tempPassword);
+        }
         loadStaff();
         toast({
           title: "Admin Created",

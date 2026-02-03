@@ -1,6 +1,4 @@
 import { useState, useEffect } from "react";
-import { mockAlerts } from "@/data/mockData";
-import { AttendanceAlert } from "@/types/attendance";
 import { cn } from "@/lib/utils";
 import {
   Bell,
@@ -15,6 +13,10 @@ import {
   UserMinus,
   X,
   Check,
+  Loader2,
+  Info,
+  AlertCircle,
+  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -24,27 +26,76 @@ import { Role } from "@/enums/enums";
 import {
   notificationsService,
   PermissionRequest,
+  UserNotification,
+  SystemNotification,
+  NotificationStatus,
+  Priority,
 } from "@/services/notifications.services";
 import { EmptyState } from "@/components/ui/EmptyState";
 
 const Notifications = () => {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [alerts, setAlerts] = useState(mockAlerts);
+  const [notifications, setNotifications] = useState<UserNotification[]>([]);
+  const [systemNotifications, setSystemNotifications] = useState<
+    SystemNotification[]
+  >([]);
   const [activeTab, setActiveTab] = useState("all");
   const [permissionRequests, setPermissionRequests] = useState<
     PermissionRequest[]
   >([]);
+  const [loading, setLoading] = useState(true);
   const [loadingRequests, setLoadingRequests] = useState(false);
+  const [markingAllRead, setMarkingAllRead] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [markingReadId, setMarkingReadId] = useState<string | null>(null);
 
   const isSuperAdmin =
     user?.role === Role.SYSTEM_ADMIN || user?.role === Role.OWNER;
+  const isAdmin =
+    user?.role === Role.ADMIN ||
+    user?.role === Role.SYSTEM_ADMIN ||
+    user?.role === Role.OWNER;
 
+  // Load notifications on mount
   useEffect(() => {
+    loadNotifications();
     if (isSuperAdmin) {
       loadPermissionRequests();
     }
-  }, [isSuperAdmin]);
+    if (isAdmin) {
+      loadSystemNotifications();
+    }
+  }, [isSuperAdmin, isAdmin]);
+
+  const loadNotifications = async () => {
+    setLoading(true);
+    try {
+      const response = await notificationsService.getUserNotifications();
+      if (response.success && response.data) {
+        setNotifications(response.data);
+      } else {
+        setNotifications([]);
+      }
+    } catch {
+      setNotifications([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadSystemNotifications = async () => {
+    try {
+      const response = await notificationsService.getSystemNotifications();
+      if (response.success && response.data) {
+        setSystemNotifications(response.data);
+      } else {
+        setSystemNotifications([]);
+      }
+    } catch {
+      setSystemNotifications([]);
+    }
+  };
 
   const loadPermissionRequests = async () => {
     setLoadingRequests(true);
@@ -54,7 +105,6 @@ const Notifications = () => {
       if (response.success && response.data) {
         setPermissionRequests(response.data.requests || []);
       } else {
-        // Gracefully handle empty/error state
         setPermissionRequests([]);
       }
     } catch {
@@ -93,39 +143,157 @@ const Notifications = () => {
     }
   };
 
-  const filteredAlerts = alerts.filter((alert) => {
+  const handleDeleteNotification = async (notificationId: string) => {
+    setDeletingId(notificationId);
+    try {
+      const response =
+        await notificationsService.deleteUserNotification(notificationId);
+      if (response.success) {
+        setNotifications((prev) => prev.filter((n) => n.id !== notificationId));
+        toast({
+          title: "Notification deleted",
+          description: "The notification has been removed.",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: response.error || "Failed to delete notification",
+          variant: "destructive",
+        });
+      }
+    } catch {
+      toast({
+        title: "Error",
+        description: "Failed to delete notification",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleMarkAsRead = async (notificationId: string) => {
+    setMarkingReadId(notificationId);
+    try {
+      const response =
+        await notificationsService.markNotificationAsRead(notificationId);
+      if (response.success) {
+        setNotifications((prev) =>
+          prev.map((n) =>
+            n.id === notificationId
+              ? { ...n, status: NotificationStatus.READ }
+              : n,
+          ),
+        );
+      } else {
+        toast({
+          title: "Error",
+          description: response.error || "Failed to mark notification as read",
+          variant: "destructive",
+        });
+      }
+    } catch {
+      toast({
+        title: "Error",
+        description: "Failed to mark notification as read",
+        variant: "destructive",
+      });
+    } finally {
+      setMarkingReadId(null);
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    setMarkingAllRead(true);
+    try {
+      const response = await notificationsService.markAllNotificationsAsRead();
+      if (response.success) {
+        setNotifications((prev) =>
+          prev.map((n) => ({ ...n, status: NotificationStatus.READ })),
+        );
+        toast({
+          title: "All notifications marked as read",
+          description: "Your notifications have been updated.",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description:
+            response.error || "Failed to mark all notifications as read",
+          variant: "destructive",
+        });
+      }
+    } catch {
+      toast({
+        title: "Error",
+        description: "Failed to mark all notifications as read",
+        variant: "destructive",
+      });
+    } finally {
+      setMarkingAllRead(false);
+    }
+  };
+
+  // Filter notifications based on active tab
+  const filteredNotifications = notifications.filter((notification) => {
     if (activeTab === "all") return true;
-    if (activeTab === "unread") return !alert.read;
-    return alert.severity === activeTab;
+    if (activeTab === "unread")
+      return notification.status === NotificationStatus.UNREAD;
+    if (activeTab === "high") return notification.priority === Priority.HIGH;
+    if (activeTab === "critical")
+      return notification.priority === Priority.CRITICAL;
+    if (activeTab === "medium")
+      return notification.priority === Priority.MEDIUM;
+    return true;
   });
 
-  const markAllRead = () => {
-    setAlerts(alerts.map((a) => ({ ...a, read: true })));
+  // Get icon based on priority
+  const getPriorityIcon = (priority: Priority) => {
+    switch (priority) {
+      case Priority.CRITICAL:
+        return Zap;
+      case Priority.HIGH:
+        return AlertTriangle;
+      case Priority.MEDIUM:
+        return AlertCircle;
+      case Priority.LOW:
+      default:
+        return Info;
+    }
   };
 
-  const icons = {
-    late: Clock,
-    absent: UserX,
-    pattern: AlertTriangle,
-    checkin: CheckCircle2,
-    checkout: Bell,
+  // Get colors based on priority
+  const priorityColors: Record<Priority, string> = {
+    [Priority.LOW]: "bg-muted text-muted-foreground",
+    [Priority.MEDIUM]: "bg-warning/20 text-warning",
+    [Priority.HIGH]: "bg-destructive/20 text-destructive",
+    [Priority.CRITICAL]: "bg-destructive text-destructive-foreground",
   };
 
-  const severityColors = {
-    low: "bg-muted text-muted-foreground",
-    medium: "bg-warning/20 text-warning",
-    high: "bg-destructive/20 text-destructive",
+  const priorityBorderColors: Record<Priority, string> = {
+    [Priority.LOW]:
+      "text-muted-foreground bg-muted/10 border-muted-foreground/30",
+    [Priority.MEDIUM]: "text-warning bg-warning/10 border-warning/30",
+    [Priority.HIGH]: "text-destructive bg-destructive/10 border-destructive/30",
+    [Priority.CRITICAL]:
+      "text-destructive bg-destructive/20 border-destructive/50",
   };
 
-  const typeColors = {
-    late: "text-warning bg-warning/10 border-warning/30",
-    absent: "text-destructive bg-destructive/10 border-destructive/30",
-    pattern: "text-warning bg-warning/10 border-warning/30",
-    checkin: "text-success bg-success/10 border-success/30",
-    checkout: "text-primary bg-primary/10 border-primary/30",
-  };
+  const unreadCount = notifications.filter(
+    (n) => n.status === NotificationStatus.UNREAD,
+  ).length;
 
-  const unreadCount = alerts.filter((a) => !a.read).length;
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">Loading notifications...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -140,10 +308,14 @@ const Notifications = () => {
         <div className="flex items-center gap-3">
           <Button
             variant="outline"
-            onClick={markAllRead}
-            disabled={unreadCount === 0}
+            onClick={handleMarkAllRead}
+            disabled={unreadCount === 0 || markingAllRead}
           >
-            <CheckCheck className="w-4 h-4 mr-2" />
+            {markingAllRead ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <CheckCheck className="w-4 h-4 mr-2" />
+            )}
             Mark All Read
           </Button>
         </div>
@@ -228,7 +400,7 @@ const Notifications = () => {
           <TabsTrigger value="all">
             All
             <span className="ml-2 px-2 py-0.5 bg-secondary rounded-full text-xs">
-              {alerts.length}
+              {notifications.length}
             </span>
           </TabsTrigger>
           <TabsTrigger value="unread">
@@ -239,29 +411,36 @@ const Notifications = () => {
               </span>
             )}
           </TabsTrigger>
+          <TabsTrigger value="critical">Critical</TabsTrigger>
           <TabsTrigger value="high">High Priority</TabsTrigger>
           <TabsTrigger value="medium">Medium</TabsTrigger>
         </TabsList>
 
         <TabsContent value={activeTab} className="mt-6">
           <div className="space-y-3">
-            {filteredAlerts.map((alert) => {
-              const Icon = icons[alert.type];
+            {filteredNotifications.map((notification) => {
+              const Icon = getPriorityIcon(notification.priority);
+              const isUnread =
+                notification.status === NotificationStatus.UNREAD;
+
               return (
                 <div
-                  key={alert.id}
+                  key={notification.id}
                   className={cn(
                     "p-4 rounded-xl border transition-all duration-200",
-                    !alert.read
+                    isUnread
                       ? "bg-card border-primary/30"
                       : "bg-card/50 border-border",
                   )}
+                  onClick={() => isUnread && handleMarkAsRead(notification.id)}
+                  role={isUnread ? "button" : undefined}
+                  style={{ cursor: isUnread ? "pointer" : "default" }}
                 >
                   <div className="flex items-start gap-4">
                     <div
                       className={cn(
                         "p-3 rounded-xl border",
-                        typeColors[alert.type],
+                        priorityBorderColors[notification.priority],
                       )}
                     >
                       <Icon className="w-5 h-5" />
@@ -269,43 +448,133 @@ const Notifications = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <p className="font-semibold text-foreground">
-                          {alert.memberName}
+                          Notification
                         </p>
                         <span
                           className={cn(
-                            "px-2 py-0.5 text-xs font-medium rounded-full",
-                            severityColors[alert.severity],
+                            "px-2 py-0.5 text-xs font-medium rounded-full capitalize",
+                            priorityColors[notification.priority],
                           )}
                         >
-                          {alert.severity}
+                          {notification.priority.toLowerCase()}
                         </span>
-                        {!alert.read && (
+                        {isUnread && (
                           <span className="w-2 h-2 bg-primary rounded-full" />
                         )}
                       </div>
-                      <p className="text-muted-foreground">{alert.message}</p>
+                      <p className="text-muted-foreground">
+                        {notification.action}
+                      </p>
                       <p className="text-xs text-muted-foreground/60 mt-2">
-                        {alert.timestamp.toLocaleString()}
+                        {new Date(notification.createdAt).toLocaleString()}
                       </p>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="flex-shrink-0"
-                    >
-                      <Trash2 className="w-4 h-4 text-muted-foreground" />
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      {isUnread && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="flex-shrink-0"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleMarkAsRead(notification.id);
+                          }}
+                          disabled={markingReadId === notification.id}
+                        >
+                          {markingReadId === notification.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                          ) : (
+                            <CheckCircle2 className="w-4 h-4 text-muted-foreground" />
+                          )}
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="flex-shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteNotification(notification.id);
+                        }}
+                        disabled={deletingId === notification.id}
+                      >
+                        {deletingId === notification.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                        ) : (
+                          <Trash2 className="w-4 h-4 text-muted-foreground" />
+                        )}
+                      </Button>
+                    </div>
                   </div>
                 </div>
               );
             })}
 
-            {filteredAlerts.length === 0 && (
+            {filteredNotifications.length === 0 && (
               <EmptyState type="notifications" title="No notifications" />
             )}
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* System Notifications Section - Only for Admins */}
+      {user && isAdmin && systemNotifications.length > 0 && (
+        <div className="mt-8">
+          <div className="flex items-center gap-2 mb-4">
+            <Bell className="w-5 h-5 text-primary" />
+            <h2 className="text-lg font-semibold text-foreground">
+              System Notifications
+            </h2>
+            <span className="px-2 py-0.5 bg-secondary text-secondary-foreground rounded-full text-xs">
+              {systemNotifications.length}
+            </span>
+          </div>
+          <div className="space-y-3">
+            {systemNotifications.map((notification) => {
+              const Icon = getPriorityIcon(notification.priority);
+
+              return (
+                <div
+                  key={notification.id}
+                  className="p-4 rounded-xl border border-border bg-card/50"
+                >
+                  <div className="flex items-start gap-4">
+                    <div
+                      className={cn(
+                        "p-3 rounded-xl border",
+                        priorityBorderColors[notification.priority],
+                      )}
+                    >
+                      <Icon className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className="font-semibold text-foreground">
+                          System Alert
+                        </p>
+                        <span
+                          className={cn(
+                            "px-2 py-0.5 text-xs font-medium rounded-full capitalize",
+                            priorityColors[notification.priority],
+                          )}
+                        >
+                          {notification.priority.toLowerCase()}
+                        </span>
+                      </div>
+                      <p className="text-muted-foreground">
+                        {notification.action}
+                      </p>
+                      <p className="text-xs text-muted-foreground/60 mt-2">
+                        {new Date(notification.createdAt).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

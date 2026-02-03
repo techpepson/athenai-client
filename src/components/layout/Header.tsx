@@ -1,19 +1,46 @@
+import { useState, useEffect } from "react";
 import { Bell, Search, User, Sun, Moon, Menu } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { mockAlerts } from "@/data/mockData";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
+import { Role, useAuth } from "@/contexts/AuthContext";
+import {
+  notificationsService,
+  NotificationStatus,
+} from "@/services/notifications.services";
 
 interface HeaderProps {
   onMenuClick: () => void;
 }
 
 export const Header = ({ onMenuClick }: HeaderProps) => {
-  const unreadCount = mockAlerts.filter((a) => !a.read).length;
+  const [unreadCount, setUnreadCount] = useState<number>(0);
   const { theme, setTheme } = useTheme();
   const { user } = useAuth();
+
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchUnread() {
+      try {
+        const response = await notificationsService.getUserNotifications();
+        if (response.success && response.data) {
+          const count = response.data.filter(
+            (n) => n.status === NotificationStatus.UNREAD,
+          ).length;
+          if (isMounted) setUnreadCount(count);
+        } else {
+          if (isMounted) setUnreadCount(0);
+        }
+      } catch {
+        if (isMounted) setUnreadCount(0);
+      }
+    }
+    fetchUnread();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark");
@@ -26,22 +53,22 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
         .join(" ")
     : "Guest";
 
-  const firstName = user?.name.split(" ")[0] || "Guest";
+  const firstName = user?.name?.split(" ")[0] || "Guest";
   const navigate = useNavigate();
 
   const handleNotificationClick = () => {
     if (!user?.role) return;
 
     const rolePrefix =
-      user.role === "super_admin"
+      user.role === Role.SYSTEM_ADMIN
         ? "super_admin"
-        : user.role === "admin"
+        : user.role === Role.ADMIN
           ? "admin"
-          : user.role === "lecturer"
+          : user.role === Role.LECTURER
             ? "lecturer"
-            : user.role === "course_rep"
+            : user.role === Role.REP
               ? "course_rep"
-              : user.role === "staff"
+              : user.role === Role.STAFF
                 ? "staff"
                 : "student";
 
@@ -51,15 +78,15 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
     if (!user?.role) return;
 
     const rolePrefix =
-      user.role === "super_admin"
+      user.role === Role.SYSTEM_ADMIN
         ? "super_admin"
-        : user.role === "admin"
+        : user.role === Role.ADMIN
           ? "admin"
-          : user.role === "lecturer"
+          : user.role === Role.LECTURER
             ? "lecturer"
-            : user.role === "course_rep"
+            : user.role === Role.REP
               ? "course_rep"
-              : user.role === "staff"
+              : user.role === Role.STAFF
                 ? "staff"
                 : "student";
 
