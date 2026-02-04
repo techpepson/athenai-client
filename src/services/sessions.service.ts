@@ -117,6 +117,11 @@ export interface Session {
     id: string;
     staffNo?: string;
     userId: string;
+    user?: {
+      id: string;
+      name: string;
+      email: string;
+    };
   };
   course?: {
     id: string;

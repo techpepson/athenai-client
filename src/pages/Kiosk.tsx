@@ -44,6 +44,9 @@ interface SessionInfo {
   courseId?: string;
   courseName?: string;
   courseCode?: string;
+  lecturerId?: string;
+  lecturerName?: string;
+  lecturerStaffNo?: string;
   type: string;
   attendanceType: string;
   location?: string;
@@ -152,6 +155,9 @@ const Kiosk = () => {
             courseId: session.courseId || undefined,
             courseName: session.course?.title || undefined,
             courseCode: session.course?.code || undefined,
+            lecturerId: session.lecturerId || undefined,
+            lecturerName: session.lecturer?.user?.name || undefined,
+            lecturerStaffNo: session.lecturer?.staffNo || undefined,
             type: session.type,
             attendanceType:
               session.mode === "CHECK_IN" ? "checkin" : "checkout",
@@ -482,29 +488,34 @@ const Kiosk = () => {
   return (
     <div className="fixed inset-0 bg-background z-50 flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 bg-card/50 backdrop-blur-xl border-b border-border">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" onClick={() => navigate(-1)}>
-            <ArrowLeft className="w-5 h-5 mr-2" />
-            Exit Kiosk
+      <div className="flex items-center justify-between p-2 md:p-4 bg-card/50 backdrop-blur-xl border-b border-border">
+        <div className="flex items-center gap-2 md:gap-4">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate(-1)}
+            className="text-xs md:text-sm"
+          >
+            <ArrowLeft className="w-4 h-4 md:mr-2" />
+            <span className="hidden md:inline">Exit Kiosk</span>
           </Button>
           {kioskSettings.organizationLogo && (
             <img
               src={kioskSettings.organizationLogo}
               alt="Organization Logo"
-              className="h-10 w-auto object-contain"
+              className="h-6 md:h-10 w-auto object-contain"
             />
           )}
         </div>
         <div className="text-center">
-          <p className="text-2xl font-bold text-foreground">
+          <p className="text-lg md:text-2xl font-bold text-foreground">
             {currentTime.toLocaleTimeString([], {
               hour: "2-digit",
               minute: "2-digit",
               second: "2-digit",
             })}
           </p>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-xs md:text-sm text-muted-foreground hidden sm:block">
             {currentTime.toLocaleDateString([], {
               weekday: "long",
               year: "numeric",
@@ -513,21 +524,30 @@ const Kiosk = () => {
             })}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon">
-            <Volume2 className="w-5 h-5" />
+        <div className="flex items-center gap-1 md:gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 md:h-10 md:w-10"
+          >
+            <Volume2 className="w-4 h-4 md:w-5 md:h-5" />
           </Button>
-          <Button variant="ghost" size="icon" onClick={handleFullscreen}>
-            <Maximize className="w-5 h-5" />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleFullscreen}
+            className="h-8 w-8 md:h-10 md:w-10"
+          >
+            <Maximize className="w-4 h-4 md:w-5 md:h-5" />
           </Button>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex items-center justify-center p-8">
-        <div className="flex items-center gap-12 max-w-6xl w-full">
+      <div className="flex-1 flex items-center justify-center p-4 md:p-8 overflow-y-auto">
+        <div className="flex flex-col lg:flex-row items-center gap-6 lg:gap-12 max-w-6xl w-full">
           {/* Camera View */}
-          <div className="flex-1 relative">
+          <div className="flex-1 w-full relative">
             <div
               className={cn(
                 "aspect-[4/3] rounded-3xl overflow-hidden border-4 transition-all duration-500 relative",
@@ -619,11 +639,11 @@ const Kiosk = () => {
           </div>
 
           {/* Info Panel */}
-          <div className="w-96 space-y-6">
+          <div className="w-full lg:w-96 space-y-4 lg:space-y-6 order-first lg:order-last">
             {/* Status Card */}
             <div
               className={cn(
-                "p-8 rounded-2xl border transition-all duration-500",
+                "p-4 lg:p-8 rounded-2xl border transition-all duration-500",
                 scanState === "success" && "bg-success/10 border-success/30",
                 scanState === "failed" &&
                   "bg-destructive/10 border-destructive/30",
@@ -722,7 +742,14 @@ const Kiosk = () => {
                     {sessionInfo.courseName}
                   </p>
                 )}
-                <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                {sessionInfo.lecturerName && (
+                  <p className="text-sm text-muted-foreground">
+                    Lecturer: {sessionInfo.lecturerName}
+                    {sessionInfo.lecturerStaffNo &&
+                      ` (${sessionInfo.lecturerStaffNo})`}
+                  </p>
+                )}
+                <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground flex-wrap">
                   {sessionInfo.location && (
                     <div className="flex items-center gap-1">
                       <MapPin className="w-3 h-3" />
@@ -782,34 +809,34 @@ const Kiosk = () => {
       </div>
 
       {/* Footer Stats */}
-      <div className="p-4 bg-card/50 backdrop-blur-xl border-t border-border">
-        <div className="flex items-center justify-center gap-12">
+      <div className="p-2 md:p-4 bg-card/50 backdrop-blur-xl border-t border-border">
+        <div className="flex items-center justify-center gap-4 md:gap-12">
           <div className="text-center">
-            <p className="text-3xl font-bold text-success">
+            <p className="text-xl md:text-3xl font-bold text-success">
               {attendanceStats.present}
             </p>
-            <p className="text-sm text-muted-foreground">Present</p>
+            <p className="text-xs md:text-sm text-muted-foreground">Present</p>
           </div>
-          <div className="w-px h-12 bg-border" />
+          <div className="w-px h-8 md:h-12 bg-border" />
           <div className="text-center">
-            <p className="text-3xl font-bold text-warning">
+            <p className="text-xl md:text-3xl font-bold text-warning">
               {attendanceStats.late}
             </p>
-            <p className="text-sm text-muted-foreground">Late</p>
+            <p className="text-xs md:text-sm text-muted-foreground">Late</p>
           </div>
-          <div className="w-px h-12 bg-border" />
+          <div className="w-px h-8 md:h-12 bg-border" />
           <div className="text-center">
-            <p className="text-3xl font-bold text-destructive">
+            <p className="text-xl md:text-3xl font-bold text-destructive">
               {attendanceStats.absent}
             </p>
-            <p className="text-sm text-muted-foreground">Absent</p>
+            <p className="text-xs md:text-sm text-muted-foreground">Absent</p>
           </div>
-          <div className="w-px h-12 bg-border" />
+          <div className="w-px h-8 md:h-12 bg-border" />
           <div className="text-center">
-            <p className="text-3xl font-bold text-foreground">
+            <p className="text-xl md:text-3xl font-bold text-foreground">
               {attendanceStats.expected}
             </p>
-            <p className="text-sm text-muted-foreground">Expected</p>
+            <p className="text-xs md:text-sm text-muted-foreground">Expected</p>
           </div>
         </div>
       </div>
