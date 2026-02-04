@@ -136,17 +136,12 @@ const Kiosk = () => {
         const response = await getSessionById(sessionId);
 
         if (response.success && response.data) {
-          const session = response.data;
-
-          // Debug: Log session info
-          console.log("Session info loaded from API:", {
-            id: session.id,
-            name: session.name,
-            startTime: session.startTime,
-            endTime: session.endTime,
-            startTimeDate: new Date(session.startTime).toLocaleString(),
-            today: new Date().toLocaleString(),
-          });
+          // The API returns { success: true, data: session }, so we need to access .data.data
+          const responseData = response.data as {
+            success: boolean;
+            data: typeof response.data;
+          };
+          const session = responseData.data || response.data;
 
           // Map API response to SessionInfo
           const mappedSession: SessionInfo = {
