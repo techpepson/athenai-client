@@ -86,17 +86,23 @@ const StudentDashboard = () => {
 
         // Fetch student's enrolled courses
         const coursesResponse = await coursesService.getStudentCourses();
+        console.log("Courses response:", coursesResponse);
         if (coursesResponse.success && coursesResponse.data?.data) {
+          console.log("Student courses loaded:", coursesResponse.data.data);
           setStudentCourses(coursesResponse.data.data);
         } else {
+          console.log("No courses found or error:", coursesResponse);
           setStudentCourses([]);
         }
 
         // Fetch all sessions (admin endpoint gives all sessions with attendances)
         const sessionsResponse = await getAllSessionsAdmin(token);
+        console.log("Sessions response:", sessionsResponse);
         if (sessionsResponse.success && sessionsResponse.data?.data) {
+          console.log("Sessions loaded:", sessionsResponse.data.data);
           setAllSessions(sessionsResponse.data.data);
         } else {
+          console.log("No sessions found or error:", sessionsResponse);
           setAllSessions([]);
         }
 
@@ -122,15 +128,21 @@ const StudentDashboard = () => {
 
   // Get student's enrolled course IDs
   const enrolledCourseIds = useMemo(() => {
-    return studentCourses.map((course) => course.id);
+    const ids = studentCourses.map((course) => course.id);
+    console.log("Enrolled course IDs:", ids);
+    return ids;
   }, [studentCourses]);
 
   // Filter sessions that belong to courses the student is enrolled in
   const studentSessions = useMemo(() => {
-    return allSessions.filter(
+    console.log("All sessions:", allSessions);
+    console.log("All sessions courseIds:", allSessions.map(s => ({ id: s.id, courseId: s.courseId, name: s.name })));
+    const filtered = allSessions.filter(
       (session) =>
         session.courseId && enrolledCourseIds.includes(session.courseId),
     );
+    console.log("Filtered student sessions:", filtered);
+    return filtered;
   }, [allSessions, enrolledCourseIds]);
 
   // Get all attendance records for this student across all sessions
@@ -156,49 +168,64 @@ const StudentDashboard = () => {
         ? studentSessions
         : studentSessions.filter((s) => s.courseId === selectedCourse);
 
-    return baseSessions.filter((s) => s.type === SessionType.CLASS);
+    const result = baseSessions.filter((s) => s.type === SessionType.CLASS);
+    console.log("Filtered sessions (CLASS type only):", result);
+    console.log("Session statuses:", result.map(s => ({ id: s.id, name: s.name, status: s.status, type: s.type })));
+    return result;
   }, [selectedCourse, studentSessions]);
 
   // Calculate attendance statistics
   const attendanceStats = useMemo(() => {
     if (!studentData?.id) {
-      return { attended: 0, late: 0, absent: 0, total: 0, rate: 0 };
+      return { attended: 0, late: 0, absent: 0, total: 0, totalSessions: 0, rate: 0 };
     }
+
+    console.log("Calculating attendance stats for student:", studentData.id);
 
     let attended = 0;
     let late = 0;
     let absent = 0;
 
-    filteredSessions.forEach((session) => {
-      // Only count completed/closed sessions for attendance stats
-      if (session.status === SessionStatus.CLOSED) {
-        const attendance = session.attendances?.find(
-          (a) => a.userId === studentData.id,
-        );
+    // Count only CLOSED sessions for attendance calculations
+    const closedSessions = filteredSessions.filter(
+      (s) => s.status === SessionStatus.CLOSED
+    );
 
-        if (attendance) {
-          // Only PRESENT (checked in + checked out) counts as fully attended
-          if (attendance.status === AttendanceStatus.PRESENT) {
-            attended++;
-          } else if (attendance.status === AttendanceStatus.CHECKED_IN) {
-            // CHECKED_IN without checkout is treated as incomplete/absent for closed sessions
-            absent++;
-          } else if (attendance.status === AttendanceStatus.LATE) {
-            late++;
-          } else if (attendance.status === AttendanceStatus.ABSENT) {
-            absent++;
-          }
-        } else {
-          // No attendance record means absent
+    console.log("Closed sessions for attendance calculation:", closedSessions.length);
+
+    closedSessions.forEach((session) => {
+      const attendance = session.attendances?.find(
+        (a) => a.userId === studentData.id,
+      );
+
+      console.log(`Session ${session.name}: attendance record =`, attendance);
+
+      if (attendance) {
+        console.log(`Attendance status: ${attendance.status}`);
+        // Only PRESENT (checked in + checked out) counts as fully attended
+        if (attendance.status === AttendanceStatus.PRESENT) {
+          attended++;
+        } else if (attendance.status === AttendanceStatus.CHECKED_IN) {
+          // CHECKED_IN without checkout is treated as incomplete/absent for closed sessions
+          absent++;
+        } else if (attendance.status === AttendanceStatus.LATE) {
+          late++;
+        } else if (attendance.status === AttendanceStatus.ABSENT) {
           absent++;
         }
+      } else {
+        // No attendance record means absent
+        absent++;
       }
     });
 
     const total = attended + late + absent;
     const rate = total > 0 ? Math.round(((attended + late) / total) * 100) : 0;
 
-    return { attended, late, absent, total, rate };
+    console.log("Attendance stats result:", { attended, late, absent, total, totalSessions: filteredSessions.length, rate });
+
+    // totalSessions = all sessions (open + closed) for the student's courses
+    return { attended, late, absent, total, totalSessions: filteredSessions.length, rate };
   }, [filteredSessions, studentData?.id]);
 
   // Calculate weekly attendance data for chart using directly fetched attendance records
@@ -228,13 +255,11 @@ const StudentDashboard = () => {
 
         const sessionDate = new Date(sessionStartTime);
         if (sessionDate >= dayDate && sessionDate < nextDay) {
-          // For chart display: PRESENT and CHECKED_IN both show as "present"
-          // (they attended, checkout just confirms they stayed)
+          // Only PRESENT (checked in AND checked out) counts as attended
+          // CHECKED_IN without checkout is incomplete and shown as absent
           if (
             record.status === AttendanceStatus.PRESENT ||
-            record.status === "PRESENT" ||
-            record.status === AttendanceStatus.CHECKED_IN ||
-            record.status === "CHECKED_IN"
+            record.status === "PRESENT"
           ) {
             present++;
           } else if (
@@ -244,8 +269,11 @@ const StudentDashboard = () => {
             late++;
           } else if (
             record.status === AttendanceStatus.ABSENT ||
-            record.status === "ABSENT"
+            record.status === "ABSENT" ||
+            record.status === AttendanceStatus.CHECKED_IN ||
+            record.status === "CHECKED_IN"
           ) {
+            // CHECKED_IN without checkout counts as absent/incomplete
             absent++;
           }
         }
@@ -471,7 +499,7 @@ const StudentDashboard = () => {
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2 sm:gap-3 md:gap-4">
         <StatCard
           title="Total Sessions"
-          value={attendanceStats.total}
+          value={attendanceStats.totalSessions}
           icon={CalendarClock}
           variant="primary"
         />
