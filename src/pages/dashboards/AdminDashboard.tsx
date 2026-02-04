@@ -98,12 +98,20 @@ const AdminDashboard = () => {
         } else {
           setAllAttendances([]);
         }
-        // Calculate total members (excluding admins)
+        // Calculate total members based on user role
+        // System Admin sees all members, Admin sees only students and lecturers
         if (usersResponse.success && usersResponse.data?.users) {
-          const nonAdminUsers = usersResponse.data.users.filter(
-            (u) => u.role !== "ADMIN" && u.role !== "SYSTEM_ADMIN",
-          );
-          setTotalMembers(nonAdminUsers.length);
+          let filteredUsers;
+          if (user?.role === "SYSTEM_ADMIN") {
+            // System admin sees all members
+            filteredUsers = usersResponse.data.users;
+          } else {
+            // Admin sees only students and lecturers
+            filteredUsers = usersResponse.data.users.filter(
+              (u) => u.role === "STUDENT" || u.role === "LECTURER",
+            );
+          }
+          setTotalMembers(filteredUsers.length);
         }
 
         // Early Arrivals: filter for today, before or within 5 mins after session start
@@ -419,7 +427,7 @@ const AdminDashboard = () => {
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2 sm:gap-3 md:gap-4">
           <StatCard
-            title="Total Members"
+            title={user?.role === "SYSTEM_ADMIN" ? "All Members" : "Students & Lecturers"}
             value={totalMembers.toLocaleString()}
             icon={Users}
             trend={{ value: 12, isPositive: true }}

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Loader2, RefreshCw } from "lucide-react";
+import { Plus, Loader2, RefreshCw, QrCode, Download, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SessionCard } from "@/components/sessions/SessionCard";
 import { CreateSessionModal } from "@/components/sessions/CreateSessionModal";
@@ -19,6 +19,7 @@ import {
   closeSession,
   deleteSession,
   toggleSessionMode,
+  generateSessionQrCode,
   Session,
   SessionStatus,
   SessionType,
@@ -26,6 +27,13 @@ import {
   Attendance,
   CourseEnrollment,
 } from "@/services/sessions.service";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 // Helper function to map API Session to AttendanceSession
 const mapSessionToAttendanceSession = (session: Session): AttendanceSession => {
@@ -128,6 +136,10 @@ const Sessions = () => {
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(
     null,
   );
+  const [qrCodeModalOpen, setQrCodeModalOpen] = useState(false);
+  const [qrCodeData, setQrCodeData] = useState<string | null>(null);
+  const [qrCodeSessionName, setQrCodeSessionName] = useState<string>("");
+  const [generatingQrCode, setGeneratingQrCode] = useState<string | null>(null);
   const { user, token } = useAuth();
 
   // Check if user can create sessions (only LECTURER and REP can create sessions)
@@ -315,6 +327,48 @@ const Sessions = () => {
     fetchSessions(true);
   };
 
+  const handleGenerateQrCode = async (session: AttendanceSession) => {
+    if (!token) {
+      toast.error("You must be logged in to generate QR code");
+      return;
+    }
+
+    setGeneratingQrCode(session.id);
+    try {
+      const response = await generateSessionQrCode(session.id, token);
+
+      if (response.success && response.data?.data) {
+        // Add data URL prefix if not already present
+        const imageData = response.data.data.startsWith("data:")
+          ? response.data.data
+          : `data:image/png;base64,${response.data.data}`;
+        setQrCodeData(imageData);
+        setQrCodeSessionName(session.name);
+        setQrCodeModalOpen(true);
+        toast.success("QR Code generated successfully");
+      } else {
+        toast.error(response.error || "Failed to generate QR code");
+      }
+    } catch (error) {
+      console.error("Error generating QR code:", error);
+      toast.error("Failed to generate QR code");
+    } finally {
+      setGeneratingQrCode(null);
+    }
+  };
+
+  const handleDownloadQrCode = () => {
+    if (!qrCodeData) return;
+
+    const link = document.createElement("a");
+    link.href = qrCodeData;
+    link.download = `qrcode-${qrCodeSessionName.replace(/\s+/g, "-").toLowerCase()}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success("QR Code downloaded");
+  };
+
   // Count sessions by status
   const activeSessions = sessions.filter((s) => s.status === "active").length;
   const completedSessions = sessions.filter(
@@ -404,9 +458,11 @@ const Sessions = () => {
                     onViewReport={handleViewReport}
                     onDelete={handleDeleteSession}
                     onToggleMode={handleToggleMode}
+                    onGenerateQrCode={handleGenerateQrCode}
                     user={user}
                     isTogglingMode={togglingSessionId === session.id}
                     isDeleting={deletingSessionId === session.id}
+                    isGeneratingQrCode={generatingQrCode === session.id}
                   />
                 ))}
               </div>
@@ -448,6 +504,54 @@ const Sessions = () => {
         onOpenChange={setReportModalOpen}
         session={selectedSession}
       />
+
+      {/* QR Code Modal */}
+      <Dialog open={qrCodeModalOpen} onOpenChange={setQrCodeModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <QrCode className="w-5 h-5" />
+              Session QR Code
+            </DialogTitle>
+            <DialogDescription>
+              Scan this QR code to open the kiosk for &quot;{qrCodeSessionName}
+              &quot;
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col items-center gap-4 py-4">
+            {qrCodeData && (
+              <div className="bg-white p-4 rounded-lg shadow-inner">
+                <img
+                  src={qrCodeData}
+                  alt="Session QR Code"
+                  className="w-64 h-64 object-contain"
+                />
+              </div>
+            )}
+            <p className="text-sm text-muted-foreground text-center">
+              Students can scan this code to mark their attendance
+            </p>
+            <div className="flex gap-2 w-full">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setQrCodeModalOpen(false)}
+              >
+                <X className="w-4 h-4 mr-2" />
+                Close
+              </Button>
+              <Button
+                variant="gradient"
+                className="flex-1"
+                onClick={handleDownloadQrCode}
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Download
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

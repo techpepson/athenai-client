@@ -251,6 +251,20 @@ export const getSessionById = async (
   });
 };
 
+/**
+ * Generate QR code for a session (Session creator only)
+ * The QR code links to the kiosk mode for attendance taking
+ * Note: Email is extracted from JWT token on the backend
+ */
+export const generateSessionQrCode = async (
+  sessionId: string,
+  token: string,
+): Promise<ApiResponse<{ message: string; data: string }>> => {
+  return api.get("/sessions/generate-qrcode", token, {
+    params: { sessionId },
+  });
+};
+
 // Utility functions
 
 /**

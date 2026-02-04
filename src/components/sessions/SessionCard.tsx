@@ -12,6 +12,7 @@ import {
   RefreshCw,
   LogIn,
   LogOut,
+  QrCode,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -43,9 +44,11 @@ interface SessionCardProps {
   onViewReport?: (session: AttendanceSession) => void;
   onDelete?: (session: AttendanceSession) => void;
   onToggleMode?: (session: AttendanceSession) => void;
+  onGenerateQrCode?: (session: AttendanceSession) => void;
   user: User | null;
   isTogglingMode?: boolean;
   isDeleting?: boolean;
+  isGeneratingQrCode?: boolean;
 }
 
 export const SessionCard = ({
@@ -55,9 +58,11 @@ export const SessionCard = ({
   onViewReport,
   onDelete,
   onToggleMode,
+  onGenerateQrCode,
   user,
   isTogglingMode = false,
   isDeleting = false,
+  isGeneratingQrCode = false,
 }: SessionCardProps) => {
   const navigate = useNavigate();
 
@@ -108,25 +113,8 @@ export const SessionCard = ({
 
   // Handle show live (navigate to kiosk with session)
   const handleShowLive = () => {
-    // Store session info in localStorage for kiosk mode
-    localStorage.setItem(
-      "activeKioskSession",
-      JSON.stringify({
-        id: session.id,
-        name: session.name,
-        courseId: session.courseId,
-        courseName: session.courseName,
-        courseCode: session.courseCode,
-        type: session.type,
-        attendanceType: session.attendanceType,
-        location: session.location,
-        startTime: session.startTime,
-        endTime: session.endTime,
-        expectedCount: session.expectedCount,
-        presentCount: session.presentCount,
-      }),
-    );
     // Navigate to kiosk mode with session ID in URL
+    // Session data will be fetched from API in Kiosk component
     navigate(`/kiosk/${session.id}`);
   };
 
@@ -269,9 +257,32 @@ export const SessionCard = ({
         )}
       </div>
 
-      {/* Secondary Actions - Toggle Mode & Delete (only for session creator) */}
+      {/* Secondary Actions - Toggle Mode, QR Code & Delete (only for session creator) */}
       {canManageSession && session.status === "active" && (
         <div className="flex gap-2 mt-3 pt-3 border-t border-border">
+          {/* Generate QR Code Button */}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onGenerateQrCode?.(session)}
+                  disabled={isGeneratingQrCode}
+                >
+                  {isGeneratingQrCode ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <QrCode className="w-4 h-4" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                Generate QR code for students to scan and mark attendance
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
           {/* Toggle Mode Button */}
           <TooltipProvider>
             <Tooltip>
@@ -284,15 +295,17 @@ export const SessionCard = ({
                   disabled={!canToggleMode() || isTogglingMode}
                 >
                   {isTogglingMode ? (
-                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    <RefreshCw className="w-4 h-4 sm:mr-2 animate-spin" />
                   ) : session.attendanceType === "checkin" ? (
-                    <LogOut className="w-4 h-4 mr-2" />
+                    <LogOut className="w-4 h-4 sm:mr-2" />
                   ) : (
-                    <LogIn className="w-4 h-4 mr-2" />
+                    <LogIn className="w-4 h-4 sm:mr-2" />
                   )}
-                  {session.attendanceType === "checkin"
-                    ? "Switch to Check-Out"
-                    : "Check-Out Mode"}
+                  <span className="hidden sm:inline">
+                    {session.attendanceType === "checkin"
+                      ? "Switch to Check-Out"
+                      : "Check-Out Mode"}
+                  </span>
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
