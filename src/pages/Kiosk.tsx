@@ -20,6 +20,7 @@ import {
   markAttendance,
   MarkAttendanceResponse,
 } from "@/services/attendance.services";
+import { getSessionById } from "@/services/sessions.service";
 import { toast } from "sonner";
 
 type ScanState = "idle" | "scanning" | "processing" | "success" | "failed";
@@ -36,8 +37,8 @@ interface AttendanceResult {
   confidence?: number;
 }
 
-// Session info stored in localStorage from SessionCard
-interface StoredSessionInfo {
+// Session info from API
+interface SessionInfo {
   id: string;
   name: string;
   courseId?: string;
@@ -62,9 +63,7 @@ const Kiosk = () => {
   const processingRef = useRef<boolean>(false);
 
   // State
-  const [sessionInfo, setSessionInfo] = useState<StoredSessionInfo | null>(
-    null,
-  );
+  const [sessionInfo, setSessionInfo] = useState<SessionInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [scanState, setScanState] = useState<ScanState>("idle");
@@ -121,53 +120,79 @@ const Kiosk = () => {
     loadModels();
   }, []);
 
-  // Load session info from localStorage
+  // Load session info from API
   useEffect(() => {
-    if (!sessionId) {
-      setError("No session ID provided");
-      setIsLoading(false);
-      return;
-    }
+    const fetchSessionInfo = async () => {
+      if (!sessionId) {
+        setError("No session ID provided");
+        setIsLoading(false);
+        return;
+      }
 
-    // Read session info from localStorage (stored by SessionCard)
-    const storedSession = localStorage.getItem("activeKioskSession");
-    if (storedSession) {
       try {
-        const parsed: StoredSessionInfo = JSON.parse(storedSession);
+        const response = await getSessionById(sessionId);
 
-        // Debug: Log session info
-        console.log("Session info loaded:", {
-          id: parsed.id,
-          name: parsed.name,
-          startTime: parsed.startTime,
-          endTime: parsed.endTime,
-          startTimeDate: new Date(parsed.startTime).toLocaleString(),
-          today: new Date().toLocaleString(),
-        });
+        if (response.success && response.data) {
+          const session = response.data;
 
-        // Verify the session ID matches
-        if (parsed.id === sessionId) {
-          setSessionInfo(parsed);
+          // Debug: Log session info
+          console.log("Session info loaded from API:", {
+            id: session.id,
+            name: session.name,
+            startTime: session.startTime,
+            endTime: session.endTime,
+            startTimeDate: new Date(session.startTime).toLocaleString(),
+            today: new Date().toLocaleString(),
+          });
 
-          // Set initial attendance stats from stored session
+          // Map API response to SessionInfo
+          const mappedSession: SessionInfo = {
+            id: session.id,
+            name: session.name,
+            courseId: session.courseId || undefined,
+            courseName: session.course?.title || undefined,
+            courseCode: session.course?.code || undefined,
+            type: session.type,
+            attendanceType:
+              session.mode === "CHECK_IN" ? "checkin" : "checkout",
+            location: session.location || undefined,
+            startTime: session.startTime,
+            endTime: session.endTime,
+            expectedCount:
+              session.course?._count?.enrollments ||
+              session.course?.enrollments?.length ||
+              0,
+            presentCount:
+              session.attendances?.filter(
+                (a) => a.status === "PRESENT" || a.status === "LATE",
+              ).length || 0,
+          };
+
+          setSessionInfo(mappedSession);
+
+          // Set initial attendance stats
           setAttendanceStats({
-            present: parsed.presentCount || 0,
-            late: 0,
+            present: mappedSession.presentCount || 0,
+            late:
+              session.attendances?.filter((a) => a.status === "LATE").length ||
+              0,
             absent: 0,
-            expected: parsed.expectedCount || 0,
+            expected: mappedSession.expectedCount || 0,
           });
         } else {
-          setError("Session mismatch. Please go back and try again.");
+          setError(
+            response.error || "Session not found. Please check the QR code.",
+          );
         }
       } catch (err) {
-        console.error("Error parsing stored session:", err);
-        setError("Invalid session data. Please go back and try again.");
+        console.error("Error fetching session:", err);
+        setError("Failed to load session. Please try again.");
+      } finally {
+        setIsLoading(false);
       }
-    } else {
-      setError("No session data found. Please start from the Sessions page.");
-    }
+    };
 
-    setIsLoading(false);
+    fetchSessionInfo();
   }, [sessionId]);
 
   // Start camera when session info is loaded
