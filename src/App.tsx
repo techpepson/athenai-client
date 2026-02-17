@@ -22,6 +22,10 @@ import AdminManagement from "./pages/AdminManagement";
 import CourseRepManagement from "./pages/CourseRepManagement";
 import Payroll from "./pages/Payroll";
 import NotFound from "./pages/NotFound";
+import { seedModulesData } from "./services/modules.seed";
+
+// Seed modules data if localStorage is empty
+seedModulesData();
 
 const queryClient = new QueryClient();
 

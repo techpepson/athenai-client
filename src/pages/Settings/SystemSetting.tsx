@@ -47,7 +47,9 @@ import {
   Trash2,
   Plus,
   GraduationCap,
+  Layers,
 } from "lucide-react";
+import ModulesManagement from "@/components/modules/ModulesManagement";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { Role } from "@/enums/enums";
@@ -463,6 +465,10 @@ const SystemSetting = () => {
             <BookOpen className="w-4 h-4" />
             Courses
           </TabsTrigger>
+          <TabsTrigger value="modules" className="gap-2">
+            <Layers className="w-4 h-4" />
+            Modules
+          </TabsTrigger>
           {/* <TabsTrigger value="organization" className="gap-2">
             <Building className="w-4 h-4" />
             Organization
@@ -726,6 +732,11 @@ const SystemSetting = () => {
               </div>
             )}
           </div>
+        </TabsContent>
+
+        {/* Modules Management */}
+        <TabsContent value="modules">
+          <ModulesManagement />
         </TabsContent>
 
         {/* Organization Settings */}

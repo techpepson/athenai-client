@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Loader2, RefreshCw, QrCode, Download, X } from "lucide-react";
+import { Plus, Loader2, RefreshCw, QrCode, Download, X, CalendarDays, LayoutList } from "lucide-react";
+import TimetableTab from "@/components/modules/TimetableTab";
 import { Button } from "@/components/ui/button";
 import { SessionCard } from "@/components/sessions/SessionCard";
 import { CreateSessionModal } from "@/components/sessions/CreateSessionModal";
@@ -127,6 +128,7 @@ const Sessions = () => {
   const [selectedSession, setSelectedSession] =
     useState<AttendanceSession | null>(null);
   const [activeTab, setActiveTab] = useState("all");
+  const [mainTab, setMainTab] = useState("sessions");
   const [sessions, setSessions] = useState<AttendanceSession[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -390,105 +392,128 @@ const Sessions = () => {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={handleRefresh}
-            disabled={isRefreshing}
-            title="Refresh sessions"
-          >
-            <RefreshCw
-              className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`}
-            />
-          </Button>
-          {canCreateSession && (
-            <Button variant="gradient" onClick={() => setCreateModalOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              Create Session
-            </Button>
+          {mainTab === "sessions" && (
+            <>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                title="Refresh sessions"
+              >
+                <RefreshCw
+                  className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`}
+                />
+              </Button>
+              {canCreateSession && (
+                <Button variant="gradient" onClick={() => setCreateModalOpen(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Session
+                </Button>
+              )}
+            </>
           )}
         </div>
       </div>
 
-      {/* Loading State */}
-      {isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
-          <span className="ml-2 text-muted-foreground">
-            Loading sessions...
-          </span>
-        </div>
-      ) : (
-        <>
-          {/* Tabs */}
-          <Tabs
-            value={activeTab}
-            onValueChange={setActiveTab}
-            className="w-full"
-          >
-            <div className="flex items-center justify-between">
-              <TabsList className="bg-card border border-border">
-                <TabsTrigger value="all">
-                  All Sessions ({sessions.length})
-                </TabsTrigger>
-                <TabsTrigger value="active">
-                  <span className="flex items-center gap-2">
-                    <span className="w-2 h-2 bg-success rounded-full animate-pulse" />
-                    Active ({activeSessions})
-                  </span>
-                </TabsTrigger>
-                <TabsTrigger value="completed">
-                  Completed ({completedSessions})
-                </TabsTrigger>
-              </TabsList>
-              <div className="text-sm text-muted-foreground">
-                {filteredSessions.length} session
-                {filteredSessions.length !== 1 ? "s" : ""} shown
-              </div>
+      {/* Main Tabs: Sessions vs Activities */}
+      <Tabs value={mainTab} onValueChange={setMainTab} className="w-full">
+        <TabsList className="bg-card border border-border">
+          <TabsTrigger value="sessions" className="gap-2">
+            <LayoutList className="w-4 h-4" />
+            Sessions
+          </TabsTrigger>
+          <TabsTrigger value="activities" className="gap-2">
+            <CalendarDays className="w-4 h-4" />
+            Activities
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Sessions Tab Content */}
+        <TabsContent value="sessions" className="mt-6">
+          {/* Loading State */}
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              <span className="ml-2 text-muted-foreground">
+                Loading sessions...
+              </span>
             </div>
-
-            <TabsContent value={activeTab} className="mt-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredSessions.map((session) => (
-                  <SessionCard
-                    key={session.id}
-                    session={session}
-                    onStart={handleStartSession}
-                    onEnd={handleEndSession}
-                    onViewReport={handleViewReport}
-                    onDelete={handleDeleteSession}
-                    onToggleMode={handleToggleMode}
-                    onGenerateQrCode={handleGenerateQrCode}
-                    user={user}
-                    isTogglingMode={togglingSessionId === session.id}
-                    isDeleting={deletingSessionId === session.id}
-                    isGeneratingQrCode={generatingQrCode === session.id}
-                  />
-                ))}
+          ) : (
+            <Tabs
+              value={activeTab}
+              onValueChange={setActiveTab}
+              className="w-full"
+            >
+              <div className="flex items-center justify-between">
+                <TabsList className="bg-card border border-border">
+                  <TabsTrigger value="all">
+                    All Sessions ({sessions.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="active">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 bg-success rounded-full animate-pulse" />
+                      Active ({activeSessions})
+                    </span>
+                  </TabsTrigger>
+                  <TabsTrigger value="completed">
+                    Completed ({completedSessions})
+                  </TabsTrigger>
+                </TabsList>
+                <div className="text-sm text-muted-foreground">
+                  {filteredSessions.length} session
+                  {filteredSessions.length !== 1 ? "s" : ""} shown
+                </div>
               </div>
 
-              {filteredSessions.length === 0 && (
-                <div className="text-center py-12 bg-card rounded-xl border border-border">
-                  <p className="text-muted-foreground">
-                    {activeTab === "all"
-                      ? "No sessions found."
-                      : `No ${activeTab} sessions found.`}
-                  </p>
-                  {canCreateSession && activeTab === "all" && (
-                    <Button
-                      variant="outline"
-                      className="mt-4"
-                      onClick={() => setCreateModalOpen(true)}
-                    >
-                      Create your first session
-                    </Button>
-                  )}
+              <TabsContent value={activeTab} className="mt-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {filteredSessions.map((session) => (
+                    <SessionCard
+                      key={session.id}
+                      session={session}
+                      onStart={handleStartSession}
+                      onEnd={handleEndSession}
+                      onViewReport={handleViewReport}
+                      onDelete={handleDeleteSession}
+                      onToggleMode={handleToggleMode}
+                      onGenerateQrCode={handleGenerateQrCode}
+                      user={user}
+                      isTogglingMode={togglingSessionId === session.id}
+                      isDeleting={deletingSessionId === session.id}
+                      isGeneratingQrCode={generatingQrCode === session.id}
+                    />
+                  ))}
                 </div>
-              )}
-            </TabsContent>
-          </Tabs>
-        </>
-      )}
+
+                {filteredSessions.length === 0 && (
+                  <div className="text-center py-12 bg-card rounded-xl border border-border">
+                    <p className="text-muted-foreground">
+                      {activeTab === "all"
+                        ? "No sessions found."
+                        : `No ${activeTab} sessions found.`}
+                    </p>
+                    {canCreateSession && activeTab === "all" && (
+                      <Button
+                        variant="outline"
+                        className="mt-4"
+                        onClick={() => setCreateModalOpen(true)}
+                      >
+                        Create your first session
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
+          )}
+        </TabsContent>
+
+        {/* Activities / Timetable Tab Content */}
+        <TabsContent value="activities" className="mt-6">
+          <TimetableTab />
+        </TabsContent>
+      </Tabs>
 
       {/* Create Session Modal */}
       <CreateSessionModal
