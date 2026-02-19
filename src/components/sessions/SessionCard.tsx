@@ -208,6 +208,20 @@ export const SessionCard = ({
 
       {/* Actions */}
       <div className="flex gap-2 flex-wrap">
+        {/* Scheduled timetable session - can start session */}
+        {session.status === "scheduled" &&
+          session.id.startsWith("timetable-") && (
+            <Button
+              className="flex-1"
+              variant="gradient"
+              size="sm"
+              onClick={() => onStart?.(session)}
+            >
+              <Play className="w-4 h-4 mr-2" />
+              Start Session
+            </Button>
+          )}
+
         {/* Active session - creator can show live and end session */}
         {session.status === "active" && canManageSession && (
           <>

@@ -864,15 +864,149 @@ function buildSampleTimetable(modules: Module[]): ModuleTimetable[] {
         week: 1, activityType: "SDL", colSpan: 1,
     });
 
+    // ============================
+    // WEEK 3 (Feb 16–20, 2026)
+    // ============================
+
+    // Monday: LECTURE 7:30-9:30, SDL 9:30-10:30, PBL 10:30-12:30, BREAK, PRACTICAL 1:30-3:30, LECTURE 3:30-5:30
+    slots.push({
+        id: genId(), moduleId: cmpc103.id, subtopicId: subtopics[2]?.id || "",
+        day: "MONDAY", startTime: "7:30", endTime: "9:30",
+        lecturerName: subtopics[2]?.lecturerName, venue: "LT 1", week: 3, activityType: "LECTURE", colSpan: 2,
+    });
+    slots.push({
+        id: genId(), moduleId: cmpc103.id, subtopicId: subtopics[3]?.id || "",
+        day: "MONDAY", startTime: "9:30", endTime: "10:30",
+        week: 3, activityType: "SDL", colSpan: 1,
+    });
+    slots.push({
+        id: genId(), moduleId: cmpc103.id, subtopicId: subtopics[0]?.id || "",
+        day: "MONDAY", startTime: "10:30", endTime: "12:30",
+        lecturerName: subtopics[0]?.lecturerName, venue: "PBL Room 2", week: 3, activityType: "PBL", colSpan: 2,
+    });
+    slots.push({
+        id: genId(), moduleId: cmpc103.id, subtopicId: subtopics[3]?.id || "",
+        day: "MONDAY", startTime: "1:30", endTime: "3:30",
+        lecturerName: subtopics[3]?.lecturerName, venue: "Biochemistry Lab", week: 3, activityType: "PRACTICAL", colSpan: 2,
+    });
+    slots.push({
+        id: genId(), moduleId: cmpc103.id, subtopicId: subtopics[1]?.id || "",
+        day: "MONDAY", startTime: "3:30", endTime: "5:30",
+        lecturerName: subtopics[1]?.lecturerName, venue: "LT 2", week: 3, activityType: "LECTURE", colSpan: 2,
+    });
+
+    // Tuesday: LECTURE 7:30-9:30, CLIN SKILLS 9:30-11:30, LECTURE 11:30-12:30, BREAK, ANATOMY PRACTICAL 1:30-3:30, SPORTS 4:30-5:30
+    slots.push({
+        id: genId(), moduleId: cmpc103.id, subtopicId: subtopics[0]?.id || "",
+        day: "TUESDAY", startTime: "7:30", endTime: "9:30",
+        lecturerName: subtopics[0]?.lecturerName, venue: "LT 1", week: 3, activityType: "LECTURE", colSpan: 2,
+    });
+    slots.push({
+        id: genId(), moduleId: cmpc103.id, subtopicId: subtopics[1]?.id || "",
+        day: "TUESDAY", startTime: "9:30", endTime: "11:30",
+        lecturerName: subtopics[1]?.lecturerName, venue: "Skills Lab", week: 3, activityType: "CLIN SKILLS", colSpan: 2,
+    });
+    slots.push({
+        id: genId(), moduleId: cmpc103.id, subtopicId: subtopics[2]?.id || "",
+        day: "TUESDAY", startTime: "11:30", endTime: "12:30",
+        lecturerName: subtopics[2]?.lecturerName, venue: "LT 1", week: 3, activityType: "LECTURE", colSpan: 1,
+    });
+    slots.push({
+        id: genId(), moduleId: cmpc103.id, subtopicId: subtopics[0]?.id || "",
+        day: "TUESDAY", startTime: "1:30", endTime: "3:30",
+        lecturerName: subtopics[0]?.lecturerName, venue: "Anatomy Lab", week: 3, activityType: "ANATOMY PRACTICAL", colSpan: 2,
+    });
+    slots.push({
+        id: genId(), moduleId: cmpc103.id, subtopicId: subtopics[3]?.id || "",
+        day: "TUESDAY", startTime: "4:30", endTime: "5:30",
+        week: 3, activityType: "SPORTS", colSpan: 1,
+    });
+
+    // Wednesday: PBL 7:30-9:30, LECTURE 9:30-10:30, TUTORIAL 10:30-12:30, BREAK, LECTURE 1:30-3:30, SDL 3:30-4:30
+    slots.push({
+        id: genId(), moduleId: cmpc103.id, subtopicId: subtopics[1]?.id || "",
+        day: "WEDNESDAY", startTime: "7:30", endTime: "9:30",
+        lecturerName: subtopics[1]?.lecturerName, venue: "PBL Room 1", week: 3, activityType: "PBL", colSpan: 2,
+    });
+    slots.push({
+        id: genId(), moduleId: cmpc103.id, subtopicId: subtopics[3]?.id || "",
+        day: "WEDNESDAY", startTime: "9:30", endTime: "10:30",
+        lecturerName: subtopics[3]?.lecturerName, venue: "LT 2", week: 3, activityType: "LECTURE", colSpan: 1,
+    });
+    slots.push({
+        id: genId(), moduleId: cmpc103.id, subtopicId: subtopics[2]?.id || "",
+        day: "WEDNESDAY", startTime: "10:30", endTime: "12:30",
+        lecturerName: subtopics[2]?.lecturerName, venue: "Tutorial Room A", week: 3, activityType: "TUTORIAL", colSpan: 2,
+    });
+    slots.push({
+        id: genId(), moduleId: cmpc103.id, subtopicId: subtopics[0]?.id || "",
+        day: "WEDNESDAY", startTime: "1:30", endTime: "3:30",
+        lecturerName: subtopics[0]?.lecturerName, venue: "LT 1", week: 3, activityType: "LECTURE", colSpan: 2,
+    });
+    slots.push({
+        id: genId(), moduleId: cmpc103.id, subtopicId: subtopics[3]?.id || "",
+        day: "WEDNESDAY", startTime: "3:30", endTime: "4:30",
+        week: 3, activityType: "SDL", colSpan: 1,
+    });
+
+    // Thursday: LECTURE 7:30-9:30, BIOCHEMISTRY PRACTICAL 9:30-12:30, BREAK, LECTURE 1:30-3:30, PBL 3:30-5:30
+    slots.push({
+        id: genId(), moduleId: cmpc103.id, subtopicId: subtopics[1]?.id || "",
+        day: "THURSDAY", startTime: "7:30", endTime: "9:30",
+        lecturerName: subtopics[1]?.lecturerName, venue: "LT 1", week: 3, activityType: "LECTURE", colSpan: 2,
+    });
+    slots.push({
+        id: genId(), moduleId: cmpc103.id, subtopicId: subtopics[3]?.id || "",
+        day: "THURSDAY", startTime: "9:30", endTime: "12:30",
+        lecturerName: subtopics[3]?.lecturerName, venue: "Biochemistry Lab", week: 3, activityType: "BIOCHEMISTRY PRACTICAL", colSpan: 3,
+    });
+    slots.push({
+        id: genId(), moduleId: cmpc103.id, subtopicId: subtopics[2]?.id || "",
+        day: "THURSDAY", startTime: "1:30", endTime: "3:30",
+        lecturerName: subtopics[2]?.lecturerName, venue: "LT 2", week: 3, activityType: "LECTURE", colSpan: 2,
+    });
+    slots.push({
+        id: genId(), moduleId: cmpc103.id, subtopicId: subtopics[0]?.id || "",
+        day: "THURSDAY", startTime: "3:30", endTime: "5:30",
+        lecturerName: subtopics[0]?.lecturerName, venue: "PBL Room 2", week: 3, activityType: "PBL", colSpan: 2,
+    });
+
+    // Friday: LECTURE 7:30-9:30, SDL 9:30-10:30, LECTURE 10:30-12:30, BREAK, COMMUNITY VISIT 1:30-4:30, SDL 4:30-5:30
+    slots.push({
+        id: genId(), moduleId: cmpc103.id, subtopicId: subtopics[2]?.id || "",
+        day: "FRIDAY", startTime: "7:30", endTime: "9:30",
+        lecturerName: subtopics[2]?.lecturerName, venue: "LT 1", week: 3, activityType: "LECTURE", colSpan: 2,
+    });
+    slots.push({
+        id: genId(), moduleId: cmpc103.id, subtopicId: subtopics[1]?.id || "",
+        day: "FRIDAY", startTime: "9:30", endTime: "10:30",
+        week: 3, activityType: "SDL", colSpan: 1,
+    });
+    slots.push({
+        id: genId(), moduleId: cmpc103.id, subtopicId: subtopics[0]?.id || "",
+        day: "FRIDAY", startTime: "10:30", endTime: "12:30",
+        lecturerName: subtopics[0]?.lecturerName, venue: "LT 2", week: 3, activityType: "LECTURE", colSpan: 2,
+    });
+    slots.push({
+        id: genId(), moduleId: cmpc103.id, subtopicId: subtopics[1]?.id || "",
+        day: "FRIDAY", startTime: "1:30", endTime: "4:30",
+        lecturerName: subtopics[1]?.lecturerName, venue: "Community Health Centre", week: 3, activityType: "COMMUNITY VISIT", colSpan: 3,
+    });
+    slots.push({
+        id: genId(), moduleId: cmpc103.id, subtopicId: subtopics[3]?.id || "",
+        day: "FRIDAY", startTime: "4:30", endTime: "5:30",
+        week: 3, activityType: "SDL", colSpan: 1,
+    });
+
     const timetable: ModuleTimetable = {
         id: genId(),
         moduleId: cmpc103.id,
         level: 100,
         semester: 1,
-        academicYear: "2024/2025",
+        academicYear: "2025/2026",
         totalWeeks: 8,
-        startDate: "2025-02-03",
-        endDate: "2025-03-28",
+        startDate: "2026-02-02",
+        endDate: "2026-03-27",
         slots,
     };
 
@@ -883,7 +1017,7 @@ function buildSampleTimetable(modules: Module[]): ModuleTimetable[] {
 // Seed function
 // ============================
 const SEED_VERSION_KEY = "college_modules_seed_version";
-const CURRENT_SEED_VERSION = "2"; // Bump this to force reseed
+const CURRENT_SEED_VERSION = "3"; // Bump this to force reseed
 
 export function seedModulesData(forceReseed = false): void {
     const seedVersion = localStorage.getItem(SEED_VERSION_KEY);

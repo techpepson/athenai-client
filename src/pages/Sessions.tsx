@@ -1,9 +1,17 @@
-import { useState, useEffect, useCallback } from "react";
-import { Plus, Loader2, RefreshCw, QrCode, Download, X, CalendarDays, LayoutList } from "lucide-react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import {
+  Loader2,
+  RefreshCw,
+  QrCode,
+  Download,
+  X,
+  CalendarDays,
+  LayoutList,
+  BookOpen,
+} from "lucide-react";
 import TimetableTab from "@/components/modules/TimetableTab";
 import { Button } from "@/components/ui/button";
 import { SessionCard } from "@/components/sessions/SessionCard";
-import { CreateSessionModal } from "@/components/sessions/CreateSessionModal";
 import { SessionReportModal } from "@/components/sessions/SessionReportModal";
 import {
   AttendanceSession,
@@ -35,6 +43,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { modulesService, TimetableSlot } from "@/services/modules.service";
 
 // Helper function to map API Session to AttendanceSession
 const mapSessionToAttendanceSession = (session: Session): AttendanceSession => {
@@ -123,7 +132,6 @@ const mapSessionToAttendanceSession = (session: Session): AttendanceSession => {
 };
 
 const Sessions = () => {
-  const [createModalOpen, setCreateModalOpen] = useState(false);
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [selectedSession, setSelectedSession] =
     useState<AttendanceSession | null>(null);
@@ -144,12 +152,164 @@ const Sessions = () => {
   const [generatingQrCode, setGeneratingQrCode] = useState<string | null>(null);
   const { user, token } = useAuth();
 
-  // Check if user can create sessions (only LECTURER and REP can create sessions)
-  const canCreateSession =
-    user?.role === Role.LECTURER || user?.role === Role.REP;
-
   // Check if user is admin (can see all sessions)
   const isAdmin = user?.role === Role.ADMIN || user?.role === Role.SYSTEM_ADMIN;
+
+  // Day name mapping for display
+  const dayNames = [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+  ];
+
+  // Build weekly lecture cards from timetable activities (LECTURES ONLY)
+  const weeklyLectureSessions = useMemo((): AttendanceSession[] => {
+    const timetables = modulesService.getTimetables();
+    const modules = modulesService.getModules();
+    if (timetables.length === 0) return [];
+
+    const now = new Date();
+    // Get Monday of the current week
+    const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon, ...
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+    monday.setHours(0, 0, 0, 0);
+
+    // Today at start of day for filtering past days
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
+
+    const dayIndexMap: Record<string, number> = {
+      MONDAY: 0,
+      TUESDAY: 1,
+      WEDNESDAY: 2,
+      THURSDAY: 3,
+      FRIDAY: 4,
+      SATURDAY: 5,
+      SUNDAY: 6,
+    };
+
+    const parseTime = (timeStr: string): { hours: number; minutes: number } => {
+      const [h, m] = timeStr.split(":").map(Number);
+      // Handle 12-hour implied format (1:30 = 13:30 if < 7)
+      const hours = h < 7 ? h + 12 : h;
+      return { hours, minutes: m || 0 };
+    };
+
+    const lectureCards: AttendanceSession[] = [];
+
+    timetables.forEach((timetable) => {
+      const mod = modules.find((m) => m.id === timetable.moduleId);
+      if (!mod) return;
+
+      // Determine current week number within the timetable
+      let currentWeek = 1;
+      if (timetable.startDate) {
+        const start = new Date(timetable.startDate);
+        const diffMs = now.getTime() - start.getTime();
+        currentWeek = Math.max(
+          1,
+          Math.ceil(diffMs / (7 * 24 * 60 * 60 * 1000)),
+        );
+        if (currentWeek > timetable.totalWeeks) return; // past this module
+      }
+
+      // Filter slots for the current week AND only LECTURE activities
+      const weekSlots = timetable.slots.filter(
+        (slot) =>
+          (!slot.week || slot.week === currentWeek) &&
+          slot.activityType === "LECTURE",
+      );
+
+      weekSlots.forEach((slot) => {
+        const dayOffset = dayIndexMap[slot.day.toUpperCase()];
+        if (dayOffset === undefined) return;
+
+        const slotDate = new Date(monday);
+        slotDate.setDate(monday.getDate() + dayOffset);
+
+        // Skip past days (only show today and upcoming days)
+        if (slotDate < todayStart) return;
+
+        const start = parseTime(slot.startTime);
+        const end = parseTime(slot.endTime);
+
+        const startTime = new Date(slotDate);
+        startTime.setHours(start.hours, start.minutes, 0, 0);
+
+        const endTime = new Date(slotDate);
+        endTime.setHours(end.hours, end.minutes, 0, 0);
+
+        // Determine status based on current time
+        let status: AttendanceSession["status"] = "scheduled";
+        if (now >= startTime && now <= endTime) {
+          status = "active";
+        } else if (now > endTime) {
+          status = "completed";
+        }
+
+        const subtopic = mod.subtopics.find((s) => s.id === slot.subtopicId);
+
+        lectureCards.push({
+          id: `timetable-${slot.id}`,
+          name: subtopic?.name || `${mod.name} - Lecture`,
+          type: "class",
+          attendanceType: "checkin",
+          department: mod.code,
+          startTime,
+          endTime,
+          status,
+          location: slot.venue || undefined,
+          expectedCount: 0,
+          presentCount: 0,
+          courseId: undefined,
+          courseName: `${mod.name} (${mod.code})`,
+          createdBy: undefined,
+        });
+      });
+    });
+
+    // Sort by day then start time
+    lectureCards.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
+
+    return lectureCards;
+  }, []);
+
+  // Group lectures by day for display
+  const lecturesByDay = useMemo(() => {
+    const grouped: Record<string, AttendanceSession[]> = {};
+
+    weeklyLectureSessions.forEach((session) => {
+      const dayName = dayNames[session.startTime.getDay()];
+      if (!grouped[dayName]) {
+        grouped[dayName] = [];
+      }
+      grouped[dayName].push(session);
+    });
+
+    // Sort days in order (Monday to Friday)
+    const orderedDays = [
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+      "Sunday",
+    ];
+    const sortedGrouped: Record<string, AttendanceSession[]> = {};
+    orderedDays.forEach((day) => {
+      if (grouped[day]) {
+        sortedGrouped[day] = grouped[day];
+      }
+    });
+
+    return sortedGrouped;
+  }, [weeklyLectureSessions]);
 
   // Fetch sessions from API
   const fetchSessions = useCallback(
@@ -219,13 +379,6 @@ const Sessions = () => {
     if (activeTab === "all") return true;
     return session.status === activeTab;
   });
-
-  // Handle creating a new session
-  const handleCreateSession = (newSession: AttendanceSession) => {
-    setSessions((prev) => [newSession, ...prev]);
-    // Refresh sessions to get the actual data from the server
-    setTimeout(() => fetchSessions(), 1000);
-  };
 
   const handleStartSession = () => {
     toast.success("Session started! Kiosk mode is now active.");
@@ -388,30 +541,22 @@ const Sessions = () => {
           <p className="text-muted-foreground mt-1">
             {isAdmin
               ? "View and manage all attendance tracking sessions"
-              : "Create and manage your attendance tracking sessions"}
+              : "View your weekly lectures and attendance sessions"}
           </p>
         </div>
         <div className="flex items-center gap-2">
           {mainTab === "sessions" && (
-            <>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={handleRefresh}
-                disabled={isRefreshing}
-                title="Refresh sessions"
-              >
-                <RefreshCw
-                  className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`}
-                />
-              </Button>
-              {canCreateSession && (
-                <Button variant="gradient" onClick={() => setCreateModalOpen(true)}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Create Session
-                </Button>
-              )}
-            </>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              title="Refresh sessions"
+            >
+              <RefreshCw
+                className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`}
+              />
+            </Button>
           )}
         </div>
       </div>
@@ -467,43 +612,118 @@ const Sessions = () => {
               </div>
 
               <TabsContent value={activeTab} className="mt-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {filteredSessions.map((session) => (
-                    <SessionCard
-                      key={session.id}
-                      session={session}
-                      onStart={handleStartSession}
-                      onEnd={handleEndSession}
-                      onViewReport={handleViewReport}
-                      onDelete={handleDeleteSession}
-                      onToggleMode={handleToggleMode}
-                      onGenerateQrCode={handleGenerateQrCode}
-                      user={user}
-                      isTogglingMode={togglingSessionId === session.id}
-                      isDeleting={deletingSessionId === session.id}
-                      isGeneratingQrCode={generatingQrCode === session.id}
-                    />
-                  ))}
-                </div>
+                {/* Weekly Lectures from Timetable - Grouped by Day */}
+                {weeklyLectureSessions.length > 0 && (
+                  <div className="mb-8">
+                    <div className="flex items-center gap-2 mb-4">
+                      <BookOpen className="w-5 h-5 text-primary" />
+                      <h2 className="text-lg font-semibold text-foreground">
+                        This Week's Lectures
+                      </h2>
+                      <span className="text-sm text-muted-foreground">
+                        (
+                        {
+                          weeklyLectureSessions.filter((s) => {
+                            if (activeTab === "all") return true;
+                            return s.status === activeTab;
+                          }).length
+                        }{" "}
+                        lectures remaining)
+                      </span>
+                    </div>
 
-                {filteredSessions.length === 0 && (
-                  <div className="text-center py-12 bg-card rounded-xl border border-border">
-                    <p className="text-muted-foreground">
-                      {activeTab === "all"
-                        ? "No sessions found."
-                        : `No ${activeTab} sessions found.`}
-                    </p>
-                    {canCreateSession && activeTab === "all" && (
-                      <Button
-                        variant="outline"
-                        className="mt-4"
-                        onClick={() => setCreateModalOpen(true)}
-                      >
-                        Create your first session
-                      </Button>
+                    {/* Group lectures by day */}
+                    {Object.entries(lecturesByDay).map(
+                      ([dayName, daySessions]) => {
+                        const filteredDaySessions = daySessions.filter((s) => {
+                          if (activeTab === "all") return true;
+                          return s.status === activeTab;
+                        });
+
+                        if (filteredDaySessions.length === 0) return null;
+
+                        const isToday =
+                          dayNames[new Date().getDay()] === dayName;
+
+                        return (
+                          <div key={dayName} className="mb-6">
+                            <div className="flex items-center gap-2 mb-3">
+                              <h3
+                                className={`text-md font-medium ${isToday ? "text-primary" : "text-muted-foreground"}`}
+                              >
+                                {dayName}
+                                {isToday && (
+                                  <span className="ml-2 text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">
+                                    Today
+                                  </span>
+                                )}
+                              </h3>
+                              <span className="text-xs text-muted-foreground">
+                                ({filteredDaySessions.length} lecture
+                                {filteredDaySessions.length !== 1 ? "s" : ""})
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                              {filteredDaySessions.map((session) => (
+                                <SessionCard
+                                  key={session.id}
+                                  session={session}
+                                  user={user}
+                                  onStart={handleStartSession}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      },
                     )}
                   </div>
                 )}
+
+                {/* API Sessions (if any) */}
+                {filteredSessions.length > 0 && (
+                  <>
+                    {weeklyLectureSessions.length > 0 && (
+                      <div className="flex items-center gap-2 mb-4">
+                        <h2 className="text-lg font-semibold text-foreground">
+                          Attendance Sessions
+                        </h2>
+                        <span className="text-sm text-muted-foreground">
+                          ({filteredSessions.length})
+                        </span>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {filteredSessions.map((session) => (
+                        <SessionCard
+                          key={session.id}
+                          session={session}
+                          onStart={handleStartSession}
+                          onEnd={handleEndSession}
+                          onViewReport={handleViewReport}
+                          onDelete={handleDeleteSession}
+                          onToggleMode={handleToggleMode}
+                          onGenerateQrCode={handleGenerateQrCode}
+                          user={user}
+                          isTogglingMode={togglingSessionId === session.id}
+                          isDeleting={deletingSessionId === session.id}
+                          isGeneratingQrCode={generatingQrCode === session.id}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {filteredSessions.length === 0 &&
+                  weeklyLectureSessions.length === 0 && (
+                    <div className="text-center py-12 bg-card rounded-xl border border-border">
+                      <p className="text-muted-foreground">
+                        {activeTab === "all"
+                          ? "No lectures scheduled this week. Add activities in the Activities tab."
+                          : `No ${activeTab} sessions found.`}
+                      </p>
+                    </div>
+                  )}
               </TabsContent>
             </Tabs>
           )}
@@ -514,14 +734,6 @@ const Sessions = () => {
           <TimetableTab />
         </TabsContent>
       </Tabs>
-
-      {/* Create Session Modal */}
-      <CreateSessionModal
-        open={createModalOpen}
-        onOpenChange={setCreateModalOpen}
-        user={user}
-        onCreateSession={handleCreateSession}
-      />
 
       {/* Session Report Modal */}
       <SessionReportModal
