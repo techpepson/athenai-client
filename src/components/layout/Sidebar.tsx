@@ -198,15 +198,14 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
             />
           )} */}
 
-          {canSeeSessions &&
-            !isStudent /* Hide Sessions for pure Students (Course Rep is distinct var here if logic holds, but wait. isStudent is true for CourseRep? Let's check logic: isStudent = user.role === 'student'. CourseRep is 'course_rep'. User said 'Studdnet = ... session- see but cant start'. User later said 'if student is class rep show session... if not dont'. So plain 'student' role hides sessions. */ && (
-              <NavItem
-                to={`${rolePrefix}/sessions`}
-                icon={<CalendarClock className="w-5 h-5" />}
-                label="Sessions"
-                collapsed={collapsed}
-              />
-            )}
+          {canSeeSessions && (
+            <NavItem
+              to={`${rolePrefix}/sessions`}
+              icon={<CalendarClock className="w-5 h-5" />}
+              label="Sessions"
+              collapsed={collapsed}
+            />
+          )}
 
           {/* Kiosk mode removed for all roles */}
 
@@ -404,7 +403,7 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
             />
           )} */}
 
-          {canSeeSessions && !isStudent && (
+          {canSeeSessions && (
             <NavItem
               to={`${rolePrefix}/sessions`}
               icon={<CalendarClock className="w-5 h-5" />}

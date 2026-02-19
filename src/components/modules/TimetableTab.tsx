@@ -47,6 +47,7 @@ import {
 import { usersServices } from "@/services/users.services";
 import { IUserPublic } from "@/interface/user.interface";
 import { Role } from "@/enums/enums";
+import { useAuth } from "@/contexts/AuthContext";
 
 // Activity types matching medical school format
 const ACTIVITY_TYPES = [
@@ -80,20 +81,12 @@ const ACTIVITY_LABELS: Record<string, string> = {
 };
 
 // Time columns matching the sample: 7.30 through 5.30
-const MORNING_TIMES = [
-  "7:30",
-  "8:30",
-  "9:30",
-  "10:30",
-  "11:30",
-  "12:30",
-];
+const MORNING_TIMES = ["7:30", "8:30", "9:30", "10:30", "11:30", "12:30"];
 const AFTERNOON_TIMES = ["1:30", "2:30", "3:30", "4:30", "5:30"];
 const ALL_TIMES = [...MORNING_TIMES, ...AFTERNOON_TIMES];
 
 const ACTIVITY_COLORS: Record<string, string> = {
-  LECTURE:
-    "bg-blue-500/15 border-blue-500/30 text-blue-700 dark:text-blue-300",
+  LECTURE: "bg-blue-500/15 border-blue-500/30 text-blue-700 dark:text-blue-300",
   PBL: "bg-amber-500/15 border-amber-500/30 text-amber-700 dark:text-amber-300",
   SDL: "bg-emerald-500/15 border-emerald-500/30 text-emerald-700 dark:text-emerald-300",
   TUTORIAL:
@@ -111,8 +104,7 @@ const ACTIVITY_COLORS: Record<string, string> = {
   "COMMUNITY VISIT":
     "bg-teal-500/15 border-teal-500/30 text-teal-700 dark:text-teal-300",
   EXAM: "bg-red-500/15 border-red-500/30 text-red-700 dark:text-red-300",
-  OTHER:
-    "bg-gray-500/15 border-gray-500/30 text-gray-700 dark:text-gray-300",
+  OTHER: "bg-gray-500/15 border-gray-500/30 text-gray-700 dark:text-gray-300",
 };
 
 const LEVEL_TEXT: Record<number, string> = {
@@ -149,7 +141,23 @@ interface WeekSlot extends TimetableSlot {
 }
 
 const TimetableTab = () => {
-  const [selectedLevel, setSelectedLevel] = useState<number>(100);
+  const { user } = useAuth();
+
+  // Role-based access control
+  const isAdmin = user?.role === Role.ADMIN || user?.role === Role.SYSTEM_ADMIN;
+  const isRep = user?.role === Role.REP;
+  const canEdit = isAdmin || isRep;
+
+  // Get student's level (default to 100 if not set)
+  // For REP/STUDENT, they should only see their own level
+  const userLevel = user?.student?.level || 100;
+
+  // Determine which levels to show
+  const availableLevels = isAdmin ? LEVELS : [userLevel];
+
+  const [selectedLevel, setSelectedLevel] = useState<number>(
+    isAdmin ? 100 : userLevel,
+  );
   const [selectedSemester, setSelectedSemester] = useState<number>(1);
   const [selectedModuleId, setSelectedModuleId] = useState<string>("");
   const [selectedWeek, setSelectedWeek] = useState<number>(1);
@@ -175,7 +183,7 @@ const TimetableTab = () => {
   const [timetableStartDate, setTimetableStartDate] = useState("");
   const [timetableEndDate, setTimetableEndDate] = useState("");
   const [timetableAcademicYear, setTimetableAcademicYear] = useState(
-    `${new Date().getFullYear()}/${new Date().getFullYear() + 1}`
+    `${new Date().getFullYear()}/${new Date().getFullYear() + 1}`,
   );
 
   useEffect(() => {
@@ -184,7 +192,7 @@ const TimetableTab = () => {
 
   useEffect(() => {
     const filtered = modules.filter(
-      (m) => m.level === selectedLevel && m.semester === selectedSemester
+      (m) => m.level === selectedLevel && m.semester === selectedSemester,
     );
     if (filtered.length > 0) {
       setSelectedModuleId(filtered[0].id);
@@ -201,8 +209,8 @@ const TimetableTab = () => {
     if (response.success && response.data?.users) {
       setStaffList(
         response.data.users.filter(
-          (u) => u.role === Role.LECTURER || u.role === Role.STAFF
-        )
+          (u) => u.role === Role.LECTURER || u.role === Role.STAFF,
+        ),
       );
     }
   };
@@ -211,15 +219,15 @@ const TimetableTab = () => {
     () =>
       modules
         .filter(
-          (m) => m.level === selectedLevel && m.semester === selectedSemester
+          (m) => m.level === selectedLevel && m.semester === selectedSemester,
         )
         .sort((a, b) => (a.order || 0) - (b.order || 0)),
-    [modules, selectedLevel, selectedSemester]
+    [modules, selectedLevel, selectedSemester],
   );
 
   const selectedModule = useMemo(
     () => modules.find((m) => m.id === selectedModuleId),
-    [modules, selectedModuleId]
+    [modules, selectedModuleId],
   );
 
   const currentTimetable = useMemo(
@@ -227,7 +235,7 @@ const TimetableTab = () => {
       selectedModuleId
         ? timetables.find((t) => t.moduleId === selectedModuleId)
         : undefined,
-    [timetables, selectedModuleId]
+    [timetables, selectedModuleId],
   );
 
   const totalWeeks = currentTimetable?.totalWeeks || 4;
@@ -258,7 +266,7 @@ const TimetableTab = () => {
     }
     if (!selectedModule?.subtopics.length) {
       toast.error(
-        "Please add subtopics to this module first (in Settings → Modules)"
+        "Please add subtopics to this module first (in Settings → Modules)",
       );
       return;
     }
@@ -310,7 +318,7 @@ const TimetableTab = () => {
     const timetable = ensureTimetable();
     const lecturer = staffList.find((s) => s.id === slotLecturerId);
     const subtopic = selectedModule?.subtopics.find(
-      (s) => s.id === slotSubtopicId
+      (s) => s.id === slotSubtopicId,
     );
 
     const slotData: Record<string, unknown> = {
@@ -320,8 +328,7 @@ const TimetableTab = () => {
       subtopicId: slotSubtopicId,
       moduleId: selectedModuleId,
       lecturerId: slotLecturerId || subtopic?.lecturerId || undefined,
-      lecturerName:
-        lecturer?.name || subtopic?.lecturerName || undefined,
+      lecturerName: lecturer?.name || subtopic?.lecturerName || undefined,
       venue: slotVenue || undefined,
       week: parseInt(slotWeek) || selectedWeek,
       activityType: slotActivityType,
@@ -332,13 +339,13 @@ const TimetableTab = () => {
       modulesService.updateTimetableSlot(
         timetable.id,
         editingSlot.id,
-        slotData as Partial<TimetableSlot>
+        slotData as Partial<TimetableSlot>,
       );
       toast.success("Time slot updated");
     } else {
       modulesService.addTimetableSlot(
         timetable.id,
-        slotData as Omit<TimetableSlot, "id">
+        slotData as Omit<TimetableSlot, "id">,
       );
       toast.success("Time slot added");
     }
@@ -376,22 +383,19 @@ const TimetableTab = () => {
       setTimetableStartDate(currentTimetable.startDate || "");
       setTimetableEndDate(currentTimetable.endDate || "");
       setTimetableAcademicYear(
-        currentTimetable.academicYear || timetableAcademicYear
+        currentTimetable.academicYear || timetableAcademicYear,
       );
     }
     setSettingsModalOpen(true);
   };
 
   // Get slots for current week and day
-  const getWeekSlots = (
-    day: string,
-    week: number
-  ): WeekSlot[] => {
+  const getWeekSlots = (day: string, week: number): WeekSlot[] => {
     if (!currentTimetable) return [];
     return (currentTimetable.slots as unknown as WeekSlot[]).filter(
       (s) =>
         s.day?.toUpperCase() === day.toUpperCase() &&
-        (s.week === week || !s.week)
+        (s.week === week || !s.week),
     );
   };
 
@@ -457,9 +461,9 @@ const TimetableTab = () => {
   const getWeekTopicsAndFacilitators = (week: number) => {
     if (!currentTimetable || !selectedModule) return [];
 
-    const weekSlots = (
-      currentTimetable.slots as unknown as WeekSlot[]
-    ).filter((s) => (s.week === week || !s.week) && s.activityType === "LECTURE");
+    const weekSlots = (currentTimetable.slots as unknown as WeekSlot[]).filter(
+      (s) => (s.week === week || !s.week) && s.activityType === "LECTURE",
+    );
 
     // Group by subtopic
     const topicMap = new Map<
@@ -469,7 +473,7 @@ const TimetableTab = () => {
 
     weekSlots.forEach((slot) => {
       const subtopic = selectedModule.subtopics.find(
-        (st) => st.id === slot.subtopicId
+        (st) => st.id === slot.subtopicId,
       );
       if (!subtopic) return;
 
@@ -477,8 +481,7 @@ const TimetableTab = () => {
       if (!topicMap.has(key)) {
         topicMap.set(key, {
           subtopicName: subtopic.name,
-          lecturerName:
-            slot.lecturerName || subtopic.lecturerName || "TBA",
+          lecturerName: slot.lecturerName || subtopic.lecturerName || "TBA",
           slots: [],
         });
       }
@@ -494,7 +497,7 @@ const TimetableTab = () => {
     : 0;
 
   const currentModuleIndex = filteredModules.findIndex(
-    (m) => m.id === selectedModuleId
+    (m) => m.id === selectedModuleId,
   );
 
   // Date range for current week
@@ -564,7 +567,7 @@ const TimetableTab = () => {
                         <SelectItem key={w} value={String(w)}>
                           Week {w}
                         </SelectItem>
-                      )
+                      ),
                     )}
                   </SelectContent>
                 </Select>
@@ -576,10 +579,7 @@ const TimetableTab = () => {
                 Subtopic / Topic{" "}
                 <span className="text-muted-foreground">(for lectures)</span>
               </Label>
-              <Select
-                value={slotSubtopicId}
-                onValueChange={setSlotSubtopicId}
-              >
+              <Select value={slotSubtopicId} onValueChange={setSlotSubtopicId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select a subtopic" />
                 </SelectTrigger>
@@ -612,10 +612,7 @@ const TimetableTab = () => {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Start Time</Label>
-                <Select
-                  value={slotStartTime}
-                  onValueChange={setSlotStartTime}
-                >
+                <Select value={slotStartTime} onValueChange={setSlotStartTime}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -647,10 +644,7 @@ const TimetableTab = () => {
 
             <div className="space-y-2">
               <Label>Lecturer / Facilitator</Label>
-              <Select
-                value={slotLecturerId}
-                onValueChange={setSlotLecturerId}
-              >
+              <Select value={slotLecturerId} onValueChange={setSlotLecturerId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select (optional)" />
                 </SelectTrigger>
@@ -736,9 +730,7 @@ const TimetableTab = () => {
             >
               Cancel
             </Button>
-            <Button onClick={handleSaveTimetableSettings}>
-              Save Settings
-            </Button>
+            <Button onClick={handleSaveTimetableSettings}>Save Settings</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -764,21 +756,30 @@ const TimetableTab = () => {
               <Label className="text-xs text-muted-foreground whitespace-nowrap font-medium">
                 Level:
               </Label>
-              <div className="flex gap-1.5">
-                {LEVELS.map((level) => (
-                  <button
-                    key={level}
-                    onClick={() => setSelectedLevel(level)}
-                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 border ${
-                      selectedLevel === level
-                        ? `${LEVEL_BG[level]} ${LEVEL_TEXT[level]} shadow-sm`
-                        : "bg-secondary/50 border-border text-muted-foreground hover:bg-secondary"
-                    }`}
-                  >
-                    {level}
-                  </button>
-                ))}
-              </div>
+              {isAdmin ? (
+                <div className="flex gap-1.5">
+                  {LEVELS.map((level) => (
+                    <button
+                      key={level}
+                      onClick={() => setSelectedLevel(level)}
+                      className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 border ${
+                        selectedLevel === level
+                          ? `${LEVEL_BG[level]} ${LEVEL_TEXT[level]} shadow-sm`
+                          : "bg-secondary/50 border-border text-muted-foreground hover:bg-secondary"
+                      }`}
+                    >
+                      {level}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <Badge
+                  variant="outline"
+                  className={`${LEVEL_BG[userLevel]} ${LEVEL_TEXT[userLevel]}`}
+                >
+                  Level {userLevel}
+                </Badge>
+              )}
             </div>
 
             <div className="w-px bg-border self-stretch" />
@@ -839,15 +840,17 @@ const TimetableTab = () => {
                 </SelectContent>
               </Select>
 
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={openTimetableSettings}
-                className="gap-1"
-              >
-                <Calendar className="w-3.5 h-3.5" />
-                Settings
-              </Button>
+              {canEdit && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={openTimetableSettings}
+                  className="gap-1"
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  Settings
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -918,8 +921,8 @@ const TimetableTab = () => {
             </h4>
             <p className="text-sm text-muted-foreground max-w-md mx-auto">
               No modules have been added for Level {selectedLevel}, Semester{" "}
-              {selectedSemester}. Go to{" "}
-              <strong>Settings → Modules</strong> to add modules first.
+              {selectedSemester}. Go to <strong>Settings → Modules</strong> to
+              add modules first.
             </p>
           </div>
         )}
@@ -1010,7 +1013,7 @@ const TimetableTab = () => {
                     >
                       {w}
                     </button>
-                  )
+                  ),
                 )}
               </div>
 
@@ -1055,10 +1058,7 @@ const TimetableTab = () => {
                   </thead>
                   <tbody>
                     {DAYS_OF_WEEK.map((day, dayIdx) => {
-                      const cells = buildDayRow(
-                        day,
-                        selectedWeek
-                      );
+                      const cells = buildDayRow(day, selectedWeek);
                       return (
                         <tr
                           key={day}
@@ -1101,8 +1101,7 @@ const TimetableTab = () => {
                                     {cell.slot.activityType === "LECTURE" && (
                                       <p className="text-[9px] mt-0.5 opacity-80 truncate max-w-full">
                                         {selectedModule?.subtopics.find(
-                                          (s) =>
-                                            s.id === cell.slot!.subtopicId
+                                          (s) => s.id === cell.slot!.subtopicId,
                                         )?.name || ""}
                                       </p>
                                     )}
@@ -1112,40 +1111,45 @@ const TimetableTab = () => {
                                         {cell.slot.venue}
                                       </p>
                                     )}
-                                    {/* Hover actions */}
-                                    <div className="absolute top-0.5 right-0.5 flex opacity-0 group-hover:opacity-100 transition-opacity bg-background/80 rounded-md">
-                                      <button
-                                        className="p-1 rounded hover:bg-black/10"
-                                        onClick={() =>
-                                          openEditSlotModal(cell.slot!)
-                                        }
-                                      >
-                                        <Pencil className="w-2.5 h-2.5" />
-                                      </button>
-                                      <button
-                                        className="p-1 rounded hover:bg-red-500/20 text-red-500"
-                                        onClick={() =>
-                                          handleDeleteSlot(cell.slot!.id)
-                                        }
-                                      >
-                                        <Trash2 className="w-2.5 h-2.5" />
-                                      </button>
-                                    </div>
+                                    {/* Hover actions - only for editors */}
+                                    {canEdit && (
+                                      <div className="absolute top-0.5 right-0.5 flex opacity-0 group-hover:opacity-100 transition-opacity bg-background/80 rounded-md">
+                                        <button
+                                          className="p-1 rounded hover:bg-black/10"
+                                          onClick={() =>
+                                            openEditSlotModal(cell.slot!)
+                                          }
+                                        >
+                                          <Pencil className="w-2.5 h-2.5" />
+                                        </button>
+                                        <button
+                                          className="p-1 rounded hover:bg-red-500/20 text-red-500"
+                                          onClick={() =>
+                                            handleDeleteSlot(cell.slot!.id)
+                                          }
+                                        >
+                                          <Trash2 className="w-2.5 h-2.5" />
+                                        </button>
+                                      </div>
+                                    )}
                                   </div>
                                 </td>
                               );
                             }
 
-                            // Empty cell
+                            // Empty cell - only clickable for editors
                             return (
                               <td
                                 key={cellIdx}
-                                className="p-1.5 border border-border/50 align-top cursor-pointer hover:bg-primary/5 transition-colors"
-                                onClick={() =>
-                                  openAddSlotModal(
-                                    day.toUpperCase(),
-                                    ALL_TIMES[cell.timeIndex]
-                                  )
+                                className={`p-1.5 border border-border/50 align-top ${canEdit ? "cursor-pointer hover:bg-primary/5" : ""} transition-colors`}
+                                onClick={
+                                  canEdit
+                                    ? () =>
+                                        openAddSlotModal(
+                                          day.toUpperCase(),
+                                          ALL_TIMES[cell.timeIndex],
+                                        )
+                                    : undefined
                                 }
                               />
                             );
@@ -1186,17 +1190,19 @@ const TimetableTab = () => {
                 <div className="p-6 text-center border-t border-border">
                   <CalendarDays className="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
                   <p className="text-sm text-muted-foreground mb-3">
-                    No activities scheduled for Week {selectedWeek}. Click on an
-                    empty cell to add a time slot.
+                    No activities scheduled for Week {selectedWeek}.
+                    {canEdit && " Click on an empty cell to add a time slot."}
                   </p>
-                  <Button
-                    size="sm"
-                    onClick={() => openAddSlotModal()}
-                    className="gap-1"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    Add Time Slot
-                  </Button>
+                  {canEdit && (
+                    <Button
+                      size="sm"
+                      onClick={() => openAddSlotModal()}
+                      className="gap-1"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Add Time Slot
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
@@ -1236,7 +1242,7 @@ const TimetableTab = () => {
                             </p>
                           </div>
                         </div>
-                      )
+                      ),
                     )}
                   </div>
                 ) : (
@@ -1326,8 +1332,8 @@ const TimetableTab = () => {
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground text-center py-4">
-                  No subtopics added. Go to{" "}
-                  <strong>Settings → Modules</strong> to add subtopics.
+                  No subtopics added. Go to <strong>Settings → Modules</strong>{" "}
+                  to add subtopics.
                 </p>
               )}
             </div>
