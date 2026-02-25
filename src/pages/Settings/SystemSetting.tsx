@@ -419,7 +419,7 @@ const SystemSetting = () => {
             <AlertDialogDescription>
               Are you sure you want to delete "{courseToDelete?.title}" (
               {courseToDelete?.code})? This will also remove all enrollments,
-              sessions, and course representative assignments associated with
+              sessions, and level representative assignments associated with
               this course. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>

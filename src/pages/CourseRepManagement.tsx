@@ -235,7 +235,7 @@ const CourseRepManagement = () => {
       if (response.success) {
         toast({
           title: "Success",
-          description: `${selectedStudent.name} has been assigned as course representative`,
+          description: `${selectedStudent.name} has been assigned as level representative`,
         });
         setAddModalOpen(false);
         loadCourseReps(); // Refresh the list
@@ -243,7 +243,7 @@ const CourseRepManagement = () => {
         toast({
           title: "Error",
           description:
-            response.error || "Failed to assign course representative",
+            response.error || "Failed to assign level representative",
           variant: "destructive",
         });
       }
@@ -306,14 +306,14 @@ const CourseRepManagement = () => {
       if (response.success) {
         toast({
           title: "Success",
-          description: `${selectedCourseRep.name} has been removed as course representative`,
+          description: `${selectedCourseRep.name} has been removed as level representative`,
         });
         loadCourseReps(); // Refresh the list
       } else {
         toast({
           title: "Error",
           description:
-            response.error || "Failed to remove course representative",
+            response.error || "Failed to remove level representative",
           variant: "destructive",
         });
       }
@@ -375,15 +375,15 @@ const CourseRepManagement = () => {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">
-            Course Representatives
+            Level Representatives
           </h1>
           <p className="text-muted-foreground mt-1">
-            Assign students as course reps to manage attendance sessions
+            Assign students as level reps to manage attendance sessions
           </p>
         </div>
         <Button variant="gradient" onClick={() => setAddModalOpen(true)}>
           <Plus className="w-4 h-4 mr-2" />
-          Assign Course Rep
+          Assign Level Rep
         </Button>
       </div>
 
@@ -393,10 +393,10 @@ const CourseRepManagement = () => {
           <GraduationCap className="w-5 h-5 text-primary mt-0.5" />
           <div>
             <p className="text-sm font-medium text-foreground">
-              Course Rep Permissions
+              Level Rep Permissions
             </p>
             <p className="text-sm text-muted-foreground mt-1">
-              Course representatives can create attendance sessions and take
+              Level representatives can create attendance sessions and take
               attendance of lecturers. They cannot manage members or other
               system settings.
             </p>
@@ -442,7 +442,7 @@ const CourseRepManagement = () => {
         </div>
       </div>
 
-      {/* Course Rep List */}
+      {/* Level Rep List */}
       <div className="bg-card rounded-xl border border-border">
         {filteredCourseReps.length === 0 &&
         (courseRepSearch || courseRepCourseFilter !== "all") ? (
@@ -452,7 +452,7 @@ const CourseRepManagement = () => {
               No results found
             </h3>
             <p className="text-muted-foreground mb-4">
-              No course representatives match your filters
+              No level representatives match your filters
             </p>
             <Button
               variant="outline"
@@ -468,11 +468,10 @@ const CourseRepManagement = () => {
           <div className="p-12 text-center">
             <UserCheck className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-medium text-foreground mb-2">
-              No course representatives
+              No level representatives
             </h3>
             <p className="text-muted-foreground mb-4">
-              Assign students as course reps to courses to help manage
-              attendance
+              Assign students as level reps to courses to help manage attendance
             </p>
             <Button variant="outline" onClick={() => setAddModalOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
@@ -494,7 +493,7 @@ const CourseRepManagement = () => {
                     <div className="flex items-center gap-2">
                       <p className="font-medium text-foreground">{rep.name}</p>
                       <Badge variant="secondary" className="text-xs">
-                        Course Rep
+                        Level Rep
                       </Badge>
                     </div>
 
@@ -574,12 +573,12 @@ const CourseRepManagement = () => {
         )}
       </div>
 
-      {/* Add Course Rep Wizard Modal */}
+      {/* Add Level Rep Wizard Modal */}
       <Dialog open={addModalOpen} onOpenChange={setAddModalOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              Assign Course Representative (Step {step}/2)
+              Assign Level Representative (Step {step}/2)
             </DialogTitle>
           </DialogHeader>
 
@@ -724,10 +723,10 @@ const CourseRepManagement = () => {
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove Course Representative?</AlertDialogTitle>
+            <AlertDialogTitle>Remove Level Representative?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will remove {selectedCourseRep?.name} from the course rep
-              role and change their role back to student.
+              This will remove {selectedCourseRep?.name} from the level rep role
+              and change their role back to student.
             </AlertDialogDescription>
           </AlertDialogHeader>
 

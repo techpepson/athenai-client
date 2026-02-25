@@ -136,7 +136,14 @@ const StudentDashboard = () => {
   // Filter sessions that belong to courses the student is enrolled in
   const studentSessions = useMemo(() => {
     console.log("All sessions:", allSessions);
-    console.log("All sessions courseIds:", allSessions.map(s => ({ id: s.id, courseId: s.courseId, name: s.name })));
+    console.log(
+      "All sessions courseIds:",
+      allSessions.map((s) => ({
+        id: s.id,
+        courseId: s.courseId,
+        name: s.name,
+      })),
+    );
     const filtered = allSessions.filter(
       (session) =>
         session.courseId && enrolledCourseIds.includes(session.courseId),
@@ -170,14 +177,29 @@ const StudentDashboard = () => {
 
     const result = baseSessions.filter((s) => s.type === SessionType.CLASS);
     console.log("Filtered sessions (CLASS type only):", result);
-    console.log("Session statuses:", result.map(s => ({ id: s.id, name: s.name, status: s.status, type: s.type })));
+    console.log(
+      "Session statuses:",
+      result.map((s) => ({
+        id: s.id,
+        name: s.name,
+        status: s.status,
+        type: s.type,
+      })),
+    );
     return result;
   }, [selectedCourse, studentSessions]);
 
   // Calculate attendance statistics
   const attendanceStats = useMemo(() => {
     if (!studentData?.id) {
-      return { attended: 0, late: 0, absent: 0, total: 0, totalSessions: 0, rate: 0 };
+      return {
+        attended: 0,
+        late: 0,
+        absent: 0,
+        total: 0,
+        totalSessions: 0,
+        rate: 0,
+      };
     }
 
     console.log("Calculating attendance stats for student:", studentData.id);
@@ -188,10 +210,13 @@ const StudentDashboard = () => {
 
     // Count only CLOSED sessions for attendance calculations
     const closedSessions = filteredSessions.filter(
-      (s) => s.status === SessionStatus.CLOSED
+      (s) => s.status === SessionStatus.CLOSED,
     );
 
-    console.log("Closed sessions for attendance calculation:", closedSessions.length);
+    console.log(
+      "Closed sessions for attendance calculation:",
+      closedSessions.length,
+    );
 
     closedSessions.forEach((session) => {
       const attendance = session.attendances?.find(
@@ -222,10 +247,24 @@ const StudentDashboard = () => {
     const total = attended + late + absent;
     const rate = total > 0 ? Math.round(((attended + late) / total) * 100) : 0;
 
-    console.log("Attendance stats result:", { attended, late, absent, total, totalSessions: filteredSessions.length, rate });
+    console.log("Attendance stats result:", {
+      attended,
+      late,
+      absent,
+      total,
+      totalSessions: filteredSessions.length,
+      rate,
+    });
 
     // totalSessions = all sessions (open + closed) for the student's courses
-    return { attended, late, absent, total, totalSessions: filteredSessions.length, rate };
+    return {
+      attended,
+      late,
+      absent,
+      total,
+      totalSessions: filteredSessions.length,
+      rate,
+    };
   }, [filteredSessions, studentData?.id]);
 
   // Calculate weekly attendance data for chart using directly fetched attendance records
@@ -468,7 +507,7 @@ const StudentDashboard = () => {
           {isCourseRep && (
             <Badge variant="secondary" className="gap-1 w-fit">
               <GraduationCap className="w-3 h-3" />
-              Course Representative
+              Level Representative
             </Badge>
           )}
         </div>

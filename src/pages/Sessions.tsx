@@ -8,8 +8,17 @@ import {
   CalendarDays,
   LayoutList,
   BookOpen,
+  FileText,
+  Users,
+  Send,
+  AlertCircle,
 } from "lucide-react";
 import TimetableTab from "@/components/modules/TimetableTab";
+import LecturerAttendanceTab from "@/components/sessions/LecturerAttendanceTab";
+import StudentAttendanceTab from "@/components/sessions/StudentAttendanceTab";
+import MyAttendanceSheet from "@/components/sessions/MyAttendanceSheet";
+import MasterAttendanceSheet from "@/components/sessions/MasterAttendanceSheet";
+import { hasEnrolledModules } from "@/data/mockAttendanceData";
 import { Button } from "@/components/ui/button";
 import { SessionCard } from "@/components/sessions/SessionCard";
 import { SessionReportModal } from "@/components/sessions/SessionReportModal";
@@ -21,6 +30,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAttendance } from "@/contexts/AttendanceContext";
 import { Role } from "@/enums/enums";
 import {
   getAllSessionsAdmin,
@@ -139,6 +149,10 @@ const Sessions = () => {
   const [mainTab, setMainTab] = useState("sessions");
   const [sessions, setSessions] = useState<AttendanceSession[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Get AttendanceContext for shared state
+  const { startSession: ctxStartSession, endSession: ctxEndSession } =
+    useAttendance();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [togglingSessionId, setTogglingSessionId] = useState<string | null>(
     null,
@@ -154,6 +168,29 @@ const Sessions = () => {
 
   // Check if user is admin (can see all sessions)
   const isAdmin = user?.role === Role.ADMIN || user?.role === Role.SYSTEM_ADMIN;
+
+  // Check if user can view lecturer attendance (REP, LECTURER, ADMIN, SYSTEM_ADMIN)
+  const canViewLecturerAttendance =
+    isAdmin || user?.role === Role.REP || user?.role === Role.LECTURER;
+
+  // Check if user can view student attendance (everyone except lecturers)
+  const canViewStudentAttendance = user?.role !== Role.LECTURER;
+
+  // Check if user is a student (for My Attendance Sheet)
+  const isStudent = user?.role === Role.STUDENT;
+  const isRep = user?.role === Role.REP;
+  const isLecturer = user?.role === Role.LECTURER;
+
+  // Check if user can view My Attendance Sheet (students and reps)
+  const canViewMyAttendanceSheet = isStudent || isRep;
+
+  // Check if user can view/edit Master Attendance Sheet (reps and lecturers)
+  const canViewMasterAttendanceSheet = isRep || isLecturer || isAdmin;
+
+  // SMS modal state for session start
+  const [smsModalOpen, setSmsModalOpen] = useState(false);
+  const [startingSession, setStartingSession] =
+    useState<AttendanceSession | null>(null);
 
   // Day name mapping for display
   const dayNames = [
@@ -380,8 +417,72 @@ const Sessions = () => {
     return session.status === activeTab;
   });
 
-  const handleStartSession = () => {
-    toast.success("Session started! Kiosk mode is now active.");
+  const handleStartSession = (session: AttendanceSession) => {
+    // Extract slot ID from the session ID (e.g., "timetable-slotId" -> "slotId")
+    const slotId = session.id.replace("timetable-", "");
+
+    // Save to localStorage to mark as active
+    const storedActiveSessions = localStorage.getItem(
+      "active_lecture_sessions",
+    );
+    const activeSessions = storedActiveSessions
+      ? JSON.parse(storedActiveSessions)
+      : [];
+
+    if (!activeSessions.includes(slotId)) {
+      activeSessions.push(slotId);
+      localStorage.setItem(
+        "active_lecture_sessions",
+        JSON.stringify(activeSessions),
+      );
+    }
+
+    // Also call AttendanceContext's startSession for shared state
+    // This enables the Sign In functionality in MyAttendanceSheet
+    const moduleCode = session.department || "UNKNOWN";
+    const formatTime = (date: Date) => {
+      const h = date.getHours().toString().padStart(2, "0");
+      const m = date.getMinutes().toString().padStart(2, "0");
+      return `${h}:${m}`;
+    };
+    ctxStartSession({
+      sessionId: session.id,
+      slotId,
+      moduleCode,
+      moduleName: session.courseName || session.name,
+      topic: session.name,
+      date: session.startTime.toISOString().split("T")[0],
+      week: 1, // Could calculate from timetable if available
+      startTime: formatTime(session.startTime),
+      endTime: formatTime(session.endTime),
+      startedBy: user?.name || "Level Rep",
+    });
+
+    // Dispatch event to notify other components
+    window.dispatchEvent(new Event("session-started"));
+
+    // Show SMS modal
+    setStartingSession(session);
+    setSmsModalOpen(true);
+
+    toast.success("Session started! Students can now sign in.");
+  };
+
+  // Handle sending SMS link
+  const handleSendSms = () => {
+    if (!startingSession) return;
+
+    const slotId = startingSession.id.replace("timetable-", "");
+    const kioskLink = `${window.location.origin}/kiosk/lecturer/${slotId}`;
+
+    navigator.clipboard.writeText(kioskLink).catch(() => {});
+
+    toast.success("SMS link sent to lecturer", {
+      description: "Link copied to clipboard for testing",
+    });
+
+    setSmsModalOpen(false);
+    setStartingSession(null);
   };
 
   const handleEndSession = async (session: AttendanceSession) => {
@@ -572,6 +673,24 @@ const Sessions = () => {
             <CalendarDays className="w-4 h-4" />
             Activities
           </TabsTrigger>
+          {canViewLecturerAttendance && (
+            <TabsTrigger value="lecturer-attendance" className="gap-2">
+              <FileText className="w-4 h-4" />
+              Lecturer Attendance
+            </TabsTrigger>
+          )}
+          {canViewMyAttendanceSheet && (
+            <TabsTrigger value="my-attendance" className="gap-2">
+              <FileText className="w-4 h-4" />
+              My Attendance Sheet
+            </TabsTrigger>
+          )}
+          {canViewMasterAttendanceSheet && (
+            <TabsTrigger value="student-attendance" className="gap-2">
+              <Users className="w-4 h-4" />
+              Student Attendance Sheet
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* Sessions Tab Content */}
@@ -733,6 +852,27 @@ const Sessions = () => {
         <TabsContent value="activities" className="mt-6">
           <TimetableTab />
         </TabsContent>
+
+        {/* Lecturer Attendance Tab Content */}
+        {canViewLecturerAttendance && (
+          <TabsContent value="lecturer-attendance" className="mt-6">
+            <LecturerAttendanceTab />
+          </TabsContent>
+        )}
+
+        {/* My Attendance Sheet Tab Content (Student/Rep personal view) */}
+        {canViewMyAttendanceSheet && (
+          <TabsContent value="my-attendance" className="mt-6">
+            <MyAttendanceSheet />
+          </TabsContent>
+        )}
+
+        {/* Student Attendance Sheet Tab Content (Master view for Rep/Lecturer) */}
+        {canViewMasterAttendanceSheet && (
+          <TabsContent value="student-attendance" className="mt-6">
+            <MasterAttendanceSheet />
+          </TabsContent>
+        )}
       </Tabs>
 
       {/* Session Report Modal */}
@@ -786,6 +926,77 @@ const Sessions = () => {
                 Download
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* SMS Link Modal for Session Start */}
+      <Dialog open={smsModalOpen} onOpenChange={setSmsModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Send className="w-5 h-5" />
+              Send Attendance Link
+            </DialogTitle>
+            <DialogDescription>
+              Send a link to the lecturer&apos;s device for face recognition
+              attendance.
+            </DialogDescription>
+          </DialogHeader>
+
+          {startingSession && (
+            <div className="space-y-4">
+              <div className="bg-muted/50 p-3 rounded-lg text-sm">
+                <p>
+                  <strong>Session:</strong> {startingSession.name}
+                </p>
+                <p>
+                  <strong>Course:</strong> {startingSession.courseName}
+                </p>
+                <p>
+                  <strong>Time:</strong>{" "}
+                  {startingSession.startTime.toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}{" "}
+                  -{" "}
+                  {startingSession.endTime.toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </p>
+              </div>
+
+              <div className="p-3 bg-primary/10 rounded-lg">
+                <p className="text-sm text-muted-foreground mb-2">
+                  A link will be sent to the lecturer&apos;s registered phone
+                  number:
+                </p>
+                <code className="text-xs bg-muted px-2 py-1 rounded break-all">
+                  {window.location.origin}/kiosk/lecturer/
+                  {startingSession.id.replace("timetable-", "")}
+                </code>
+              </div>
+
+              <div className="flex items-start gap-2 text-sm text-muted-foreground">
+                <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <p>
+                  The lecturer can use this link to verify their attendance
+                  through face recognition, or sign manually on the attendance
+                  sheet.
+                </p>
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setSmsModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="gradient" onClick={handleSendSms}>
+              <Send className="w-4 h-4 mr-2" />
+              Send SMS
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

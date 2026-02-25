@@ -15,6 +15,14 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { LEVELS } from "@/services/modules.service";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogContent,
@@ -34,6 +42,7 @@ const formSchema = z
     email: z.string().email("Invalid email address"),
     fullName: z.string().min(2, "Full name is required"),
     phone: z.string().min(10, "Phone number must be at least 10 digits"),
+    level: z.number().min(100, "Please select your level"),
     password: z.string().min(6, "Password must be at least 6 characters"),
     confirmPassword: z.string(),
   })
@@ -60,6 +69,7 @@ export const StudentForm = ({ onSuccess }: StudentFormProps) => {
       email: "",
       fullName: "",
       phone: "",
+      level: 100,
       password: "",
       confirmPassword: "",
     },
@@ -68,12 +78,17 @@ export const StudentForm = ({ onSuccess }: StudentFormProps) => {
   const onSubmit = async (data: FormValues) => {
     setIsLoading(true);
     try {
+      // Store level in localStorage for mock frontend
+      localStorage.setItem("student_level", data.level.toString());
+      localStorage.setItem("enrolled_modules", JSON.stringify([]));
+
       const response = await authServices.register({
         email: data.email,
         name: data.fullName,
         phone: data.phone,
         password: data.password,
         role: Role.STUDENT,
+        // Note: level would be sent to backend in real implementation
       });
 
       if (response.success) {
@@ -196,6 +211,34 @@ export const StudentForm = ({ onSuccess }: StudentFormProps) => {
                         {...field}
                       />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="level"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Level</FormLabel>
+                    <Select
+                      onValueChange={(value) => field.onChange(parseInt(value))}
+                      defaultValue={field.value?.toString()}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select your level" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {LEVELS.map((level) => (
+                          <SelectItem key={level} value={level.toString()}>
+                            Level {level}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}

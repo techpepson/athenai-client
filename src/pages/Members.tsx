@@ -482,12 +482,12 @@ const Members = () => {
   const confirmRemovePrivilege = async () => {
     if (!selectedMember) return;
 
-    // TODO: Implement remove course rep privilege via API
+    // TODO: Implement remove level rep privilege via API
     // For now, show a placeholder message
     toast({
       title: "Feature Coming Soon",
       description:
-        "Course rep privilege removal will be available once the API is integrated.",
+        "Level rep privilege removal will be available once the API is integrated.",
     });
     setRemovePrivilegeConfirmOpen(false);
     setSelectedMember(null);
@@ -559,7 +559,7 @@ const Members = () => {
   const isLecturer = user?.role === Role.LECTURER;
   const isRep = user?.role === Role.REP;
 
-  // Filter role options for lecturers - only show students and course reps
+  // Filter role options for lecturers - only show students and level reps
   // For reps - only show lecturers
   const roleFilterOptions = isLecturer
     ? ROLE_FILTER_OPTIONS.filter(
@@ -783,16 +783,16 @@ const Members = () => {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Course Rep Action Dialog - Choose between remove privilege or delete */}
+      {/* Level Rep Action Dialog - Choose between remove privilege or delete */}
       <AlertDialog
         open={courseRepActionDialogOpen}
         onOpenChange={setCourseRepActionDialogOpen}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove Course Rep</AlertDialogTitle>
+            <AlertDialogTitle>Remove Level Rep</AlertDialogTitle>
             <AlertDialogDescription>
-              {selectedMember?.name} is a Course Representative. How would you
+              {selectedMember?.name} is a Level Representative. How would you
               like to proceed?
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -803,7 +803,7 @@ const Members = () => {
               onClick={handleRemoveCourseRepPrivilege}
             >
               <div className="text-left">
-                <p className="font-medium">Remove Course Rep Privilege</p>
+                <p className="font-medium">Remove Level Rep Privilege</p>
                 <p className="text-sm text-muted-foreground mt-1">
                   Demote to regular student. Keep all attendance and course
                   data.
@@ -836,7 +836,7 @@ const Members = () => {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove Course Rep Privilege</AlertDialogTitle>
+            <AlertDialogTitle>Remove Level Rep Privilege</AlertDialogTitle>
             <AlertDialogDescription className="space-y-2">
               <span className="block">
                 <strong>{selectedMember?.name}</strong> will return back as a

@@ -171,7 +171,7 @@ export const getAllSessionsAdmin = async (
 };
 
 /**
- * Get sessions created by the current user (Lecturers and Course Reps)
+ * Get sessions created by the current user (Lecturers and Level Reps)
  */
 export const getCreatorSessions = async (
   token: string,

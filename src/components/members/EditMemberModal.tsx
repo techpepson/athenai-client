@@ -467,7 +467,7 @@ export const EditMemberModal = ({
                   {member.role === Role.STUDENT || member.role === Role.REP ? (
                     <>
                       <SelectItem value={Role.STUDENT}>Student</SelectItem>
-                      <SelectItem value={Role.REP}>Course Rep</SelectItem>
+                      <SelectItem value={Role.REP}>Level Rep</SelectItem>
                     </>
                   ) : (
                     <>
@@ -625,12 +625,12 @@ export const EditMemberModal = ({
             </div>
           )}
 
-          {/* Courses for Course Rep */}
+          {/* Courses for Level Rep */}
           {formData.role === Role.REP && (
             <div className="space-y-2">
               <Label>Courses Assigned as Rep</Label>
               <p className="text-xs text-muted-foreground p-3 bg-muted rounded-md">
-                Course rep assignments are managed separately via the
+                Level rep assignments are managed separately via the
                 assign/remove rep feature.
               </p>
             </div>
@@ -664,12 +664,12 @@ export const EditMemberModal = ({
           <AlertDialogHeader>
             <AlertDialogTitle>
               {pendingRole === Role.STUDENT
-                ? "Warning: Changing Course Rep to Student"
+                ? "Warning: Changing Level Rep to Student"
                 : "Warning: Changing Admin to Staff"}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {pendingRole === Role.STUDENT
-                ? "Check this box if you want to proceed. This action will cause the student to lose all course rep privileges, including all assigned courses."
+                ? "Check this box if you want to proceed. This action will cause the student to lose all level rep privileges, including all assigned courses."
                 : "Check this box if you want to proceed. This action will cause the admin to lose all admin privileges."}
             </AlertDialogDescription>
           </AlertDialogHeader>

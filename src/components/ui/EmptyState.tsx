@@ -45,7 +45,7 @@ const titleMap: Record<EmptyStateKey, string> = {
   analytics: "No Data",
   admins: "No Admins",
   staff: "No Staff",
-  courseReps: "No Course Reps",
+  courseReps: "No Level Reps",
   attendance: "No Records",
   search: "No Results",
   default: "No Data",
