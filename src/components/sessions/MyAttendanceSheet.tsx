@@ -262,14 +262,14 @@ const MyAttendanceSheet = () => {
 
       {/* Attendance Table */}
       <div className="border rounded-lg overflow-hidden">
-        <Table>
+        <Table className="table-fixed w-full">
           <TableHeader>
             <TableRow className="bg-muted/50">
-              <TableHead className="w-[80px]">Week</TableHead>
-              <TableHead className="w-[120px]">Date</TableHead>
-              <TableHead>Topic</TableHead>
-              <TableHead className="w-[120px] text-center">Sign In</TableHead>
-              <TableHead className="w-[160px] text-center">
+              <TableHead className="w-[10%] text-center">Week</TableHead>
+              <TableHead className="w-[15%]">Date</TableHead>
+              <TableHead className="w-[35%]">Topic</TableHead>
+              <TableHead className="w-[15%] text-center">Sign In</TableHead>
+              <TableHead className="w-[25%] text-center">
                 Attendance Status
               </TableHead>
             </TableRow>

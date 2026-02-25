@@ -322,114 +322,116 @@ const MasterAttendanceSheet = () => {
 
             {/* Attendance Table — hidden when collapsed */}
             {!collapsedSessions.has(sessionId) && (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[60px] text-center">S/N</TableHead>
-                  <TableHead>Student Name</TableHead>
-                  <TableHead className="w-[140px]">Student ID</TableHead>
-                  <TableHead className="w-[180px] text-center">
-                    Attendance Status
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {records.map((record, idx) => (
-                  <TableRow key={record.id}>
-                    <TableCell className="text-center font-medium text-muted-foreground">
-                      {idx + 1}
-                    </TableCell>
-                    <TableCell>
-                      <div className="font-medium">{record.studentName}</div>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {record.studentId}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      {canEdit ? (
-                        // Editable status for Level Rep
-                        <div className="flex items-center justify-center gap-2">
-                          <Button
-                            size="sm"
-                            variant={
-                              record.status === "present"
-                                ? "default"
-                                : "outline"
-                            }
-                            className={cn(
-                              "h-8 px-3",
-                              record.status === "present"
-                                ? "bg-green-500 hover:bg-green-600 text-white"
-                                : "hover:bg-green-50 hover:text-green-700",
-                            )}
-                            onClick={() =>
-                              handleStatusChange(
-                                record.sessionId,
-                                record.studentId,
-                                record.studentName,
-                                "present",
-                              )
-                            }
-                          >
-                            <CheckCircle className="w-4 h-4 mr-1" />
-                            Present
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant={
-                              record.status === "absent" ? "default" : "outline"
-                            }
-                            className={cn(
-                              "h-8 px-3",
-                              record.status === "absent"
-                                ? "bg-red-500 hover:bg-red-600 text-white"
-                                : "hover:bg-red-50 hover:text-red-700",
-                            )}
-                            onClick={() =>
-                              handleStatusChange(
-                                record.sessionId,
-                                record.studentId,
-                                record.studentName,
-                                "absent",
-                              )
-                            }
-                          >
-                            <XCircle className="w-4 h-4 mr-1" />
-                            Absent
-                          </Button>
-                        </div>
-                      ) : (
-                        // Read-only status for Lecturer
-                        <span
-                          className={cn(
-                            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium cursor-default select-none",
-                            record.status === "present"
-                              ? "bg-green-500 text-white"
-                              : record.status === "pending"
-                                ? "bg-yellow-500 text-white"
-                                : "bg-red-500 text-white",
-                          )}
-                        >
-                          {record.status === "present" ? (
-                            <>
-                              <CheckCircle className="w-4 h-4" />
-                              Present
-                            </>
-                          ) : record.status === "pending" ? (
-                            "Pending"
-                          ) : (
-                            <>
-                              <XCircle className="w-4 h-4" />
-                              Absent
-                            </>
-                          )}
-                        </span>
-                      )}
-                    </TableCell>
+              <Table className="table-fixed w-full">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[8%] text-center">S/N</TableHead>
+                    <TableHead className="w-[32%]">Student Name</TableHead>
+                    <TableHead className="w-[25%]">Student ID</TableHead>
+                    <TableHead className="w-[35%] text-center">
+                      Attendance Status
+                    </TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {records.map((record, idx) => (
+                    <TableRow key={record.id}>
+                      <TableCell className="text-center font-medium text-muted-foreground">
+                        {idx + 1}
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-medium">{record.studentName}</div>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-sm">
+                        {record.studentId}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {canEdit ? (
+                          // Editable status for Level Rep
+                          <div className="flex items-center justify-center gap-2">
+                            <Button
+                              size="sm"
+                              variant={
+                                record.status === "present"
+                                  ? "default"
+                                  : "outline"
+                              }
+                              className={cn(
+                                "h-8 px-3",
+                                record.status === "present"
+                                  ? "bg-green-500 hover:bg-green-600 text-white"
+                                  : "hover:bg-green-50 hover:text-green-700",
+                              )}
+                              onClick={() =>
+                                handleStatusChange(
+                                  record.sessionId,
+                                  record.studentId,
+                                  record.studentName,
+                                  "present",
+                                )
+                              }
+                            >
+                              <CheckCircle className="w-4 h-4 mr-1" />
+                              Present
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant={
+                                record.status === "absent"
+                                  ? "default"
+                                  : "outline"
+                              }
+                              className={cn(
+                                "h-8 px-3",
+                                record.status === "absent"
+                                  ? "bg-red-500 hover:bg-red-600 text-white"
+                                  : "hover:bg-red-50 hover:text-red-700",
+                              )}
+                              onClick={() =>
+                                handleStatusChange(
+                                  record.sessionId,
+                                  record.studentId,
+                                  record.studentName,
+                                  "absent",
+                                )
+                              }
+                            >
+                              <XCircle className="w-4 h-4 mr-1" />
+                              Absent
+                            </Button>
+                          </div>
+                        ) : (
+                          // Read-only status for Lecturer
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium cursor-default select-none",
+                              record.status === "present"
+                                ? "bg-green-500 text-white"
+                                : record.status === "pending"
+                                  ? "bg-yellow-500 text-white"
+                                  : "bg-red-500 text-white",
+                            )}
+                          >
+                            {record.status === "present" ? (
+                              <>
+                                <CheckCircle className="w-4 h-4" />
+                                Present
+                              </>
+                            ) : record.status === "pending" ? (
+                              "Pending"
+                            ) : (
+                              <>
+                                <XCircle className="w-4 h-4" />
+                                Absent
+                              </>
+                            )}
+                          </span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             )}
           </div>
         );

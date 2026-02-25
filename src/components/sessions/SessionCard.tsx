@@ -104,6 +104,9 @@ export const SessionCard = ({
   // Check if user is admin
   const isAdmin = user?.role === Role.ADMIN || user?.role === Role.SYSTEM_ADMIN;
 
+  // Check if user is a REP (only REPs can start sessions)
+  const isRep = user?.role === Role.REP;
+
   // Check if user is the creator of this session
   const isCreator = user?.id === session.createdBy;
 
@@ -208,9 +211,10 @@ export const SessionCard = ({
 
       {/* Actions */}
       <div className="flex gap-2 flex-wrap">
-        {/* Scheduled timetable session - can start session */}
+        {/* Scheduled timetable session - only REP can start session */}
         {session.status === "scheduled" &&
-          session.id.startsWith("timetable-") && (
+          session.id.startsWith("timetable-") &&
+          isRep && (
             <Button
               className="flex-1"
               variant="gradient"
