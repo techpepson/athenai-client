@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import {
   TrendingUp,
-  Clock,
   DollarSign,
   Loader2,
   GraduationCap,
   ClipboardCheck,
+  CalendarCheck,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { PayrollStatsCard } from "@/components/staff/PayrollStatsCard";
@@ -15,11 +15,15 @@ import {
 } from "@/services/payroll.service";
 import { Role } from "@/enums/enums";
 
+// Extended type with sessions count
+interface LecturerEarningExtended extends LecturerEarning {
+  totalSessions: number;
+}
+
 const Payroll = () => {
   const { user, token } = useAuth();
-  const [lecturerData, setLecturerData] = useState<LecturerEarning | null>(
-    null,
-  );
+  const [lecturerData, setLecturerData] =
+    useState<LecturerEarningExtended | null>(null);
   const [loading, setLoading] = useState(true);
 
   const isLecturer = user?.role === Role.LECTURER;
@@ -27,12 +31,13 @@ const Payroll = () => {
   useEffect(() => {
     const loadPayrollData = async () => {
       // Use mock data for development/preview
-      const mockLecturerData: LecturerEarning = {
+      const mockLecturerData: LecturerEarningExtended = {
         name: user?.name || "Dr. John Smith",
         email: user?.email || "john.smith@university.edu",
         staffNo: user?.lecturer?.staffNo || "LEC-2024-001",
         hourlyRate: 75.0,
         totalHours: 42.5,
+        totalSessions: 12,
         earnings: 3187.5,
       };
 
@@ -45,7 +50,10 @@ const Payroll = () => {
               (e) => e.email === user?.email,
             );
             if (myEarnings) {
-              setLecturerData(myEarnings);
+              setLecturerData({
+                ...myEarnings,
+                totalSessions: Math.round(myEarnings.totalHours / 3.5) || 12, // Estimate sessions
+              });
               setLoading(false);
               return;
             }
@@ -101,24 +109,16 @@ const Payroll = () => {
       {/* Lecturer Info Card */}
       {lecturerData && (
         <div className="bg-gradient-to-r from-primary/10 to-primary/5 rounded-xl border border-primary/20 p-6">
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
-                <GraduationCap className="w-6 h-6 text-primary" />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold text-foreground">
-                  {lecturerData.name}
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  {lecturerData.staffNo || "No Staff ID"} • {lecturerData.email}
-                </p>
-              </div>
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
+              <GraduationCap className="w-6 h-6 text-primary" />
             </div>
-            <div className="text-right">
-              <p className="text-sm text-muted-foreground">Hourly Rate</p>
-              <p className="text-2xl font-bold text-primary">
-                ${lecturerData.hourlyRate.toFixed(2)}/hr
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">
+                {lecturerData.name}
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                {lecturerData.staffNo || "No Staff ID"} • {lecturerData.email}
               </p>
             </div>
           </div>
@@ -128,9 +128,9 @@ const Payroll = () => {
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         <PayrollStatsCard
-          label="Total Hours Attended"
-          value={`${lecturerData?.totalHours.toFixed(1) || 0}h`}
-          icon={Clock}
+          label="Total Sessions Attended"
+          value={`${lecturerData?.totalSessions || 0} Sessions`}
+          icon={CalendarCheck}
           variant="primary"
         />
         <PayrollStatsCard
@@ -172,6 +172,14 @@ const Payroll = () => {
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
                     <span className="text-foreground">
+                      Total Sessions Attended
+                    </span>
+                    <span className="font-semibold text-foreground">
+                      {lecturerData.totalSessions}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-foreground">
                       Total Hours Attended
                     </span>
                     <span className="font-semibold text-foreground">
@@ -205,10 +213,11 @@ const Payroll = () => {
                   <div>
                     <div className="flex justify-between text-sm mb-1">
                       <span className="text-muted-foreground">
-                        Hours Worked
+                        {lecturerData.totalSessions} Sessions ·{" "}
+                        {lecturerData.totalHours}h Worked
                       </span>
                       <span className="text-foreground font-medium">
-                        {lecturerData.totalHours}h
+                        ${lecturerData.earnings.toFixed(2)}
                       </span>
                     </div>
                     <div className="w-full bg-muted rounded-full h-2">

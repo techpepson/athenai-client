@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import {
-  TrendingUp,
   Users,
   Clock,
   DollarSign,
@@ -27,7 +26,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 
 // Combined lecturer data with earnings
 interface LecturerWithEarnings {
@@ -47,6 +45,8 @@ const StaffManagement = () => {
   const [lecturers, setLecturers] = useState<LecturerWithEarnings[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingRate, setEditingRate] = useState<string>("");
   const { toast } = useToast();
 
   useEffect(() => {
@@ -130,13 +130,53 @@ const StaffManagement = () => {
   // Calculate statistics
   const stats = {
     totalLecturers: lecturers.length,
-    activeLecturers: lecturers.filter((l) => l.isActive).length,
     totalHours: lecturers.reduce((sum, l) => sum + l.totalHours, 0),
     totalEarnings: lecturers.reduce((sum, l) => sum + l.earnings, 0),
-    avgHourlyRate:
-      lecturers.length > 0
-        ? lecturers.reduce((sum, l) => sum + l.hourlyRate, 0) / lecturers.length
-        : 0,
+  };
+
+  // Handle inline hourly rate edit
+  const handleRateClick = (id: string, currentRate: number) => {
+    setEditingId(id);
+    setEditingRate(currentRate.toFixed(2));
+  };
+
+  const handleRateSave = (id: string) => {
+    const newRate = parseFloat(editingRate);
+    if (isNaN(newRate) || newRate < 0) {
+      toast({
+        title: "Invalid Rate",
+        description: "Please enter a valid hourly rate",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Update the lecturer's hourly rate and recalculate earnings
+    setLecturers((prev) =>
+      prev.map((lec) => {
+        if (lec.id === id) {
+          const newEarnings = lec.totalHours * newRate;
+          return { ...lec, hourlyRate: newRate, earnings: newEarnings };
+        }
+        return lec;
+      }),
+    );
+
+    setEditingId(null);
+    setEditingRate("");
+    toast({
+      title: "Rate Updated",
+      description: "Hourly rate and earnings updated successfully",
+    });
+  };
+
+  const handleRateKeyDown = (e: React.KeyboardEvent, id: string) => {
+    if (e.key === "Enter") {
+      handleRateSave(id);
+    } else if (e.key === "Escape") {
+      setEditingId(null);
+      setEditingRate("");
+    }
   };
 
   if (loading) {
@@ -171,7 +211,7 @@ const StaffManagement = () => {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         <PayrollStatsCard
           label="Total Lecturers"
           value={stats.totalLecturers}
@@ -188,12 +228,6 @@ const StaffManagement = () => {
           value={`$${stats.totalEarnings.toFixed(2)}`}
           icon={DollarSign}
           variant="success"
-        />
-        <PayrollStatsCard
-          label="Avg Hourly Rate"
-          value={`$${stats.avgHourlyRate.toFixed(2)}`}
-          icon={TrendingUp}
-          variant="warning"
         />
       </div>
 
@@ -213,11 +247,8 @@ const StaffManagement = () => {
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
-                <TableHead>Email</TableHead>
                 <TableHead>Staff No</TableHead>
-                <TableHead>Status</TableHead>
                 <TableHead className="text-right">Hourly Rate</TableHead>
-                <TableHead className="text-right">Credit Hours</TableHead>
                 <TableHead className="text-right">Total Hours Worked</TableHead>
                 <TableHead className="text-right">Total Earnings</TableHead>
               </TableRow>
@@ -226,22 +257,31 @@ const StaffManagement = () => {
               {filteredLecturers.map((lecturer) => (
                 <TableRow key={lecturer.id}>
                   <TableCell className="font-medium">{lecturer.name}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {lecturer.email}
-                  </TableCell>
                   <TableCell>{lecturer.staffNo || "-"}</TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={lecturer.isActive ? "default" : "secondary"}
-                    >
-                      {lecturer.isActive ? "Active" : "Inactive"}
-                    </Badge>
-                  </TableCell>
                   <TableCell className="text-right">
-                    ${lecturer.hourlyRate.toFixed(2)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {lecturer.creditHours}
+                    {editingId === lecturer.id ? (
+                      <Input
+                        type="number"
+                        value={editingRate}
+                        onChange={(e) => setEditingRate(e.target.value)}
+                        onBlur={() => handleRateSave(lecturer.id)}
+                        onKeyDown={(e) => handleRateKeyDown(e, lecturer.id)}
+                        className="w-24 ml-auto text-right"
+                        autoFocus
+                        step="0.01"
+                        min="0"
+                      />
+                    ) : (
+                      <button
+                        onClick={() =>
+                          handleRateClick(lecturer.id, lecturer.hourlyRate)
+                        }
+                        className="hover:bg-muted px-2 py-1 rounded cursor-pointer transition-colors"
+                        title="Click to edit"
+                      >
+                        ${lecturer.hourlyRate.toFixed(2)}
+                      </button>
+                    )}
                   </TableCell>
                   <TableCell className="text-right">
                     {lecturer.totalHours.toFixed(1)}h
