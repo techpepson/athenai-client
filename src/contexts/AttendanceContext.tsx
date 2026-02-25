@@ -168,51 +168,63 @@ export const AttendanceProvider = ({ children }: { children: ReactNode }) => {
       const timetable = timetables.find((t) => t.moduleId === mod.id);
       if (!timetable) return;
 
-      timetable.slots.forEach((slot) => {
-        // Calculate actual date for this slot based on week
-        const weekStartDate = timetable.startDate
-          ? new Date(timetable.startDate)
-          : new Date(currentYear, 1, 3); // Default to Feb 3
+      // Get unique slots (ignoring week - we'll generate for all weeks)
+      const uniqueSlots = timetable.slots.filter(
+        (slot) => slot.activityType === "LECTURE",
+      );
 
-        // Find day offset
-        const days = [
-          "Sunday",
-          "Monday",
-          "Tuesday",
-          "Wednesday",
-          "Thursday",
-          "Friday",
-          "Saturday",
-        ];
-        const dayIndex = days.findIndex(
-          (d) => d.toUpperCase() === slot.day.toUpperCase(),
-        );
-        const weekOffset = (slot.week || 1) - 1;
+      // Generate sessions for ALL weeks (cumulative attendance)
+      for (let week = 1; week <= timetable.totalWeeks; week++) {
+        uniqueSlots.forEach((slot) => {
+          // Skip if this slot specifies a different week
+          if (slot.week && slot.week !== week) return;
 
-        const slotDate = new Date(weekStartDate);
-        slotDate.setDate(
-          slotDate.getDate() +
-            weekOffset * 7 +
-            (dayIndex > 0 ? dayIndex - 1 : 0),
-        );
+          // Calculate actual date for this slot based on week
+          const weekStartDate = timetable.startDate
+            ? new Date(timetable.startDate)
+            : new Date(currentYear, 1, 3); // Default to Feb 3
 
-        const subtopic = mod.subtopics.find((s) => s.id === slot.subtopicId);
+          // Find day offset
+          const days = [
+            "Sunday",
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+          ];
+          const dayIndex = days.findIndex(
+            (d) => d.toUpperCase() === slot.day.toUpperCase(),
+          );
 
-        sessions.push({
-          sessionId: `slot-${slot.id}`,
-          slotId: slot.id,
-          moduleCode: mod.code,
-          moduleName: mod.name,
-          topic: subtopic?.name || slot.activityType || "Lecture",
-          date: slotDate.toISOString().split("T")[0],
-          week: slot.week || 1,
-          startTime: slot.startTime,
-          endTime: slot.endTime,
-          startedAt: "",
-          startedBy: "",
-          isActive: false,
+          // Calculate the date for this week
+          const weekOffset = week - 1;
+          const slotDate = new Date(weekStartDate);
+          slotDate.setDate(
+            slotDate.getDate() +
+              weekOffset * 7 +
+              (dayIndex > 0 ? dayIndex - 1 : 0),
+          );
+
+          const subtopic = mod.subtopics.find((s) => s.id === slot.subtopicId);
+
+          sessions.push({
+            sessionId: `slot-${slot.id}-week${week}`,
+            slotId: slot.id,
+            moduleCode: mod.code,
+            moduleName: mod.name,
+            topic: subtopic?.name || slot.activityType || "Lecture",
+            date: slotDate.toISOString().split("T")[0],
+            week: week,
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+            startedAt: "",
+            startedBy: "",
+            isActive: false,
+          });
         });
-      });
+      }
     });
 
     // Merge with actually active sessions

@@ -53,6 +53,7 @@ import { cn } from "@/lib/utils";
 export interface LecturerAttendanceRecord {
   id: string;
   slotId: string;
+  week: number; // week number within the timetable
   date: Date;
   startTime: string;
   endTime: string;
@@ -130,14 +131,34 @@ const LecturerAttendanceTab = () => {
   const [signatureModalOpen, setSignatureModalOpen] = useState(false);
   const [signatureType, setSignatureType] = useState<"rep" | "lecturer">("rep");
   const [signatureInput, setSignatureInput] = useState("");
+  const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
   // Listen for session started events from Sessions page
   useEffect(() => {
     const handleSessionStarted = () => {
-      // Reload active sessions when a session is started
       const storedActiveSessions = localStorage.getItem(ACTIVE_SESSIONS_KEY);
       if (storedActiveSessions) {
         try {
-          setActiveSessions(new Set(JSON.parse(storedActiveSessions)));
+          const activeSlotIds: string[] = JSON.parse(storedActiveSessions);
+          setActiveSessions(new Set(activeSlotIds));
+
+          // Auto-select the topic of the started session
+          const timetables = modulesService.getTimetables();
+          const modules = modulesService.getModules();
+          for (const slotId of activeSlotIds) {
+            for (const timetable of timetables) {
+              const slot = timetable.slots.find((s) => s.id === slotId);
+              if (slot?.subtopicId) {
+                const mod = modules.find((m) => m.id === timetable.moduleId);
+                if (
+                  mod &&
+                  mod.subtopics.find((s) => s.id === slot.subtopicId)
+                ) {
+                  setSelectedTopic(slot.subtopicId);
+                  return;
+                }
+              }
+            }
+          }
         } catch {
           // ignore
         }
@@ -148,6 +169,19 @@ const LecturerAttendanceTab = () => {
     return () =>
       window.removeEventListener("session-started", handleSessionStarted);
   }, []);
+
+  // Check if the selected topic has an active session right now
+  const isSelectedTopicActive = useMemo(() => {
+    if (!selectedTopic) return false;
+    const timetables = modulesService.getTimetables();
+    for (const timetable of timetables) {
+      const slot = timetable.slots.find(
+        (s) => s.subtopicId === selectedTopic && activeSessions.has(s.id),
+      );
+      if (slot) return true;
+    }
+    return false;
+  }, [selectedTopic, activeSessions]);
 
   // Available levels based on role
   const availableLevels = useMemo(() => {
@@ -226,69 +260,82 @@ const LecturerAttendanceTab = () => {
       const mod = modules.find((m) => m.id === timetable.moduleId);
       if (!mod) return;
 
-      // Determine current week number within the timetable
-      let currentWeek = 1;
-      if (timetable.startDate) {
-        const start = new Date(timetable.startDate);
-        const diffMs = now.getTime() - start.getTime();
-        currentWeek = Math.max(
-          1,
-          Math.ceil(diffMs / (7 * 24 * 60 * 60 * 1000)),
-        );
-        if (currentWeek > timetable.totalWeeks) return; // past this module
-      }
+      // Get start date for the timetable
+      const startDate = timetable.startDate
+        ? new Date(timetable.startDate)
+        : new Date(now.getFullYear(), 0, 1); // Default to Jan 1
 
-      // Filter for LECTURE activities only
+      // Filter for LECTURE activities only (ignoring week filter - we'll generate for all weeks)
       const lectureSlots = timetable.slots.filter(
-        (slot) =>
-          (!slot.week || slot.week === currentWeek) &&
-          slot.activityType === "LECTURE",
+        (slot) => slot.activityType === "LECTURE",
       );
 
-      lectureSlots.forEach((slot) => {
-        const dayOffset = dayIndexMap[slot.day.toUpperCase()];
-        if (dayOffset === undefined) return;
+      // Generate records for ALL weeks (cumulative attendance)
+      for (let week = 1; week <= timetable.totalWeeks; week++) {
+        lectureSlots.forEach((slot) => {
+          // Skip if this slot specifies a different week
+          if (slot.week && slot.week !== week) return;
 
-        const slotDate = new Date(monday);
-        slotDate.setDate(monday.getDate() + dayOffset);
+          const dayOffset = dayIndexMap[slot.day.toUpperCase()];
+          if (dayOffset === undefined) return;
 
-        const subtopic = mod.subtopics.find((s) => s.id === slot.subtopicId);
+          // Calculate the actual date for this week
+          const weekStartDate = new Date(startDate);
+          weekStartDate.setDate(startDate.getDate() + (week - 1) * 7);
 
-        // Check if we have stored attendance data for this slot
-        const existingRecord = attendanceRecords.find(
-          (ar) =>
-            ar.slotId === slot.id &&
-            formatDate(ar.date) === formatDate(slotDate),
-        );
+          // Get the Monday of this week
+          const weekDay = weekStartDate.getDay();
+          const mondayOffset = weekDay === 0 ? -6 : 1 - weekDay;
+          const weekMonday = new Date(weekStartDate);
+          weekMonday.setDate(weekStartDate.getDate() + mondayOffset);
 
-        const isSessionActive = activeSessions.has(slot.id);
+          // Calculate slot date based on day of week
+          const slotDate = new Date(weekMonday);
+          slotDate.setDate(weekMonday.getDate() + dayOffset);
 
-        records.push({
-          id: existingRecord?.id || `${slot.id}-${formatDate(slotDate)}`,
-          slotId: slot.id,
-          date: slotDate,
-          startTime: slot.startTime,
-          endTime: slot.endTime,
-          duration: calculateDuration(slot.startTime, slot.endTime),
-          moduleCode: mod.code,
-          moduleName: mod.name,
-          subtopicName: subtopic?.name || "Lecture",
-          lecturerName:
-            slot.lecturerName || subtopic?.lecturerName || "Not Assigned",
-          lecturerId: slot.lecturerId || subtopic?.lecturerId,
-          venue: slot.venue,
-          classRepSignature: existingRecord?.classRepSignature,
-          classRepSignedAt: existingRecord?.classRepSignedAt,
-          lecturerSignature: existingRecord?.lecturerSignature,
-          lecturerSignedAt: existingRecord?.lecturerSignedAt,
-          sessionStarted: isSessionActive || !!existingRecord?.sessionStarted,
-          sessionId: existingRecord?.sessionId,
+          const subtopic = mod.subtopics.find((s) => s.id === slot.subtopicId);
+
+          // Check if we have stored attendance data for this slot and week
+          const existingRecord = attendanceRecords.find(
+            (ar) =>
+              ar.slotId === slot.id &&
+              ar.week === week &&
+              formatDate(ar.date) === formatDate(slotDate),
+          );
+
+          const isSessionActive = activeSessions.has(slot.id);
+
+          records.push({
+            id:
+              existingRecord?.id ||
+              `${slot.id}-week${week}-${formatDate(slotDate)}`,
+            slotId: slot.id,
+            week: week,
+            date: slotDate,
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+            duration: calculateDuration(slot.startTime, slot.endTime),
+            moduleCode: mod.code,
+            moduleName: mod.name,
+            subtopicName: subtopic?.name || "Lecture",
+            lecturerName:
+              slot.lecturerName || subtopic?.lecturerName || "Not Assigned",
+            lecturerId: slot.lecturerId || subtopic?.lecturerId,
+            venue: slot.venue,
+            classRepSignature: existingRecord?.classRepSignature,
+            classRepSignedAt: existingRecord?.classRepSignedAt,
+            lecturerSignature: existingRecord?.lecturerSignature,
+            lecturerSignedAt: existingRecord?.lecturerSignedAt,
+            sessionStarted: isSessionActive || !!existingRecord?.sessionStarted,
+            sessionId: existingRecord?.sessionId,
+          });
         });
-      });
+      }
     });
 
-    // Sort by date then start time
+    // Sort by week, then date, then start time
     records.sort((a, b) => {
+      if (a.week !== b.week) return a.week - b.week;
       const dateCompare = a.date.getTime() - b.date.getTime();
       if (dateCompare !== 0) return dateCompare;
       return a.startTime.localeCompare(b.startTime);
@@ -296,6 +343,26 @@ const LecturerAttendanceTab = () => {
 
     return records;
   }, [selectedLevel, selectedSemester, attendanceRecords, activeSessions]);
+
+  // Filter records by selected topic
+  const filteredRecords = useMemo(() => {
+    if (!selectedTopic) return [];
+
+    const modules = modulesService.getModules();
+    // Find the subtopic name for the selected topic ID
+    let subtopicName = "";
+    for (const mod of modules) {
+      const subtopic = mod.subtopics.find((s) => s.id === selectedTopic);
+      if (subtopic) {
+        subtopicName = subtopic.name;
+        break;
+      }
+    }
+
+    return generateRecordsFromTimetable.filter(
+      (record) => record.subtopicName === subtopicName,
+    );
+  }, [generateRecordsFromTimetable, selectedTopic]);
 
   // Save attendance records to localStorage
   const saveAttendanceRecords = (records: LecturerAttendanceRecord[]) => {
@@ -420,7 +487,7 @@ const LecturerAttendanceTab = () => {
           {currentModule && (
             <div className="flex items-center gap-2">
               <FileText className="w-5 h-5 text-primary" />
-              <span className="font-semibold">Course:</span>
+              <span className="font-semibold">Module:</span>
               <span className="text-muted-foreground">
                 {currentModule.name} ({currentModule.code})
               </span>
@@ -428,17 +495,46 @@ const LecturerAttendanceTab = () => {
           )}
         </div>
         {currentModule && (
-          <div className="mt-3 pt-3 border-t border-border">
-            <div className="flex items-center gap-2">
-              <User className="w-5 h-5 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">
-                Lecturer/Technician:{" "}
-                <span className="font-medium text-foreground">
-                  {currentModule.subtopics[0]?.lecturerName ||
-                    "Prof. Not Assigned"}
-                </span>
-              </span>
+          <div className="mt-3 pt-3 border-t border-border space-y-3">
+            {/* Topic Selector */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <BookOpen className="w-5 h-5 text-primary" />
+              <span className="font-semibold text-sm">Topic:</span>
+              <Select
+                value={selectedTopic || ""}
+                onValueChange={(v) => setSelectedTopic(v || null)}
+              >
+                <SelectTrigger className="w-[300px]">
+                  <SelectValue placeholder="Select a topic" />
+                </SelectTrigger>
+                <SelectContent>
+                  {currentModule.subtopics.map((subtopic) => (
+                    <SelectItem key={subtopic.id} value={subtopic.id}>
+                      {subtopic.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {isSelectedTopicActive && (
+                <Badge className="bg-green-500 hover:bg-green-500 text-white gap-1">
+                  <Clock className="w-3 h-3" />
+                  Active Session
+                </Badge>
+              )}
             </div>
+            {/* Lecturer for selected topic */}
+            {selectedTopic && (
+              <div className="flex items-center gap-2">
+                <User className="w-5 h-5 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">
+                  Lecturer/Technician:{" "}
+                  <span className="font-medium text-foreground">
+                    {currentModule.subtopics.find((s) => s.id === selectedTopic)
+                      ?.lecturerName || "Prof. Not Assigned"}
+                  </span>
+                </span>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -515,6 +611,9 @@ const LecturerAttendanceTab = () => {
               <TableHead className="w-12 text-center font-semibold">
                 S/N
               </TableHead>
+              <TableHead className="w-16 text-center font-semibold">
+                Week
+              </TableHead>
               <TableHead className="font-semibold">Date</TableHead>
               <TableHead className="font-semibold">Start Time</TableHead>
               <TableHead className="font-semibold">End Time</TableHead>
@@ -533,14 +632,22 @@ const LecturerAttendanceTab = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {generateRecordsFromTimetable.length === 0 ? (
+            {!selectedTopic ? (
               <TableRow>
                 <TableCell
-                  colSpan={canEdit ? 8 : 7}
+                  colSpan={9}
                   className="text-center py-8 text-muted-foreground"
                 >
-                  No lecture sessions found for Level {selectedLevel}, Semester{" "}
-                  {selectedSemester}.
+                  Please select a topic above to view attendance records.
+                </TableCell>
+              </TableRow>
+            ) : filteredRecords.length === 0 ? (
+              <TableRow>
+                <TableCell
+                  colSpan={9}
+                  className="text-center py-8 text-muted-foreground"
+                >
+                  No lecture sessions found for the selected topic.
                   <br />
                   <span className="text-sm">
                     Add activities in the Activities tab to see them here.
@@ -548,7 +655,7 @@ const LecturerAttendanceTab = () => {
                 </TableCell>
               </TableRow>
             ) : (
-              generateRecordsFromTimetable.map((record, index) => (
+              filteredRecords.map((record, index) => (
                 <TableRow
                   key={record.id}
                   className={cn(
@@ -558,6 +665,9 @@ const LecturerAttendanceTab = () => {
                 >
                   <TableCell className="text-center font-medium">
                     {index + 1}
+                  </TableCell>
+                  <TableCell className="text-center font-medium">
+                    {record.week}
                   </TableCell>
                   <TableCell>{formatDate(record.date)}</TableCell>
                   <TableCell>{formatTime(record.startTime)}</TableCell>
@@ -678,6 +788,9 @@ const LecturerAttendanceTab = () => {
             <div className="space-y-4">
               <div className="bg-muted/50 p-3 rounded-lg text-sm">
                 <p>
+                  <strong>Week:</strong> {editingRecord.week}
+                </p>
+                <p>
                   <strong>Date:</strong> {formatDate(editingRecord.date)}
                 </p>
                 <p>
@@ -685,8 +798,11 @@ const LecturerAttendanceTab = () => {
                   {formatTime(editingRecord.endTime)}
                 </p>
                 <p>
-                  <strong>Course:</strong> {editingRecord.moduleName} (
+                  <strong>Module:</strong> {editingRecord.moduleName} (
                   {editingRecord.moduleCode})
+                </p>
+                <p>
+                  <strong>Topic:</strong> {editingRecord.subtopicName}
                 </p>
                 <p>
                   <strong>Lecturer:</strong> {editingRecord.lecturerName}
