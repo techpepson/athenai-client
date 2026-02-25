@@ -29,6 +29,8 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAttendance } from "@/contexts/AttendanceContext";
@@ -66,6 +68,23 @@ const MasterAttendanceSheet = () => {
   // Selected session filter
   const [selectedSessionId, setSelectedSessionId] = useState<string>("all");
 
+  // Track which sessions are collapsed (past sessions start collapsed)
+  const [collapsedSessions, setCollapsedSessions] = useState<Set<string>>(
+    new Set(),
+  );
+
+  const toggleCollapse = (sessionId: string) => {
+    setCollapsedSessions((prev) => {
+      const next = new Set(prev);
+      if (next.has(sessionId)) {
+        next.delete(sessionId);
+      } else {
+        next.add(sessionId);
+      }
+      return next;
+    });
+  };
+
   // Load timetable sessions on mount
   useEffect(() => {
     loadTimetableSessions();
@@ -84,6 +103,33 @@ const MasterAttendanceSheet = () => {
         week: s.week,
       }));
   }, [activeSessions, enrolledModules]);
+
+  // Auto-collapse past sessions; keep today's / latest session expanded
+  useEffect(() => {
+    if (sessions.length === 0) return;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Find the latest session date (current or most recent)
+    const latestSessionId = sessions.reduce((latest, s) => {
+      if (!latest) return s.sessionId;
+      const latestDate = new Date(
+        sessions.find((x) => x.sessionId === latest)?.date || "",
+      );
+      const thisDate = new Date(s.date);
+      return thisDate >= latestDate ? s.sessionId : latest;
+    }, "");
+
+    const toCollapse = new Set<string>();
+    sessions.forEach((s) => {
+      const sessionDate = new Date(s.date);
+      sessionDate.setHours(0, 0, 0, 0);
+      if (sessionDate < today && s.sessionId !== latestSessionId) {
+        toCollapse.add(s.sessionId);
+      }
+    });
+    setCollapsedSessions(toCollapse);
+  }, [sessions]);
 
   // Filtered attendance records based on selected session
   const filteredRecords = useMemo(() => {
@@ -238,8 +284,11 @@ const MasterAttendanceSheet = () => {
             key={sessionId}
             className="border rounded-lg overflow-hidden bg-card"
           >
-            {/* Session Header */}
-            <div className="bg-muted/50 p-4 border-b flex items-center justify-between">
+            {/* Session Header — click anywhere to expand/collapse */}
+            <div
+              className="bg-muted/50 p-4 border-b flex items-center justify-between cursor-pointer select-none hover:bg-muted/70 transition-colors"
+              onClick={() => toggleCollapse(sessionId)}
+            >
               <div>
                 <div className="flex items-center gap-2">
                   <Calendar className="w-4 h-4 text-muted-foreground" />
@@ -251,44 +300,50 @@ const MasterAttendanceSheet = () => {
                   {firstRecord.moduleCode}: {firstRecord.topic}
                 </div>
               </div>
-              <div className="flex gap-3 text-sm">
-                <Badge variant="outline" className="bg-green-50 text-green-700">
-                  Present: {presentCount}
-                </Badge>
-                <Badge variant="outline" className="bg-red-50 text-red-700">
-                  Absent: {absentCount}
-                </Badge>
+              <div className="flex items-center gap-3">
+                <div className="flex gap-3 text-sm">
+                  <Badge
+                    variant="outline"
+                    className="bg-green-50 text-green-700"
+                  >
+                    Present: {presentCount}
+                  </Badge>
+                  <Badge variant="outline" className="bg-red-50 text-red-700">
+                    Absent: {absentCount}
+                  </Badge>
+                </div>
+                {collapsedSessions.has(sessionId) ? (
+                  <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                )}
               </div>
             </div>
 
-            {/* Attendance Table */}
+            {/* Attendance Table — hidden when collapsed */}
+            {!collapsedSessions.has(sessionId) && (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[80px]">Week</TableHead>
-                  <TableHead>Student Name / ID</TableHead>
-                  <TableHead>Topic</TableHead>
-                  <TableHead className="w-[160px] text-center">
+                  <TableHead className="w-[60px] text-center">S/N</TableHead>
+                  <TableHead>Student Name</TableHead>
+                  <TableHead className="w-[140px]">Student ID</TableHead>
+                  <TableHead className="w-[180px] text-center">
                     Attendance Status
                   </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {records.map((record) => (
+                {records.map((record, idx) => (
                   <TableRow key={record.id}>
-                    <TableCell className="font-medium">
-                      Week {record.week}
+                    <TableCell className="text-center font-medium text-muted-foreground">
+                      {idx + 1}
                     </TableCell>
                     <TableCell>
-                      <div>
-                        <div className="font-medium">{record.studentName}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {record.studentId}
-                        </div>
-                      </div>
+                      <div className="font-medium">{record.studentName}</div>
                     </TableCell>
-                    <TableCell className="max-w-[200px] truncate">
-                      {record.topic}
+                    <TableCell className="text-muted-foreground text-sm">
+                      {record.studentId}
                     </TableCell>
                     <TableCell className="text-center">
                       {canEdit ? (
@@ -375,6 +430,7 @@ const MasterAttendanceSheet = () => {
                 ))}
               </TableBody>
             </Table>
+            )}
           </div>
         );
       })}
