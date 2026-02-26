@@ -1,12 +1,20 @@
 // ==================== Module Types ====================
 
+export interface ScheduledDay {
+    day: string; // Date string in ISO format (e.g. "2026-02-28") or day name (e.g. "MONDAY")
+    startTime: string; // e.g. "7:30"
+    endTime: string; // e.g. "9:30"
+}
+
 export interface SubTopic {
     id: string;
     name: string;
     lecturerId?: string;
     lecturerName?: string;
     weeks?: number; // number of weeks allocated
-    hoursPerWeek?: number; // hours per week
+    hoursPerWeek?: number; // hours per week (deprecated - kept for backwards compatibility)
+    activityType?: string; // LECTURE, PBL, SDL, TUTORIAL, PRACTICAL, etc.
+    scheduledDays?: ScheduledDay[]; // days and times when this topic is scheduled
 }
 
 export interface Module {
