@@ -15,6 +15,7 @@ import Dashboard from "./pages/Dashboard";
 import Members from "./pages/Members";
 import Sessions from "./pages/Sessions";
 import Kiosk from "./pages/Kiosk";
+import LecturerKiosk from "./pages/LecturerKiosk";
 import Analytics from "./pages/Analytics";
 import Notifications from "./pages/Notifications";
 import Settings from "./pages/Settings";
@@ -114,6 +115,10 @@ const App = () => (
                     </Route>
                   </Route>
                   <Route path="/kiosk/:sessionId" element={<Kiosk />} />
+                  <Route
+                    path="/kiosk/lecturer/:slotId"
+                    element={<LecturerKiosk />}
+                  />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </BrowserRouter>

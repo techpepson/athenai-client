@@ -521,6 +521,11 @@ const Sessions = () => {
     setReportModalOpen(true);
   };
 
+  const handleCheckout = (session: AttendanceSession) => {
+    toast.success("Session checked out successfully");
+    // The SessionCard handles localStorage sync internally
+  };
+
   const handleDeleteSession = async (session: AttendanceSession) => {
     if (!token) {
       toast.error("You must be logged in to delete a session");
@@ -789,6 +794,8 @@ const Sessions = () => {
                                   session={session}
                                   user={user}
                                   onStart={handleStartSession}
+                                  onCheckout={handleCheckout}
+                                  onViewReport={handleViewReport}
                                 />
                               ))}
                             </div>
@@ -823,6 +830,7 @@ const Sessions = () => {
                           onDelete={handleDeleteSession}
                           onToggleMode={handleToggleMode}
                           onGenerateQrCode={handleGenerateQrCode}
+                          onCheckout={handleCheckout}
                           user={user}
                           isTogglingMode={togglingSessionId === session.id}
                           isDeleting={deletingSessionId === session.id}

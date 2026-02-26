@@ -1,3 +1,4 @@
+import * as XLSX from "xlsx";
 import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -75,6 +76,7 @@ export interface LecturerAttendanceRecord {
 // Local storage key for lecturer attendance records
 const LECTURER_ATTENDANCE_KEY = "lecturer_attendance_records";
 const ACTIVE_SESSIONS_KEY = "active_lecture_sessions";
+const CHECKED_OUT_SESSIONS_KEY = "checked_out_sessions";
 
 // Helper to calculate duration in hours
 const calculateDuration = (startTime: string, endTime: string): number => {
@@ -108,6 +110,36 @@ const formatTime = (timeStr: string): string => {
 };
 
 const LecturerAttendanceTab = () => {
+  // Export attendance records to Excel
+  const exportToExcel = () => {
+    const data = attendanceRecords.map((rec) => ({
+      "S/N": rec.id,
+      Week: rec.week,
+      Date: formatDate(rec.date),
+      "Start Time": rec.startTime,
+      "End Time": rec.endTime,
+      "Duration (hrs)": rec.duration,
+      "Module Code": rec.moduleCode,
+      "Module Name": rec.moduleName,
+      Topic: rec.subtopicName,
+      "Lecturer Name": rec.lecturerName,
+      "Lecturer Signature": rec.lecturerSignature || "",
+      "Lecturer Signed At": rec.lecturerSignedAt
+        ? rec.lecturerSignedAt.toLocaleString()
+        : "",
+      "Class Rep Signature": rec.classRepSignature || "",
+      "Class Rep Signed At": rec.classRepSignedAt
+        ? rec.classRepSignedAt.toLocaleString()
+        : "",
+      Venue: rec.venue || "",
+      "Session Started": rec.sessionStarted ? "Yes" : "No",
+      "Session ID": rec.sessionId || "",
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Lecturer Attendance");
+    XLSX.writeFile(wb, "lecturer_attendance.xlsx");
+  };
   const { user } = useAuth();
 
   // Role-based access
@@ -126,6 +158,9 @@ const LecturerAttendanceTab = () => {
     LecturerAttendanceRecord[]
   >([]);
   const [activeSessions, setActiveSessions] = useState<Set<string>>(new Set());
+  const [checkedOutSessions, setCheckedOutSessions] = useState<Set<string>>(
+    new Set(),
+  );
   const [editingRecord, setEditingRecord] =
     useState<LecturerAttendanceRecord | null>(null);
   const [signatureModalOpen, setSignatureModalOpen] = useState(false);
@@ -170,6 +205,85 @@ const LecturerAttendanceTab = () => {
       window.removeEventListener("session-started", handleSessionStarted);
   }, []);
 
+  // Listen for session checked out events
+  useEffect(() => {
+    const loadCheckedOutSessions = () => {
+      const stored = localStorage.getItem(CHECKED_OUT_SESSIONS_KEY);
+      if (stored) {
+        try {
+          const sessionIds: string[] = JSON.parse(stored);
+          // Extract slot IDs from session IDs (e.g., "timetable-slotId" -> "slotId")
+          const slotIds = sessionIds.map((id) => id.replace("timetable-", ""));
+          setCheckedOutSessions(new Set(slotIds));
+        } catch {
+          // ignore
+        }
+      }
+    };
+
+    // Initial load
+    loadCheckedOutSessions();
+
+    // Listen for checkout events
+    const handleCheckoutEvent = () => {
+      loadCheckedOutSessions();
+    };
+
+    window.addEventListener("session-checked-out", handleCheckoutEvent);
+    window.addEventListener("storage", handleCheckoutEvent);
+
+    return () => {
+      window.removeEventListener("session-checked-out", handleCheckoutEvent);
+      window.removeEventListener("storage", handleCheckoutEvent);
+    };
+  }, []);
+
+  // Listen for lecturer sign-in events from LecturerKiosk
+  useEffect(() => {
+    const handleLecturerSignedIn = (event: Event) => {
+      const customEvent = event as CustomEvent<{
+        slotId: string;
+        lecturerName: string;
+        signedAt: string | Date;
+        status?: number;
+        week?: number;
+        date?: string;
+      }>;
+      const { slotId, lecturerName, signedAt, status, week, date } =
+        customEvent.detail;
+      if (status !== 1) return;
+
+      setAttendanceRecords((prev) => {
+        // Find the record for this slotId, week, and date, update lecturerSignature and lecturerSignedAt
+        const updated = prev.map((rec) => {
+          const recDate =
+            rec.date instanceof Date
+              ? rec.date.toISOString().split("T")[0]
+              : rec.date;
+          if (
+            rec.slotId === slotId &&
+            (typeof week === "undefined" || rec.week === week) &&
+            (typeof date === "undefined" || recDate === date)
+          ) {
+            return {
+              ...rec,
+              lecturerSignature: lecturerName,
+              lecturerSignedAt:
+                typeof signedAt === "string" ? new Date(signedAt) : signedAt,
+            };
+          }
+          return rec;
+        });
+        localStorage.setItem(LECTURER_ATTENDANCE_KEY, JSON.stringify(updated));
+        return updated;
+      });
+    };
+
+    window.addEventListener("lecturer-signed-in", handleLecturerSignedIn);
+    return () =>
+      window.removeEventListener("lecturer-signed-in", handleLecturerSignedIn);
+  }, []);
+
   // Check if the selected topic has an active session right now
   const isSelectedTopicActive = useMemo(() => {
     if (!selectedTopic) return false;
@@ -186,9 +300,25 @@ const LecturerAttendanceTab = () => {
   // Available levels based on role
   const availableLevels = useMemo(() => {
     if (isAdmin) return LEVELS;
+    if (isLecturer && user?.id) {
+      // Find all modules where this lecturer is assigned to any subtopic
+      const modules = modulesService.getModules();
+      const assignedLevels = new Set<number>();
+      modules.forEach((mod) => {
+        if (
+          mod.subtopics.some(
+            (sub) =>
+              sub.lecturerId === user.id || sub.lecturerName === user.name,
+          )
+        ) {
+          assignedLevels.add(mod.level);
+        }
+      });
+      return Array.from(assignedLevels).sort((a, b) => a - b);
+    }
     const userLevel = user?.student?.level || 100;
     return [userLevel];
-  }, [isAdmin, user?.student?.level]);
+  }, [isAdmin, isLecturer, user?.id, user?.name, user?.student?.level]);
 
   // Load attendance records and active sessions from localStorage
   useEffect(() => {
@@ -563,8 +693,27 @@ const LecturerAttendanceTab = () => {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Level Selector */}
+          <Button variant="outline" onClick={exportToExcel}>
+            Export to Excel
+          </Button>
+          {/* Level Selector: Only show dropdown if >1 level for lecturer */}
           {isAdmin ? (
+            <Select
+              value={selectedLevel.toString()}
+              onValueChange={(v) => setSelectedLevel(parseInt(v))}
+            >
+              <SelectTrigger className="w-[120px]">
+                <SelectValue placeholder="Level" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableLevels.map((level) => (
+                  <SelectItem key={level} value={level.toString()}>
+                    Level {level}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : isLecturer && availableLevels.length > 1 ? (
             <Select
               value={selectedLevel.toString()}
               onValueChange={(v) => setSelectedLevel(parseInt(v))}
@@ -627,6 +776,9 @@ const LecturerAttendanceTab = () => {
                 Lecturer&apos;s Signature
               </TableHead>
               <TableHead className="font-semibold text-center">
+                Sign Out
+              </TableHead>
+              <TableHead className="font-semibold text-center">
                 Status
               </TableHead>
             </TableRow>
@@ -635,7 +787,7 @@ const LecturerAttendanceTab = () => {
             {!selectedTopic ? (
               <TableRow>
                 <TableCell
-                  colSpan={9}
+                  colSpan={10}
                   className="text-center py-8 text-muted-foreground"
                 >
                   Please select a topic above to view attendance records.
@@ -644,7 +796,7 @@ const LecturerAttendanceTab = () => {
             ) : filteredRecords.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={9}
+                  colSpan={10}
                   className="text-center py-8 text-muted-foreground"
                 >
                   No lecture sessions found for the selected topic.
@@ -710,24 +862,12 @@ const LecturerAttendanceTab = () => {
 
                   {/* Lecturer Signature */}
                   <TableCell>
-                    {record.lecturerSignature ? (
+                    {record.lecturerSignature && record.lecturerSignedAt ? (
                       <div className="flex items-center gap-2">
                         <CheckCircle className="w-4 h-4 text-success" />
                         <span className="italic text-muted-foreground">
                           {record.lecturerSignature}
                         </span>
-                        {canEditRecord(record) && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6"
-                            onClick={() =>
-                              openSignatureModal(record, "lecturer")
-                            }
-                          >
-                            <Pencil className="w-3 h-3" />
-                          </Button>
-                        )}
                       </div>
                     ) : canEditRecord(record) ? (
                       <Button
@@ -737,6 +877,29 @@ const LecturerAttendanceTab = () => {
                       >
                         Sign
                       </Button>
+                    ) : (
+                      <span className="text-muted-foreground">-</span>
+                    )}
+                  </TableCell>
+
+                  {/* Sign Out */}
+                  <TableCell className="text-center">
+                    {record.sessionStarted &&
+                    checkedOutSessions.has(record.slotId) ? (
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="text-sm font-medium text-success">
+                          {formatTime(record.endTime)}
+                        </span>
+                        <Badge
+                          variant="outline"
+                          className="bg-success/10 text-success text-xs"
+                        >
+                          <CheckCircle className="w-3 h-3 mr-1" />
+                          Signed Out
+                        </Badge>
+                      </div>
+                    ) : record.sessionStarted ? (
+                      <span className="text-muted-foreground">-</span>
                     ) : (
                       <span className="text-muted-foreground">-</span>
                     )}

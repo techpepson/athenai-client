@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { AttendanceSession } from "@/types/attendance";
 import { cn } from "@/lib/utils";
 import {
@@ -45,11 +46,35 @@ interface SessionCardProps {
   onDelete?: (session: AttendanceSession) => void;
   onToggleMode?: (session: AttendanceSession) => void;
   onGenerateQrCode?: (session: AttendanceSession) => void;
+  onCheckout?: (session: AttendanceSession) => void;
   user: User | null;
   isTogglingMode?: boolean;
   isDeleting?: boolean;
   isGeneratingQrCode?: boolean;
 }
+
+// localStorage key for checked out sessions
+const CHECKED_OUT_SESSIONS_KEY = "checked_out_sessions";
+
+// Helper to check if a session is checked out
+const isSessionCheckedOut = (sessionId: string): boolean => {
+  const stored = localStorage.getItem(CHECKED_OUT_SESSIONS_KEY);
+  if (!stored) return false;
+  const checkedOut: string[] = JSON.parse(stored);
+  return checkedOut.includes(sessionId);
+};
+
+// Helper to mark a session as checked out
+const markSessionCheckedOut = (sessionId: string): void => {
+  const stored = localStorage.getItem(CHECKED_OUT_SESSIONS_KEY);
+  const checkedOut: string[] = stored ? JSON.parse(stored) : [];
+  if (!checkedOut.includes(sessionId)) {
+    checkedOut.push(sessionId);
+    localStorage.setItem(CHECKED_OUT_SESSIONS_KEY, JSON.stringify(checkedOut));
+    // Dispatch event for cross-component sync
+    window.dispatchEvent(new Event("session-checked-out"));
+  }
+};
 
 export const SessionCard = ({
   session,
@@ -59,12 +84,72 @@ export const SessionCard = ({
   onDelete,
   onToggleMode,
   onGenerateQrCode,
+  onCheckout,
   user,
   isTogglingMode = false,
   isDeleting = false,
   isGeneratingQrCode = false,
 }: SessionCardProps) => {
   const navigate = useNavigate();
+  const [isCheckedOut, setIsCheckedOut] = useState(() =>
+    isSessionCheckedOut(session.id),
+  );
+
+  // Check if past end time
+  const now = new Date();
+  const endTimeMs = new Date(session.endTime).getTime();
+  const isPastEndTime = now.getTime() >= endTimeMs;
+
+  // Auto checkout after 30 minutes past end time
+  useEffect(() => {
+    if (session.status !== "active") return;
+    if (isCheckedOut) return;
+
+    const AUTO_CHECKOUT_MINUTES = 30;
+    const autoCheckoutTime = endTimeMs + AUTO_CHECKOUT_MINUTES * 60 * 1000;
+    const timeUntilAutoCheckout = autoCheckoutTime - Date.now();
+
+    if (timeUntilAutoCheckout <= 0) {
+      // Already past auto checkout time
+      markSessionCheckedOut(session.id);
+      setIsCheckedOut(true);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      markSessionCheckedOut(session.id);
+      setIsCheckedOut(true);
+    }, timeUntilAutoCheckout);
+
+    return () => clearTimeout(timer);
+  }, [session.id, session.status, isCheckedOut, endTimeMs]);
+
+  // Listen for checkout events from other components
+  useEffect(() => {
+    const handleCheckoutEvent = () => {
+      setIsCheckedOut(isSessionCheckedOut(session.id));
+    };
+
+    window.addEventListener("session-checked-out", handleCheckoutEvent);
+    window.addEventListener("storage", handleCheckoutEvent);
+
+    return () => {
+      window.removeEventListener("session-checked-out", handleCheckoutEvent);
+      window.removeEventListener("storage", handleCheckoutEvent);
+    };
+  }, [session.id]);
+
+  // Handle checkout
+  const handleCheckout = () => {
+    markSessionCheckedOut(session.id);
+    setIsCheckedOut(true);
+    onCheckout?.(session);
+  };
+
+  // Check if user can checkout (REP or LECTURER)
+  const isRep = user?.role === Role.REP;
+  const isLecturer = user?.role === Role.LECTURER;
+  const canCheckout = isRep || isLecturer;
 
   // Check if session mode can be toggled (only CHECK_IN -> CHECK_OUT allowed by backend)
   // Backend allows toggle only within 15 mins after end time
@@ -103,9 +188,6 @@ export const SessionCard = ({
 
   // Check if user is admin
   const isAdmin = user?.role === Role.ADMIN || user?.role === Role.SYSTEM_ADMIN;
-
-  // Check if user is a REP (only REPs can start sessions)
-  const isRep = user?.role === Role.REP;
 
   // Check if user is the creator of this session
   const isCreator = user?.id === session.createdBy;
@@ -226,8 +308,37 @@ export const SessionCard = ({
             </Button>
           )}
 
-        {/* Active session - creator can show live and end session */}
-        {session.status === "active" && canManageSession && (
+        {/* Active session past end time - show Checkout for REP/LECTURER */}
+        {session.status === "active" &&
+          isPastEndTime &&
+          canCheckout &&
+          !isCheckedOut && (
+            <Button
+              className="flex-1"
+              variant="destructive"
+              size="sm"
+              onClick={handleCheckout}
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Checkout
+            </Button>
+          )}
+
+        {/* Active session past end time and checked out - show View Report */}
+        {session.status === "active" && isPastEndTime && isCheckedOut && (
+          <Button
+            className="flex-1"
+            variant="outline"
+            size="sm"
+            onClick={() => onViewReport?.(session)}
+          >
+            <Eye className="w-4 h-4 mr-2" />
+            View Report
+          </Button>
+        )}
+
+        {/* Active session before end time - creator can show live and end session */}
+        {session.status === "active" && !isPastEndTime && canManageSession && (
           <>
             <Button
               className="flex-1"
@@ -250,18 +361,21 @@ export const SessionCard = ({
           </>
         )}
 
-        {/* Active session - non-creator, non-admin users can view live */}
-        {session.status === "active" && !canManageSession && !isAdmin && (
-          <Button
-            className="flex-1"
-            variant="gradient"
-            size="sm"
-            onClick={handleShowLive}
-          >
-            <Eye className="w-4 h-4 mr-2" />
-            Show Live
-          </Button>
-        )}
+        {/* Active session before end time - non-creator, non-admin users can view live */}
+        {session.status === "active" &&
+          !isPastEndTime &&
+          !canManageSession &&
+          !isAdmin && (
+            <Button
+              className="flex-1"
+              variant="gradient"
+              size="sm"
+              onClick={handleShowLive}
+            >
+              <Eye className="w-4 h-4 mr-2" />
+              Show Live
+            </Button>
+          )}
 
         {/* Completed session - everyone can view report */}
         {session.status === "completed" && (
