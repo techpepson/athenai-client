@@ -64,9 +64,9 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
   const canAddAdmin =
     user?.role === Role.OWNER || user?.role === Role.SYSTEM_ADMIN;
 
-  // Fetch all courses when role is LECTURER or STUDENT
+  // Fetch all courses when role is LECTURER
   useEffect(() => {
-    if (role === Role.LECTURER || role === Role.STUDENT) {
+    if (role === Role.LECTURER) {
       setIsCoursesLoading(true);
       coursesService.getAllCourses().then((res) => {
         if (res.success && res.data?.data) {
@@ -105,28 +105,16 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
         return;
       }
 
-      // Check if 3 photos are captured
-      if (capturedPhotos.length < 3) {
-        toast({
-          title: "Photo Required",
-          description: "Please capture 3 photos for facial recognition.",
-          variant: "destructive",
-        });
-        setIsSubmitting(false);
-        return;
-      }
-
       // Build payload based on role
+      // enrollUser (POST /users/enroll) is for Lecturers and Staff only
+      // Face images are optional - can be enrolled later
       const payload: any = {
         fullName: name,
         email,
         phone,
         role,
       };
-      if (role === Role.STUDENT) {
-        payload.studentId = idNumber;
-        payload.courses = courses;
-      } else if (role === Role.LECTURER) {
+      if (role === Role.LECTURER) {
         payload.lecturerId = idNumber;
         payload.staffId = staffId;
         payload.lecturerHourlyRate = parseFloat(hourlyRate) || 0;
@@ -135,7 +123,10 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
       } else if (role === Role.STAFF) {
         payload.staffId = staffId;
       }
-      const response = await usersServices.enrollUser(payload, capturedPhotos);
+      const response = await usersServices.enrollUser(
+        payload,
+        capturedPhotos.length > 0 ? capturedPhotos : [],
+      );
 
       if (response.success) {
         setCreatedMemberName(name);
@@ -263,19 +254,37 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
                   }
                 }}
                 label={`Profile Photos (${capturedPhotos.length}/3)`}
-                description="Capture 3 photos for facial recognition (required)"
+                description="Capture 3 photos for facial recognition (optional — can be enrolled later)"
               />
               <div className="flex gap-2 mt-2">
                 {[...Array(3)].map((_, idx) => (
                   <span
                     key={idx}
-                    className={`text-xs px-2 py-1 rounded border ${
+                    className={`text-xs px-2 py-1 rounded border inline-flex items-center gap-1 ${
                       idx < capturedPhotos.length
                         ? "bg-success/20 border-success text-success"
                         : "bg-muted border-muted-foreground text-muted-foreground"
                     }`}
                   >
-                    {idx < capturedPhotos.length ? `Photo ${idx + 1}` : `Empty`}
+                    {idx < capturedPhotos.length ? (
+                      <>
+                        Photo {idx + 1}
+                        <button
+                          type="button"
+                          className="ml-1 hover:text-destructive transition-colors rounded-full"
+                          title={`Remove photo ${idx + 1}`}
+                          onClick={() =>
+                            setCapturedPhotos((prev) =>
+                              prev.filter((_, i) => i !== idx),
+                            )
+                          }
+                        >
+                          ✕
+                        </button>
+                      </>
+                    ) : (
+                      `Empty`
+                    )}
                   </span>
                 ))}
               </div>
@@ -365,41 +374,7 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
                   </SelectContent>
                 </Select>
               </div>
-              {/* Department/Program removed */}
-              {role === Role.STUDENT && (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="studentId">Student ID Number</Label>
-                    <Input
-                      id="studentId"
-                      type="text"
-                      placeholder="Enter student ID number"
-                      required
-                      value={idNumber}
-                      onChange={(e) => setIdNumber(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Courses Offered</Label>
-                    {isCoursesLoading ? (
-                      <div className="text-sm text-muted-foreground">
-                        Loading courses...
-                      </div>
-                    ) : allCourses.length > 0 ? (
-                      <MultiSelect
-                        options={allCourses}
-                        selected={courses}
-                        onChange={setCourses}
-                        placeholder="Select courses"
-                      />
-                    ) : (
-                      <div className="text-sm text-muted-foreground">
-                        No courses available
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
+              {/* Student role not available here — students self-register and use enrollFace */}
               {(role === Role.STAFF || role === Role.LECTURER) && (
                 <div className="space-y-2">
                   <Label
@@ -430,49 +405,17 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
                 </div>
               )}
               {role === Role.LECTURER && (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="hourlyRate">Hourly Rate</Label>
-                    <Input
-                      id="hourlyRate"
-                      type="number"
-                      placeholder="e.g., 50"
-                      required
-                      value={hourlyRate}
-                      onChange={(e) => setHourlyRate(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="lecturerCreditHours">Credit Hours</Label>
-                    <Input
-                      id="lecturerCreditHours"
-                      type="number"
-                      placeholder="e.g., 12"
-                      required
-                      value={lecturerCreditHours}
-                      onChange={(e) => setLecturerCreditHours(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Courses to Teach</Label>
-                    {isCoursesLoading ? (
-                      <div className="text-sm text-muted-foreground">
-                        Loading courses...
-                      </div>
-                    ) : allCourses.length > 0 ? (
-                      <MultiSelect
-                        options={allCourses}
-                        selected={courses}
-                        onChange={setCourses}
-                        placeholder="Select courses"
-                      />
-                    ) : (
-                      <div className="text-sm text-muted-foreground">
-                        No courses available
-                      </div>
-                    )}
-                  </div>
-                </>
+                <div className="space-y-2">
+                  <Label htmlFor="hourlyRate">Hourly Rate</Label>
+                  <Input
+                    id="hourlyRate"
+                    type="number"
+                    placeholder="e.g., 50"
+                    required
+                    value={hourlyRate}
+                    onChange={(e) => setHourlyRate(e.target.value)}
+                  />
+                </div>
               )}
             </div>
 

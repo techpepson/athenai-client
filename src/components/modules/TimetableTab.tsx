@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import * as XLSX from "xlsx";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,6 +34,8 @@ import {
   CalendarDays,
   ListTree,
   Info,
+  Loader2,
+  Download,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -43,6 +46,8 @@ import {
   LEVELS,
   SEMESTERS,
   DAYS_OF_WEEK,
+  formatTimeDisplay,
+  timeToMinutes,
 } from "@/services/modules.service";
 import { usersServices } from "@/services/users.services";
 import { IUserPublic } from "@/interface/user.interface";
@@ -80,10 +85,51 @@ const ACTIVITY_LABELS: Record<string, string> = {
   OTHER: "Other",
 };
 
-// Time columns matching the sample: 7.30 through 5.30
+// Time columns for the timetable grid: 7:30 AM through 8:00 PM
 const MORNING_TIMES = ["7:30", "8:30", "9:30", "10:30", "11:30", "12:30"];
-const AFTERNOON_TIMES = ["1:30", "2:30", "3:30", "4:30", "5:30"];
+const AFTERNOON_TIMES = [
+  "1:30",
+  "2:30",
+  "3:30",
+  "4:30",
+  "5:30",
+  "6:30",
+  "19:00",
+  "19:30",
+  "20:00",
+];
 const ALL_TIMES = [...MORNING_TIMES, ...AFTERNOON_TIMES];
+
+// Time options for slot modal dropdowns (every 30 min, 7:00 AM to 8:00 PM)
+const SLOT_TIME_OPTIONS = [
+  "7:00",
+  "7:30",
+  "8:00",
+  "8:30",
+  "9:00",
+  "9:30",
+  "10:00",
+  "10:30",
+  "11:00",
+  "11:30",
+  "12:00",
+  "12:30",
+  "1:00",
+  "1:30",
+  "2:00",
+  "2:30",
+  "3:00",
+  "3:30",
+  "4:00",
+  "4:30",
+  "5:00",
+  "5:30",
+  "6:00",
+  "6:30",
+  "19:00",
+  "19:30",
+  "20:00",
+];
 
 const ACTIVITY_COLORS: Record<string, string> = {
   LECTURE: "bg-blue-500/15 border-blue-500/30 text-blue-700 dark:text-blue-300",
@@ -146,22 +192,48 @@ const TimetableTab = () => {
   // Role-based access control
   const isAdmin = user?.role === Role.ADMIN || user?.role === Role.SYSTEM_ADMIN;
   const isRep = user?.role === Role.REP;
+  const isLecturer = user?.role === Role.LECTURER;
   const canEdit = isAdmin || isRep;
 
   // Get student's level (default to 100 if not set)
   // For REP/STUDENT, they should only see their own level
   const userLevel = user?.student?.level || 100;
 
+  // Modules state - declared early so lecturer memos below can reference it
+  const [modules, setModules] = useState<Module[]>([]);
+
   // Determine which levels to show
-  const availableLevels = isAdmin ? LEVELS : [userLevel];
+  // For lecturers: derive levels from modules that have subtopics assigned to them
+  const lecturerUserId = user?.id;
+  const lecturerAssignedModules = useMemo(() => {
+    if (!isLecturer || !lecturerUserId) return [];
+    return modules.filter(
+      (m) =>
+        m.subtopics &&
+        m.subtopics.some((st) => st.lecturerId === lecturerUserId),
+    );
+  }, [modules, isLecturer, lecturerUserId]);
+
+  const lecturerAvailableLevels = useMemo(() => {
+    if (!isLecturer) return [];
+    const levels = new Set(lecturerAssignedModules.map((m) => m.level));
+    return Array.from(levels).sort((a, b) => a - b);
+  }, [isLecturer, lecturerAssignedModules]);
+
+  const availableLevels = isAdmin
+    ? LEVELS
+    : isLecturer
+      ? lecturerAvailableLevels.length > 0
+        ? lecturerAvailableLevels
+        : [100]
+      : [userLevel];
 
   const [selectedLevel, setSelectedLevel] = useState<number>(
-    isAdmin ? 100 : userLevel,
+    isAdmin ? 100 : isLecturer ? lecturerAvailableLevels[0] || 100 : userLevel,
   );
   const [selectedSemester, setSelectedSemester] = useState<number>(1);
   const [selectedModuleId, setSelectedModuleId] = useState<string>("");
   const [selectedWeek, setSelectedWeek] = useState<number>(1);
-  const [modules, setModules] = useState<Module[]>([]);
   const [timetables, setTimetables] = useState<ModuleTimetable[]>([]);
   const [staffList, setStaffList] = useState<IUserPublic[]>([]);
 
@@ -186,43 +258,91 @@ const TimetableTab = () => {
     `${new Date().getFullYear()}/${new Date().getFullYear() + 1}`,
   );
 
-  useEffect(() => {
-    loadData();
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [modulesRes, timetablesRes, usersRes] = await Promise.all([
+        modulesService.getModules(),
+        modulesService.getTimetables(),
+        usersServices.getAllUsers(),
+      ]);
+
+      if (modulesRes.success && modulesRes.data?.data) {
+        setModules(modulesRes.data.data);
+      }
+      if (timetablesRes.success && timetablesRes.data?.data) {
+        setTimetables(timetablesRes.data.data);
+      }
+      if (usersRes.success && usersRes.data?.users) {
+        setStaffList(
+          usersRes.data.users.filter(
+            (u) => u.role === Role.LECTURER || u.role === Role.STAFF,
+          ),
+        );
+      }
+    } catch {
+      toast.error("Failed to load timetable data");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    const filtered = modules.filter(
+    loadData();
+  }, [loadData]);
+
+  useEffect(() => {
+    let filtered = modules.filter(
       (m) => m.level === selectedLevel && m.semester === selectedSemester,
     );
+    // Lecturers: only show modules with assigned subtopics
+    if (isLecturer && lecturerUserId) {
+      filtered = filtered.filter(
+        (m) =>
+          m.subtopics &&
+          m.subtopics.some((st) => st.lecturerId === lecturerUserId),
+      );
+    }
     if (filtered.length > 0) {
       setSelectedModuleId(filtered[0].id);
     } else {
       setSelectedModuleId("");
     }
     setSelectedWeek(1);
-  }, [selectedLevel, selectedSemester, modules]);
+  }, [selectedLevel, selectedSemester, modules, isLecturer, lecturerUserId]);
 
-  const loadData = async () => {
-    setModules(modulesService.getModules());
-    setTimetables(modulesService.getTimetables());
-    const response = await usersServices.getAllUsers();
-    if (response.success && response.data?.users) {
-      setStaffList(
-        response.data.users.filter(
-          (u) => u.role === Role.LECTURER || u.role === Role.STAFF,
-        ),
-      );
+  // Update selected level when lecturer's available levels change (after modules load)
+  useEffect(() => {
+    if (
+      isLecturer &&
+      lecturerAvailableLevels.length > 0 &&
+      !lecturerAvailableLevels.includes(selectedLevel)
+    ) {
+      setSelectedLevel(lecturerAvailableLevels[0]);
     }
-  };
+  }, [isLecturer, lecturerAvailableLevels, selectedLevel]);
 
   const filteredModules = useMemo(
     () =>
       modules
-        .filter(
-          (m) => m.level === selectedLevel && m.semester === selectedSemester,
-        )
+        .filter((m) => {
+          const levelMatch = m.level === selectedLevel;
+          const semesterMatch = m.semester === selectedSemester;
+          if (!levelMatch || !semesterMatch) return false;
+          // Lecturers: only show modules with subtopics assigned to them
+          if (isLecturer && lecturerUserId) {
+            return (
+              m.subtopics &&
+              m.subtopics.some((st) => st.lecturerId === lecturerUserId)
+            );
+          }
+          return true;
+        })
         .sort((a, b) => (a.order || 0) - (b.order || 0)),
-    [modules, selectedLevel, selectedSemester],
+    [modules, selectedLevel, selectedSemester, isLecturer, lecturerUserId],
   );
 
   const selectedModule = useMemo(
@@ -230,22 +350,49 @@ const TimetableTab = () => {
     [modules, selectedModuleId],
   );
 
-  const currentTimetable = useMemo(
-    () =>
-      selectedModuleId
-        ? timetables.find((t) => t.moduleId === selectedModuleId)
-        : undefined,
-    [timetables, selectedModuleId],
-  );
+  // Fetch full timetable with slots for the selected module
+  const [currentTimetable, setCurrentTimetable] =
+    useState<ModuleTimetable | null>(null);
+  const [timetableVersion, setTimetableVersion] = useState(0); // bump to trigger re-fetch
 
-  const totalWeeks = currentTimetable?.totalWeeks || 4;
+  const loadCurrentTimetable = useCallback(async () => {
+    if (!selectedModuleId) {
+      setCurrentTimetable(null);
+      return;
+    }
+    try {
+      const res = await modulesService.getTimetableForModule(selectedModuleId);
+      if (res.success && res.data?.data) {
+        setCurrentTimetable(res.data.data);
+      } else {
+        setCurrentTimetable(null);
+      }
+    } catch {
+      setCurrentTimetable(null);
+    }
+  }, [selectedModuleId]);
+
+  useEffect(() => {
+    loadCurrentTimetable();
+    // timetableVersion triggers re-fetch after mutations
+  }, [loadCurrentTimetable, timetableVersion]);
+
+  // Helper to refresh timetable after mutations
+  const refreshTimetable = () => setTimetableVersion((v) => v + 1);
+
+  // Total module weeks from subtopics
+  const totalModuleWeeks = selectedModule
+    ? selectedModule.subtopics.reduce((sum, st) => sum + (st.weeks || 0), 0)
+    : 0;
+
+  const totalWeeks = totalModuleWeeks || currentTimetable?.totalWeeks || 4;
 
   // --- Timetable CRUD ---
 
-  const ensureTimetable = (): ModuleTimetable => {
+  const ensureTimetable = async (): Promise<ModuleTimetable | null> => {
     if (currentTimetable) return currentTimetable;
 
-    const newTimetable = modulesService.saveTimetable({
+    const res = await modulesService.createTimetable({
       moduleId: selectedModuleId,
       level: selectedLevel,
       semester: selectedSemester,
@@ -253,10 +400,16 @@ const TimetableTab = () => {
       totalWeeks: parseInt(timetableWeeks) || 4,
       startDate: timetableStartDate || undefined,
       endDate: timetableEndDate || undefined,
-      slots: [],
     });
-    setTimetables(modulesService.getTimetables());
-    return newTimetable;
+
+    if (res.success && res.data?.data) {
+      // Reload timetable with slots
+      refreshTimetable();
+      return res.data.data;
+    }
+
+    toast.error(res.error || "Failed to create timetable");
+    return null;
   };
 
   const openAddSlotModal = (day?: string, time?: string) => {
@@ -305,76 +458,180 @@ const TimetableTab = () => {
   const getColSpan = (startTime: string, endTime: string): number => {
     const startIdx = ALL_TIMES.indexOf(startTime);
     const endIdx = ALL_TIMES.indexOf(endTime);
-    if (startIdx === -1 || endIdx === -1) return 1;
-    return Math.max(1, endIdx - startIdx);
+    if (startIdx !== -1 && endIdx !== -1) return Math.max(1, endIdx - startIdx);
+    // Fallback: use minute math to find closest grid columns
+    const startMin = timeToMinutes(startTime);
+    const endMin = timeToMinutes(endTime);
+    const startGridIdx = ALL_TIMES.findIndex(
+      (t, i) =>
+        timeToMinutes(t) <= startMin &&
+        (i + 1 >= ALL_TIMES.length ||
+          timeToMinutes(ALL_TIMES[i + 1]) > startMin),
+    );
+    const endGridIdx = ALL_TIMES.findIndex(
+      (t, i) =>
+        timeToMinutes(t) <= endMin &&
+        (i + 1 >= ALL_TIMES.length || timeToMinutes(ALL_TIMES[i + 1]) > endMin),
+    );
+    if (startGridIdx === -1 || endGridIdx === -1) return 1;
+    return Math.max(1, endGridIdx - startGridIdx + 1);
   };
 
-  const handleSaveSlot = () => {
+  /**
+   * Find a slot whose startTime falls within a grid column's time range.
+   * Each grid column represents the period from its time to the next column's time.
+   */
+  const findSlotForColumn = (
+    slots: WeekSlot[],
+    columnTime: string,
+    columnIndex: number,
+    timesArray: string[],
+  ): WeekSlot | undefined => {
+    // First try exact match (fast path)
+    const exact = slots.find((s) => s.startTime === columnTime);
+    if (exact) return exact;
+
+    // Fuzzy match: find a slot whose startTime falls within this column's range
+    const colMin = timeToMinutes(columnTime);
+    const nextColMin =
+      columnIndex + 1 < timesArray.length
+        ? timeToMinutes(timesArray[columnIndex + 1])
+        : colMin + 60;
+
+    return slots.find((s) => {
+      const slotMin = timeToMinutes(s.startTime);
+      return slotMin >= colMin && slotMin < nextColMin;
+    });
+  };
+
+  const handleSaveSlot = async () => {
     if (!slotSubtopicId) {
       toast.error("Please select a subtopic");
       return;
     }
 
-    const timetable = ensureTimetable();
-    const lecturer = staffList.find((s) => s.id === slotLecturerId);
-    const subtopic = selectedModule?.subtopics.find(
-      (s) => s.id === slotSubtopicId,
-    );
+    setSaving(true);
+    try {
+      const timetable = await ensureTimetable();
+      if (!timetable) return;
 
-    const slotData: Record<string, unknown> = {
-      day: slotDay,
-      startTime: slotStartTime,
-      endTime: slotEndTime,
-      subtopicId: slotSubtopicId,
-      moduleId: selectedModuleId,
-      lecturerId: slotLecturerId || subtopic?.lecturerId || undefined,
-      lecturerName: lecturer?.name || subtopic?.lecturerName || undefined,
-      venue: slotVenue || undefined,
-      week: parseInt(slotWeek) || selectedWeek,
-      activityType: slotActivityType,
-      colSpan: getColSpan(slotStartTime, slotEndTime),
-    };
+      const slotData = {
+        day: slotDay,
+        startTime: slotStartTime,
+        endTime: slotEndTime,
+        subtopicId: slotSubtopicId,
+        moduleId: selectedModuleId,
+        lecturerId:
+          slotLecturerId && slotLecturerId !== "none"
+            ? slotLecturerId
+            : undefined,
+        venue: slotVenue || undefined,
+        week: parseInt(slotWeek) || selectedWeek,
+        activityType: slotActivityType,
+        colSpan: getColSpan(slotStartTime, slotEndTime),
+      };
 
-    if (editingSlot) {
-      modulesService.updateTimetableSlot(
-        timetable.id,
-        editingSlot.id,
-        slotData as Partial<TimetableSlot>,
-      );
-      toast.success("Time slot updated");
-    } else {
-      modulesService.addTimetableSlot(
-        timetable.id,
-        slotData as Omit<TimetableSlot, "id">,
-      );
-      toast.success("Time slot added");
+      if (editingSlot) {
+        const res = await modulesService.updateTimetableSlot(
+          timetable.id,
+          editingSlot.id,
+          slotData,
+        );
+        if (res.success) {
+          toast.success("Time slot updated");
+        } else {
+          toast.error(res.error || "Failed to update slot");
+          return;
+        }
+      } else {
+        const res = await modulesService.addTimetableSlot(
+          timetable.id,
+          slotData,
+        );
+        if (res.success) {
+          toast.success("Time slot added");
+        } else {
+          toast.error(res.error || "Failed to add slot");
+          return;
+        }
+      }
+
+      setSlotModalOpen(false);
+      // Reload timetable with slots
+      refreshTimetable();
+    } catch {
+      toast.error("Failed to save slot");
+    } finally {
+      setSaving(false);
     }
-
-    setSlotModalOpen(false);
-    setTimetables(modulesService.getTimetables());
   };
 
-  const handleDeleteSlot = (slotId: string) => {
+  const handleDeleteSlot = async (slotId: string) => {
     if (!currentTimetable) return;
-    modulesService.removeTimetableSlot(currentTimetable.id, slotId);
-    toast.success("Time slot removed");
-    setTimetables(modulesService.getTimetables());
+    setSaving(true);
+    try {
+      const res = await modulesService.removeTimetableSlot(
+        currentTimetable.id,
+        slotId,
+      );
+      if (res.success) {
+        toast.success("Time slot removed");
+      } else {
+        toast.error(res.error || "Failed to remove slot");
+      }
+      refreshTimetable();
+    } catch {
+      toast.error("Failed to remove slot");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleSaveTimetableSettings = () => {
+  const handleSaveTimetableSettings = async () => {
     if (!selectedModuleId) return;
 
-    const timetable = ensureTimetable();
-    modulesService.saveTimetable({
-      ...timetable,
-      totalWeeks: parseInt(timetableWeeks) || 4,
-      startDate: timetableStartDate || undefined,
-      endDate: timetableEndDate || undefined,
-      academicYear: timetableAcademicYear,
-    });
-    toast.success("Timetable settings saved");
-    setSettingsModalOpen(false);
-    setTimetables(modulesService.getTimetables());
+    setSaving(true);
+    try {
+      if (currentTimetable) {
+        // Update existing timetable
+        const res = await modulesService.updateTimetable(currentTimetable.id, {
+          totalWeeks: parseInt(timetableWeeks) || 4,
+          startDate: timetableStartDate || undefined,
+          endDate: timetableEndDate || undefined,
+          academicYear: timetableAcademicYear,
+        });
+        if (res.success) {
+          toast.success("Timetable settings saved");
+        } else {
+          toast.error(res.error || "Failed to save settings");
+          return;
+        }
+      } else {
+        // Create new timetable
+        const res = await modulesService.createTimetable({
+          moduleId: selectedModuleId,
+          level: selectedLevel,
+          semester: selectedSemester,
+          academicYear: timetableAcademicYear,
+          totalWeeks: parseInt(timetableWeeks) || 4,
+          startDate: timetableStartDate || undefined,
+          endDate: timetableEndDate || undefined,
+        });
+        if (res.success) {
+          toast.success("Timetable created");
+        } else {
+          toast.error(res.error || "Failed to create timetable");
+          return;
+        }
+      }
+
+      setSettingsModalOpen(false);
+      refreshTimetable();
+    } catch {
+      toast.error("Failed to save timetable settings");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const openTimetableSettings = () => {
@@ -399,9 +656,202 @@ const TimetableTab = () => {
     );
   };
 
+  // --- Download timetable as Excel ---
+  const handleDownloadTimetable = () => {
+    if (!selectedModule || !currentTimetable) {
+      toast.error("No timetable data to download");
+      return;
+    }
+
+    const wb = XLSX.utils.book_new();
+    const allColumnHeaders = [
+      "Day / Time",
+      ...MORNING_TIMES.map((t) => formatTimeDisplay(t)),
+      "BREAK",
+      ...AFTERNOON_TIMES.map((t) => formatTimeDisplay(t)),
+    ];
+
+    // Build a sheet for each week
+    for (let week = 1; week <= totalWeeks; week++) {
+      const rows: string[][] = [];
+
+      // Title rows
+      rows.push([`${selectedModule.code} — ${selectedModule.name}`]);
+      rows.push([
+        `Level ${selectedLevel} | Semester ${selectedSemester} | Week ${week} of ${totalWeeks}`,
+      ]);
+      if (currentTimetable.academicYear) {
+        rows.push([`Academic Year: ${currentTimetable.academicYear}`]);
+      }
+      rows.push([]); // blank row
+
+      // Column headers
+      rows.push(allColumnHeaders);
+
+      // Data rows — one per day
+      DAYS_OF_WEEK.forEach((day) => {
+        const daySlots = getWeekSlots(day, week);
+        const placedSlotIds = new Set<string>();
+        const rowCells: string[] = [day];
+
+        // Morning columns
+        let i = 0;
+        while (i < MORNING_TIMES.length) {
+          const time = MORNING_TIMES[i];
+          const remaining = daySlots.filter((s) => !placedSlotIds.has(s.id));
+          const slot = findSlotForColumn(remaining, time, i, MORNING_TIMES);
+          if (slot) {
+            placedSlotIds.add(slot.id);
+            const span =
+              slot.colSpan || getColSpan(slot.startTime, slot.endTime);
+            const clampedSpan = Math.min(span, MORNING_TIMES.length - i);
+            const subtopicName =
+              selectedModule.subtopics.find((s) => s.id === slot.subtopicId)
+                ?.name || "";
+            const label = [
+              slot.activityType,
+              subtopicName,
+              slot.venue ? `(${slot.venue})` : "",
+              slot.lecturerName || "",
+            ]
+              .filter(Boolean)
+              .join(" — ");
+            // Fill the first cell with the label
+            rowCells.push(label);
+            // Fill remaining spanned cells with empty strings
+            for (let s = 1; s < clampedSpan; s++) {
+              rowCells.push("");
+            }
+            i += clampedSpan;
+          } else {
+            rowCells.push("");
+            i++;
+          }
+        }
+
+        // Break column
+        rowCells.push("");
+
+        // Afternoon + Evening columns
+        i = 0;
+        while (i < AFTERNOON_TIMES.length) {
+          const time = AFTERNOON_TIMES[i];
+          const remaining = daySlots.filter((s) => !placedSlotIds.has(s.id));
+          const slot = findSlotForColumn(remaining, time, i, AFTERNOON_TIMES);
+          if (slot) {
+            placedSlotIds.add(slot.id);
+            const span =
+              slot.colSpan || getColSpan(slot.startTime, slot.endTime);
+            const clampedSpan = Math.min(span, AFTERNOON_TIMES.length - i);
+            const subtopicName =
+              selectedModule.subtopics.find((s) => s.id === slot.subtopicId)
+                ?.name || "";
+            const label = [
+              slot.activityType,
+              subtopicName,
+              slot.venue ? `(${slot.venue})` : "",
+              slot.lecturerName || "",
+            ]
+              .filter(Boolean)
+              .join(" — ");
+            rowCells.push(label);
+            for (let s = 1; s < clampedSpan; s++) {
+              rowCells.push("");
+            }
+            i += clampedSpan;
+          } else {
+            rowCells.push("");
+            i++;
+          }
+        }
+
+        rows.push(rowCells);
+      });
+
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+
+      // Merge cells for multi-span slots (row offset = 4 header rows)
+      const headerRowCount = currentTimetable.academicYear ? 5 : 4;
+      DAYS_OF_WEEK.forEach((day, dayIdx) => {
+        const daySlots = getWeekSlots(day, week);
+        const placedSlotIds = new Set<string>();
+        let col = 1; // column 0 is Day name
+
+        // Morning
+        let ci = 0;
+        while (ci < MORNING_TIMES.length) {
+          const time = MORNING_TIMES[ci];
+          const remaining = daySlots.filter((s) => !placedSlotIds.has(s.id));
+          const slot = findSlotForColumn(remaining, time, ci, MORNING_TIMES);
+          if (slot) {
+            placedSlotIds.add(slot.id);
+            const span =
+              slot.colSpan || getColSpan(slot.startTime, slot.endTime);
+            const clampedSpan = Math.min(span, MORNING_TIMES.length - ci);
+            if (clampedSpan > 1) {
+              if (!ws["!merges"]) ws["!merges"] = [];
+              ws["!merges"].push({
+                s: { r: headerRowCount + dayIdx, c: col },
+                e: { r: headerRowCount + dayIdx, c: col + clampedSpan - 1 },
+              });
+            }
+            col += clampedSpan;
+            ci += clampedSpan;
+          } else {
+            col++;
+            ci++;
+          }
+        }
+
+        col++; // skip BREAK column
+
+        // Afternoon
+        ci = 0;
+        while (ci < AFTERNOON_TIMES.length) {
+          const time = AFTERNOON_TIMES[ci];
+          const remaining = daySlots.filter((s) => !placedSlotIds.has(s.id));
+          const slot = findSlotForColumn(remaining, time, ci, AFTERNOON_TIMES);
+          if (slot) {
+            placedSlotIds.add(slot.id);
+            const span =
+              slot.colSpan || getColSpan(slot.startTime, slot.endTime);
+            const clampedSpan = Math.min(span, AFTERNOON_TIMES.length - ci);
+            if (clampedSpan > 1) {
+              if (!ws["!merges"]) ws["!merges"] = [];
+              ws["!merges"].push({
+                s: { r: headerRowCount + dayIdx, c: col },
+                e: { r: headerRowCount + dayIdx, c: col + clampedSpan - 1 },
+              });
+            }
+            col += clampedSpan;
+            ci += clampedSpan;
+          } else {
+            col++;
+            ci++;
+          }
+        }
+      });
+
+      // Set column widths
+      ws["!cols"] = [
+        { wch: 12 }, // Day
+        ...allColumnHeaders.slice(1).map(() => ({ wch: 18 })),
+      ];
+
+      const sheetName = `Week ${week}`;
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    }
+
+    const fileName = `Timetable_${selectedModule.code}_Level${selectedLevel}_Sem${selectedSemester}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+    toast.success(`Timetable downloaded as ${fileName}`);
+  };
+
   // Build the row data for a given day
   const buildDayRow = (day: string, week: number) => {
     const daySlots = getWeekSlots(day, week);
+    // Track which slots we've already placed so they aren't matched twice
+    const placedSlotIds = new Set<string>();
     const cells: {
       type: "slot" | "empty" | "break";
       slot?: WeekSlot;
@@ -413,8 +863,10 @@ const TimetableTab = () => {
     let i = 0;
     while (i < MORNING_TIMES.length) {
       const time = MORNING_TIMES[i];
-      const slot = daySlots.find((s) => s.startTime === time);
+      const remaining = daySlots.filter((s) => !placedSlotIds.has(s.id));
+      const slot = findSlotForColumn(remaining, time, i, MORNING_TIMES);
       if (slot) {
+        placedSlotIds.add(slot.id);
         const span = slot.colSpan || getColSpan(slot.startTime, slot.endTime);
         // Clamp span to morning section
         const clampedSpan = Math.min(span, MORNING_TIMES.length - i);
@@ -429,12 +881,14 @@ const TimetableTab = () => {
     // Break cell
     cells.push({ type: "break", colSpan: 1, timeIndex: -1 });
 
-    // Process afternoon times (indices 0-4)
+    // Process afternoon times (indices 0-N)
     i = 0;
     while (i < AFTERNOON_TIMES.length) {
       const time = AFTERNOON_TIMES[i];
-      const slot = daySlots.find((s) => s.startTime === time);
+      const remaining = daySlots.filter((s) => !placedSlotIds.has(s.id));
+      const slot = findSlotForColumn(remaining, time, i, AFTERNOON_TIMES);
       if (slot) {
+        placedSlotIds.add(slot.id);
         const span = slot.colSpan || getColSpan(slot.startTime, slot.endTime);
         const clampedSpan = Math.min(span, AFTERNOON_TIMES.length - i);
         cells.push({
@@ -490,11 +944,6 @@ const TimetableTab = () => {
 
     return Array.from(topicMap.values());
   };
-
-  // Total module weeks
-  const totalModuleWeeks = selectedModule
-    ? selectedModule.subtopics.reduce((sum, st) => sum + (st.weeks || 0), 0)
-    : 0;
 
   const currentModuleIndex = filteredModules.findIndex(
     (m) => m.id === selectedModuleId,
@@ -617,9 +1066,9 @@ const TimetableTab = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {ALL_TIMES.map((t) => (
+                    {SLOT_TIME_OPTIONS.map((t) => (
                       <SelectItem key={t} value={t}>
-                        {t}
+                        {formatTimeDisplay(t)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -632,9 +1081,9 @@ const TimetableTab = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {ALL_TIMES.map((t) => (
+                    {SLOT_TIME_OPTIONS.map((t) => (
                       <SelectItem key={t} value={t}>
-                        {t}
+                        {formatTimeDisplay(t)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -672,7 +1121,8 @@ const TimetableTab = () => {
             <Button variant="outline" onClick={() => setSlotModalOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSaveSlot}>
+            <Button onClick={handleSaveSlot} disabled={saving}>
+              {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               {editingSlot ? "Update Slot" : "Add Slot"}
             </Button>
           </DialogFooter>
@@ -730,7 +1180,10 @@ const TimetableTab = () => {
             >
               Cancel
             </Button>
-            <Button onClick={handleSaveTimetableSettings}>Save Settings</Button>
+            <Button onClick={handleSaveTimetableSettings} disabled={saving}>
+              {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Save Settings
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -851,6 +1304,16 @@ const TimetableTab = () => {
                   Settings
                 </Button>
               )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDownloadTimetable}
+                disabled={!currentTimetable || !selectedModule}
+                className="gap-1"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Download
+              </Button>
             </div>
           )}
         </div>
@@ -912,8 +1375,18 @@ const TimetableTab = () => {
           </div>
         )}
 
+        {/* Loading */}
+        {loading && (
+          <div className="bg-card rounded-xl border border-border p-12 flex items-center justify-center">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            <span className="ml-2 text-sm text-muted-foreground">
+              Loading timetable data...
+            </span>
+          </div>
+        )}
+
         {/* No Modules */}
-        {filteredModules.length === 0 && (
+        {!loading && filteredModules.length === 0 && (
           <div className="bg-card rounded-xl border border-border p-12 text-center">
             <BookOpen className="w-16 h-16 text-muted-foreground/30 mx-auto mb-4" />
             <h4 className="text-lg font-medium text-foreground mb-2">
@@ -1019,7 +1492,7 @@ const TimetableTab = () => {
 
               {/* Timetable Grid */}
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[900px] border-collapse">
+                <table className="w-full min-w-[1200px] border-collapse">
                   <thead>
                     <tr className="bg-secondary/50">
                       <th className="text-left p-2.5 text-xs font-bold text-foreground border border-border/50 w-28 uppercase">
@@ -1030,7 +1503,7 @@ const TimetableTab = () => {
                           key={t}
                           className="text-center p-2.5 text-xs font-bold text-foreground border border-border/50 min-w-[80px] uppercase"
                         >
-                          {t}
+                          {formatTimeDisplay(t)}
                         </th>
                       ))}
                       <th className="text-center p-2.5 text-xs font-bold text-foreground border border-border/50 w-12 bg-secondary/80 uppercase writing-vertical">
@@ -1051,7 +1524,7 @@ const TimetableTab = () => {
                           key={t}
                           className="text-center p-2.5 text-xs font-bold text-foreground border border-border/50 min-w-[80px] uppercase"
                         >
-                          {t}
+                          {formatTimeDisplay(t)}
                         </th>
                       ))}
                     </tr>

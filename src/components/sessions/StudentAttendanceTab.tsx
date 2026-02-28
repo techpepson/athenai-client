@@ -37,7 +37,12 @@ import {
   FileText,
 } from "lucide-react";
 import { toast } from "sonner";
-import { modulesService, LEVELS } from "@/services/modules.service";
+import {
+  modulesService,
+  LEVELS,
+  Module,
+  ModuleTimetable,
+} from "@/services/modules.service";
 import { useAuth } from "@/contexts/AuthContext";
 import { Role } from "@/enums/enums";
 import { cn } from "@/lib/utils";
@@ -112,6 +117,35 @@ const StudentAttendanceTab = () => {
   const [editingEntry, setEditingEntry] =
     useState<StudentAttendanceEntry | null>(null);
   const [signatureInput, setSignatureInput] = useState("");
+  const [allModules, setAllModules] = useState<Module[]>([]);
+  const [allTimetables, setAllTimetables] = useState<ModuleTimetable[]>([]);
+
+  // Load modules and timetables (with full slot data) asynchronously
+  useEffect(() => {
+    const loadData = async () => {
+      const modulesRes = await modulesService.getModules();
+      let modules: Module[] = [];
+      if (modulesRes.success && modulesRes.data?.data) {
+        modules = modulesRes.data.data;
+        setAllModules(modules);
+      }
+
+      // Fetch full timetable (with slots) for each module
+      if (modules.length > 0) {
+        const timetableResults = await Promise.all(
+          modules.map((m) => modulesService.getTimetableForModule(m.id)),
+        );
+        const timetables: ModuleTimetable[] = [];
+        timetableResults.forEach((res) => {
+          if (res.success && res.data?.data) {
+            timetables.push(res.data.data);
+          }
+        });
+        setAllTimetables(timetables);
+      }
+    };
+    loadData();
+  }, []);
 
   // Available levels based on role
   const availableLevels = useMemo(() => {
@@ -152,15 +186,12 @@ const StudentAttendanceTab = () => {
 
   // Generate attendance sheets from timetable data (for today's sessions only)
   const todaysSheets = useMemo(() => {
-    const timetables = modulesService.getTimetables();
-    const modules = modulesService.getModules();
-
-    if (timetables.length === 0 || modules.length === 0) {
+    if (allTimetables.length === 0 || allModules.length === 0) {
       return [];
     }
 
     // Filter by selected level and semester
-    const filteredTimetables = timetables.filter(
+    const filteredTimetables = allTimetables.filter(
       (t) => t.level === selectedLevel && t.semester === selectedSemester,
     );
 
@@ -187,7 +218,7 @@ const StudentAttendanceTab = () => {
     const sheets: StudentAttendanceSheet[] = [];
 
     filteredTimetables.forEach((timetable) => {
-      const mod = modules.find((m) => m.id === timetable.moduleId);
+      const mod = allModules.find((m) => m.id === timetable.moduleId);
       if (!mod) return;
 
       // Determine current week
@@ -261,7 +292,14 @@ const StudentAttendanceTab = () => {
     });
 
     return sheets;
-  }, [selectedLevel, selectedSemester, attendanceSheets, activeSessions]);
+  }, [
+    selectedLevel,
+    selectedSemester,
+    attendanceSheets,
+    activeSessions,
+    allModules,
+    allTimetables,
+  ]);
 
   // Save attendance sheets to localStorage
   const saveAttendanceSheets = (sheets: StudentAttendanceSheet[]) => {

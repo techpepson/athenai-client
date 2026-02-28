@@ -12,7 +12,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Shield, Clock, Save, BookOpen, ScanFace, Loader2 } from "lucide-react";
+import {
+  Shield,
+  Clock,
+  Save,
+  BookOpen,
+  ScanFace,
+  Loader2,
+  GraduationCap,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { Role } from "@/enums/enums";
@@ -27,6 +35,13 @@ import { getStudentLevel } from "@/data/mockAttendanceData";
 import { useAttendance } from "@/contexts/AttendanceContext";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const ProfileSetting = () => {
   // Use AttendanceContext for module enrollment
@@ -96,7 +111,7 @@ const ProfileSetting = () => {
     fetchRepCourses();
   }, [isCourseRep, user?.id, user?.student?.id]);
 
-  // Load modules by student level (localStorage-based)
+  // Load modules by student level (API-based)
   useEffect(() => {
     if (!isStudent && !isCourseRep) return;
 
@@ -104,13 +119,17 @@ const ProfileSetting = () => {
     const level = user?.student?.level || getStudentLevel() || 100;
 
     // Load modules for the student's level
-    const levelModules = modulesService.getModulesByLevel(level);
-    setAvailableModules(levelModules);
-
-    // Auto-enroll all modules if none enrolled yet
-    if (contextEnrolledModules.length === 0 && levelModules.length > 0) {
-      autoEnrollByLevel();
-    }
+    const fetchModules = async () => {
+      const res = await modulesService.getModulesByLevel(level);
+      if (res.success && res.data?.data) {
+        setAvailableModules(res.data.data);
+        // Auto-enroll all modules if none enrolled yet
+        if (contextEnrolledModules.length === 0 && res.data.data.length > 0) {
+          autoEnrollByLevel();
+        }
+      }
+    };
+    fetchModules();
   }, [
     isStudent,
     isCourseRep,
@@ -119,11 +138,18 @@ const ProfileSetting = () => {
     autoEnrollByLevel,
   ]);
 
+  // Available student levels
+  const STUDENT_LEVELS = [100, 200, 300, 400, 500, 600];
+
   // State for editable fields
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
   const [facialImages, setFacialImages] = useState<string[] | null>(null);
   const [facialData, setFacialData] = useState<string | null>(null);
   const [studentIdCard, setStudentIdCard] = useState<string>("");
+  const [studentLevel, setStudentLevel] = useState<number>(
+    user?.student?.level || 100,
+  );
+  const [savingLevel, setSavingLevel] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showSaveAlert, setShowSaveAlert] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -145,8 +171,24 @@ const ProfileSetting = () => {
       hasChanges = true;
     }
 
+    // Check level changes (for students and reps)
+    if (
+      (isStudent || isCourseRep) &&
+      studentLevel !== (user.student?.level || 100)
+    ) {
+      hasChanges = true;
+    }
+
     setHasUnsavedChanges(hasChanges);
-  }, [profilePhoto, facialData, studentIdCard, user, isStudent]);
+  }, [
+    profilePhoto,
+    facialData,
+    studentIdCard,
+    studentLevel,
+    user,
+    isStudent,
+    isCourseRep,
+  ]);
 
   // Initialize state from user data
   useEffect(() => {
@@ -157,6 +199,8 @@ const ProfileSetting = () => {
       setFacialData(user.embeddingStatus === "UPLOADED" ? "verified" : null);
       // Set student ID card from user data
       setStudentIdCard(user.student?.studentId || "");
+      // Set student level from user data
+      setStudentLevel(user.student?.level || 100);
     }
   }, [user]);
 
@@ -181,12 +225,15 @@ const ProfileSetting = () => {
         const alreadyEnrolled = !!user.student?.studentId;
         if (alreadyEnrolled) {
           // Only update records (student already exists)
-          const updateRecordsPayload: Record<string, string> = {};
+          const updateRecordsPayload: Record<string, string | number> = {};
           if (
             studentIdCard &&
             studentIdCard !== (user.student?.studentId || "")
           ) {
             updateRecordsPayload.studentId = studentIdCard;
+          }
+          if (studentLevel !== (user.student?.level || 100)) {
+            updateRecordsPayload.level = studentLevel;
           }
           if (Object.keys(updateRecordsPayload).length > 0) {
             const res = await usersServices.updateRecords(
@@ -196,25 +243,42 @@ const ProfileSetting = () => {
             if (!res.success)
               throw new Error(res.error || "Failed to update records");
           }
+
+          // If facial images were captured, also enroll face with level
+          if (facialImages && facialImages.length === 3) {
+            const files = await Promise.all(
+              facialImages.map(async (img, i) => {
+                const blob = await fetch(img).then((r) => r.blob());
+                return new File([blob], `face${i + 1}.jpg`, {
+                  type: "image/jpeg",
+                });
+              }),
+            );
+            const faceRes = await usersServices.enrollFace(
+              files,
+              studentIdCard || undefined,
+              studentLevel,
+            );
+            if (!faceRes.success)
+              throw new Error(faceRes.error || "Failed to enroll face data");
+          }
         } else {
           // Not enrolled: enroll new student (requires facial images)
           if (facialImages && facialImages.length === 3) {
             const files = await Promise.all(
               facialImages.map(async (img, i) => {
                 const blob = await fetch(img).then((r) => r.blob());
-                console.log(blob);
                 return new File([blob], `face${i + 1}.jpg`, {
                   type: "image/jpeg",
                 });
               }),
             );
 
-            const payload = {
-              role: Role.STUDENT,
-              email: user.email, // Required for backend to find existing user
-              studentId: studentIdCard,
-            };
-            const res = await usersServices.enrollUser(payload, files);
+            const res = await usersServices.enrollFace(
+              files,
+              studentIdCard || undefined,
+              studentLevel,
+            );
             if (!res.success)
               throw new Error(res.error || "Failed to enroll face data");
           } else {
@@ -346,6 +410,80 @@ const ProfileSetting = () => {
                 {user.role?.replace("_", " ")}
               </div>
             </div>
+
+            {/* Student Level Selection */}
+            {(isStudent || isCourseRep) && (
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <GraduationCap className="w-4 h-4" />
+                  Academic Level
+                </Label>
+                <Select
+                  value={String(studentLevel)}
+                  onValueChange={(value) => setStudentLevel(Number(value))}
+                >
+                  <SelectTrigger className="bg-background">
+                    <SelectValue placeholder="Select your level" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {STUDENT_LEVELS.map((level) => (
+                      <SelectItem key={level} value={String(level)}>
+                        Level {level}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Select your current academic year/level
+                </p>
+                {studentLevel !== (user?.student?.level || 100) && (
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      variant="outline"
+                      className="text-xs text-amber-600 border-amber-300 bg-amber-50"
+                    >
+                      Changed from Level {user?.student?.level || 100}
+                    </Badge>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-xs px-2"
+                      onClick={async () => {
+                        const token =
+                          await usersServices.utilService.getTokenFromLocalStorage();
+                        if (!token) {
+                          toast.error("You must be logged in");
+                          return;
+                        }
+                        setSavingLevel(true);
+                        try {
+                          const res = await usersServices.updateRecords(
+                            { level: studentLevel } as any,
+                            token,
+                          );
+                          if (res.success) {
+                            toast.success(`Level updated to ${studentLevel}`);
+                          } else {
+                            toast.error(res.error || "Failed to update level");
+                          }
+                        } catch {
+                          toast.error("Failed to update level");
+                        } finally {
+                          setSavingLevel(false);
+                        }
+                      }}
+                      disabled={savingLevel}
+                    >
+                      {savingLevel ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        "Update Now"
+                      )}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

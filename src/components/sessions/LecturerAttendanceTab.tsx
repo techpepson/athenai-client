@@ -1,9 +1,17 @@
+/**
+ * LecturerAttendanceTab Component
+ *
+ * Displays open sessions at the logged-in rep's level, showing the lecturer
+ * assigned to each session's subtopic. Reps/Admins can mark lecturers as
+ * Present or Absent via the manual attendance API, including bulk operations.
+ *
+ * Data is fetched entirely from the backend - no localStorage.
+ */
+
+import { useState, useEffect, useMemo, useCallback } from "react";
 import * as XLSX from "xlsx";
-import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
   TableBody,
@@ -20,657 +28,391 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from "@/components/ui/dialog";
-import {
   Calendar,
-  Clock,
-  User,
   BookOpen,
   GraduationCap,
-  Pencil,
   CheckCircle,
+  XCircle,
   AlertCircle,
   FileText,
+  Loader2,
+  RefreshCw,
+  CheckSquare,
+  User,
 } from "lucide-react";
 import { toast } from "sonner";
-import {
-  modulesService,
-  Module,
-  ModuleTimetable,
-  TimetableSlot,
-  LEVELS,
-} from "@/services/modules.service";
 import { useAuth } from "@/contexts/AuthContext";
 import { Role } from "@/enums/enums";
 import { cn } from "@/lib/utils";
+import {
+  getCreatorSessions,
+  getAllSessionsAdmin,
+  Session,
+} from "@/services/sessions.service";
+import {
+  markManualAttendance,
+  markBulkManualAttendance,
+} from "@/services/attendance.services";
+import { modulesService, Module } from "@/services/modules.service";
 
-// Lecturer attendance record interface
-export interface LecturerAttendanceRecord {
-  id: string;
-  slotId: string;
-  week: number; // week number within the timetable
-  date: Date;
+/* helpers */
+
+const formatDate = (dateStr: string | Date): string => {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+  });
+};
+
+const formatTime = (dateStr: string | Date): string => {
+  const d = new Date(dateStr);
+  return d.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+};
+
+const durationHours = (start: string | Date, end: string | Date): string => {
+  const ms = new Date(end).getTime() - new Date(start).getTime();
+  return (ms / 3_600_000).toFixed(1);
+};
+
+/* derived row type */
+
+interface LecturerRow {
+  sessionId: string;
+  session: Session;
+  week: number | undefined;
+  date: string;
   startTime: string;
   endTime: string;
-  duration: number; // in hours
+  duration: string;
   moduleCode: string;
   moduleName: string;
   subtopicName: string;
+  lecturerUserId: string | undefined;
   lecturerName: string;
-  lecturerId?: string;
-  venue?: string;
-  classRepSignature?: string;
-  classRepSignedAt?: Date;
-  lecturerSignature?: string;
-  lecturerSignedAt?: Date;
-  sessionStarted: boolean; // if session has been started by REP
-  sessionId?: string; // linked session ID if started
+  status: "PRESENT" | "LATE" | "CHECKED_IN" | "ABSENT" | "EXCUSED" | "UNMARKED";
+  isOpen: boolean;
 }
 
-// Local storage key for lecturer attendance records
-const LECTURER_ATTENDANCE_KEY = "lecturer_attendance_records";
-const ACTIVE_SESSIONS_KEY = "active_lecture_sessions";
-const CHECKED_OUT_SESSIONS_KEY = "checked_out_sessions";
-
-// Helper to calculate duration in hours
-const calculateDuration = (startTime: string, endTime: string): number => {
-  const parseTime = (timeStr: string): number => {
-    const [h, m] = timeStr.split(":").map(Number);
-    // Handle 12-hour implied format (1:30 = 13:30 if < 7)
-    const hours = h < 7 ? h + 12 : h;
-    return hours + (m || 0) / 60;
-  };
-
-  const start = parseTime(startTime);
-  const end = parseTime(endTime);
-  return Math.round((end - start) * 10) / 10; // Round to 1 decimal
-};
-
-// Format date for display
-const formatDate = (date: Date): string => {
-  const day = date.getDate().toString().padStart(2, "0");
-  const month = (date.getMonth() + 1).toString().padStart(2, "0");
-  const year = date.getFullYear().toString().slice(-2);
-  return `${day}/${month}/${year}`;
-};
-
-// Format time for display
-const formatTime = (timeStr: string): string => {
-  const [h, m] = timeStr.split(":").map(Number);
-  const hours = h < 7 ? h + 12 : h;
-  const period = hours >= 12 ? "pm" : "am";
-  const displayHour = hours > 12 ? hours - 12 : hours;
-  return `${displayHour}:${(m || 0).toString().padStart(2, "0")}${period}`;
-};
+/* Component */
 
 const LecturerAttendanceTab = () => {
-  // Export attendance records to Excel
+  const { user, token } = useAuth();
+
+  const isAdmin = user?.role === Role.ADMIN || user?.role === Role.SYSTEM_ADMIN;
+  const isRep = user?.role === Role.REP;
+  const isLecturer = user?.role === Role.LECTURER;
+  const canEdit = isRep || isAdmin;
+  const canView = isAdmin || isRep || isLecturer;
+
+  /* state */
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [allModules, setAllModules] = useState<Module[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [markingKey, setMarkingKey] = useState<string | null>(null);
+  const [bulkMarking, setBulkMarking] = useState(false);
+  const [selectedModule, setSelectedModule] = useState<string>("all");
+
+  /* data fetch */
+  const loadData = useCallback(async () => {
+    if (!token) return;
+    setIsLoading(true);
+    try {
+      const [sessionsRes, modulesRes] = await Promise.all([
+        isAdmin ? getAllSessionsAdmin(token) : getCreatorSessions(token),
+        modulesService.getModules(),
+      ]);
+
+      if (sessionsRes.success && sessionsRes.data) {
+        const list = isAdmin
+          ? ((sessionsRes.data as Record<string, unknown>).data as Session[]) ||
+            []
+          : ((sessionsRes.data as Record<string, unknown>)
+              .sessions as Session[]) || [];
+        list.sort(
+          (a, b) =>
+            new Date(b.startTime).getTime() - new Date(a.startTime).getTime(),
+        );
+        setSessions(list);
+      }
+
+      if (modulesRes.success && modulesRes.data?.data) {
+        setAllModules(modulesRes.data.data);
+      }
+    } catch (err) {
+      console.error("Failed to load lecturer attendance data:", err);
+      toast.error("Failed to load data");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [token, isAdmin]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  /* derive rows from sessions */
+  const rows: LecturerRow[] = useMemo(() => {
+    const repLevel = user?.student?.level;
+
+    return sessions
+      .filter((s) => {
+        // Must have a subtopic (i.e. a lecturer assignment)
+        if (!s.subtopicId && !s.subtopic) return false;
+
+        // Filter to the rep's level unless admin
+        if (!isAdmin && repLevel) {
+          const moduleLevel =
+            s.module?.level ??
+            allModules.find((m) => m.id === s.moduleId)?.level;
+          if (moduleLevel && moduleLevel !== repLevel) return false;
+        }
+
+        return true;
+      })
+      .map((s) => {
+        const mod = s.module ?? allModules.find((m) => m.id === s.moduleId);
+        const subtopicName = s.subtopic?.name ?? "Lecture";
+
+        // Look up the subtopic from modules data (has lecturerName populated)
+        const moduleSubtopic = s.subtopicId
+          ? (mod?.subtopics?.find((st) => st.id === s.subtopicId) ??
+            allModules
+              .flatMap((m) => m.subtopics ?? [])
+              .find((st) => st.id === s.subtopicId))
+          : undefined;
+
+        // Resolve lecturer name - try session data first, then fall back to modules data
+        const lecturerUserId =
+          s.subtopic?.lecturerId ??
+          s.subtopic?.lecturer?.id ??
+          moduleSubtopic?.lecturerId ??
+          s.lecturer?.userId;
+
+        const lecturerName =
+          s.subtopic?.lecturerName ??
+          s.subtopic?.lecturer?.name ??
+          s.lecturer?.user?.name ??
+          moduleSubtopic?.lecturerName ??
+          moduleSubtopic?.lecturer?.name ??
+          "Not Assigned";
+
+        // Check if attendance already recorded for this lecturer
+        const lecturerAttendance = s.attendances?.find(
+          (a) => a.userId === lecturerUserId,
+        );
+
+        const status =
+          (lecturerAttendance?.status as LecturerRow["status"]) ?? "UNMARKED";
+
+        return {
+          sessionId: s.id,
+          session: s,
+          week: s.week ?? undefined,
+          date: formatDate(s.startTime),
+          startTime: formatTime(s.startTime),
+          endTime: formatTime(s.endTime),
+          duration: durationHours(s.startTime, s.endTime),
+          moduleCode: mod?.code ?? "",
+          moduleName: mod?.name ?? "",
+          subtopicName,
+          lecturerUserId,
+          lecturerName,
+          status,
+          isOpen: s.status === "OPEN",
+        };
+      });
+  }, [sessions, allModules, user?.student?.level, isAdmin]);
+
+  /* available modules for filter */
+  const availableModuleCodes = useMemo(() => {
+    const set = new Set<string>();
+    rows.forEach((r) => {
+      if (r.moduleCode) set.add(r.moduleCode);
+    });
+    return Array.from(set).sort();
+  }, [rows]);
+
+  const filteredRows = useMemo(() => {
+    if (selectedModule === "all") return rows;
+    return rows.filter((r) => r.moduleCode === selectedModule);
+  }, [rows, selectedModule]);
+
+  /* mark single lecturer */
+  const handleMark = async (
+    row: LecturerRow,
+    newStatus: "PRESENT" | "ABSENT",
+  ) => {
+    if (!canEdit || !token || !row.lecturerUserId) return;
+    const key = `${row.sessionId}-${row.lecturerUserId}`;
+    setMarkingKey(key);
+    try {
+      const res = await markManualAttendance(
+        row.sessionId,
+        row.lecturerUserId,
+        newStatus,
+        undefined,
+        token,
+      );
+      if (res.success) {
+        setSessions((prev) =>
+          prev.map((s) => {
+            if (s.id !== row.sessionId) return s;
+            const atts = [...(s.attendances || [])];
+            const idx = atts.findIndex((a) => a.userId === row.lecturerUserId);
+            if (idx >= 0) {
+              atts[idx] = { ...atts[idx], status: newStatus as never };
+            } else {
+              atts.push({
+                id: `temp-${Date.now()}`,
+                sessionId: row.sessionId,
+                userId: row.lecturerUserId!,
+                timestamp: new Date(),
+                status: newStatus as never,
+              });
+            }
+            return { ...s, attendances: atts };
+          }),
+        );
+        toast.success(`Marked ${row.lecturerName} as ${newStatus}`);
+      } else {
+        toast.error(res.error || "Failed to mark attendance");
+      }
+    } catch {
+      toast.error("Failed to mark attendance");
+    } finally {
+      setMarkingKey(null);
+    }
+  };
+
+  /* bulk mark all unmarked as present */
+  const handleBulkMarkPresent = async () => {
+    if (!canEdit || !token) return;
+
+    const toMark = filteredRows.filter(
+      (r) =>
+        r.lecturerUserId &&
+        r.isOpen &&
+        (r.status === "UNMARKED" || r.status === "ABSENT"),
+    );
+
+    if (toMark.length === 0) {
+      toast.info("No unmarked lecturers to update");
+      return;
+    }
+
+    // Group by session for bulk API calls
+    const bySession = new Map<string, { userId: string; status: string }[]>();
+    toMark.forEach((r) => {
+      if (!bySession.has(r.sessionId)) bySession.set(r.sessionId, []);
+      bySession.get(r.sessionId)!.push({
+        userId: r.lecturerUserId!,
+        status: "PRESENT",
+      });
+    });
+
+    setBulkMarking(true);
+    let successCount = 0;
+    let errorCount = 0;
+
+    try {
+      for (const [sessionId, records] of bySession) {
+        const res = await markBulkManualAttendance(sessionId, records, token);
+        if (res.success && res.data) {
+          const data = res.data as {
+            results?: { userId: string; success: boolean }[];
+            errors?: { userId: string; success: boolean }[];
+          };
+          successCount += data.results?.filter((r) => r.success).length || 0;
+          errorCount += data.errors?.length || 0;
+
+          const successUserIds = new Set(
+            data.results?.filter((r) => r.success).map((r) => r.userId) || [],
+          );
+          setSessions((prev) =>
+            prev.map((s) => {
+              if (s.id !== sessionId) return s;
+              const atts = [...(s.attendances || [])];
+              successUserIds.forEach((uid) => {
+                const idx = atts.findIndex((a) => a.userId === uid);
+                if (idx >= 0) {
+                  atts[idx] = { ...atts[idx], status: "PRESENT" as never };
+                } else {
+                  atts.push({
+                    id: `temp-${Date.now()}-${uid}`,
+                    sessionId,
+                    userId: uid,
+                    timestamp: new Date(),
+                    status: "PRESENT" as never,
+                  });
+                }
+              });
+              return { ...s, attendances: atts };
+            }),
+          );
+        } else {
+          errorCount += records.length;
+        }
+      }
+
+      if (successCount > 0) {
+        toast.success(
+          `Marked ${successCount} lecturer${successCount !== 1 ? "s" : ""} as Present`,
+        );
+      }
+      if (errorCount > 0) {
+        toast.error(
+          `${errorCount} record${errorCount !== 1 ? "s" : ""} failed`,
+        );
+      }
+    } catch {
+      toast.error("Bulk marking failed");
+    } finally {
+      setBulkMarking(false);
+    }
+  };
+
+  /* export */
   const exportToExcel = () => {
-    const data = attendanceRecords.map((rec) => ({
-      "S/N": rec.id,
-      Week: rec.week,
-      Date: formatDate(rec.date),
-      "Start Time": rec.startTime,
-      "End Time": rec.endTime,
-      "Duration (hrs)": rec.duration,
-      "Module Code": rec.moduleCode,
-      "Module Name": rec.moduleName,
-      Topic: rec.subtopicName,
-      "Lecturer Name": rec.lecturerName,
-      "Lecturer Signature": rec.lecturerSignature || "",
-      "Lecturer Signed At": rec.lecturerSignedAt
-        ? rec.lecturerSignedAt.toLocaleString()
-        : "",
-      "Class Rep Signature": rec.classRepSignature || "",
-      "Class Rep Signed At": rec.classRepSignedAt
-        ? rec.classRepSignedAt.toLocaleString()
-        : "",
-      Venue: rec.venue || "",
-      "Session Started": rec.sessionStarted ? "Yes" : "No",
-      "Session ID": rec.sessionId || "",
+    const data = filteredRows.map((r, i) => ({
+      "S/N": i + 1,
+      Week: r.week ?? "",
+      Date: r.date,
+      "Start Time": r.startTime,
+      "End Time": r.endTime,
+      "Duration (hrs)": r.duration,
+      "Module Code": r.moduleCode,
+      Module: r.moduleName,
+      Topic: r.subtopicName,
+      Lecturer: r.lecturerName,
+      Status: r.status === "UNMARKED" ? "\u2014" : r.status,
+      "Session Status": r.isOpen ? "Open" : "Closed",
     }));
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Lecturer Attendance");
     XLSX.writeFile(wb, "lecturer_attendance.xlsx");
   };
-  const { user } = useAuth();
 
-  // Role-based access
-  const isAdmin = user?.role === Role.ADMIN || user?.role === Role.SYSTEM_ADMIN;
-  const isRep = user?.role === Role.REP;
-  const isLecturer = user?.role === Role.LECTURER;
-  const canEdit = isAdmin || isRep;
-  const canView = isAdmin || isRep || isLecturer;
-
-  // State
-  const [selectedLevel, setSelectedLevel] = useState<number>(
-    user?.student?.level || 100,
-  );
-  const [selectedSemester, setSelectedSemester] = useState<number>(1);
-  const [attendanceRecords, setAttendanceRecords] = useState<
-    LecturerAttendanceRecord[]
-  >([]);
-  const [activeSessions, setActiveSessions] = useState<Set<string>>(new Set());
-  const [checkedOutSessions, setCheckedOutSessions] = useState<Set<string>>(
-    new Set(),
-  );
-  const [editingRecord, setEditingRecord] =
-    useState<LecturerAttendanceRecord | null>(null);
-  const [signatureModalOpen, setSignatureModalOpen] = useState(false);
-  const [signatureType, setSignatureType] = useState<"rep" | "lecturer">("rep");
-  const [signatureInput, setSignatureInput] = useState("");
-  const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
-  // Listen for session started events from Sessions page
-  useEffect(() => {
-    const handleSessionStarted = () => {
-      const storedActiveSessions = localStorage.getItem(ACTIVE_SESSIONS_KEY);
-      if (storedActiveSessions) {
-        try {
-          const activeSlotIds: string[] = JSON.parse(storedActiveSessions);
-          setActiveSessions(new Set(activeSlotIds));
-
-          // Auto-select the topic of the started session
-          const timetables = modulesService.getTimetables();
-          const modules = modulesService.getModules();
-          for (const slotId of activeSlotIds) {
-            for (const timetable of timetables) {
-              const slot = timetable.slots.find((s) => s.id === slotId);
-              if (slot?.subtopicId) {
-                const mod = modules.find((m) => m.id === timetable.moduleId);
-                if (
-                  mod &&
-                  mod.subtopics.find((s) => s.id === slot.subtopicId)
-                ) {
-                  setSelectedTopic(slot.subtopicId);
-                  return;
-                }
-              }
-            }
-          }
-        } catch {
-          // ignore
-        }
-      }
-    };
-
-    window.addEventListener("session-started", handleSessionStarted);
-    return () =>
-      window.removeEventListener("session-started", handleSessionStarted);
-  }, []);
-
-  // Listen for session checked out events
-  useEffect(() => {
-    const loadCheckedOutSessions = () => {
-      const stored = localStorage.getItem(CHECKED_OUT_SESSIONS_KEY);
-      if (stored) {
-        try {
-          const sessionIds: string[] = JSON.parse(stored);
-          // Extract slot IDs from session IDs (e.g., "timetable-slotId" -> "slotId")
-          const slotIds = sessionIds.map((id) => id.replace("timetable-", ""));
-          setCheckedOutSessions(new Set(slotIds));
-        } catch {
-          // ignore
-        }
-      }
-    };
-
-    // Initial load
-    loadCheckedOutSessions();
-
-    // Listen for checkout events
-    const handleCheckoutEvent = () => {
-      loadCheckedOutSessions();
-    };
-
-    window.addEventListener("session-checked-out", handleCheckoutEvent);
-    window.addEventListener("storage", handleCheckoutEvent);
-
-    return () => {
-      window.removeEventListener("session-checked-out", handleCheckoutEvent);
-      window.removeEventListener("storage", handleCheckoutEvent);
-    };
-  }, []);
-
-  // Listen for lecturer sign-in events from LecturerKiosk
-  useEffect(() => {
-    const handleLecturerSignedIn = (event: Event) => {
-      const customEvent = event as CustomEvent<{
-        slotId: string;
-        lecturerName: string;
-        signedAt: string | Date;
-        status?: number;
-        week?: number;
-        date?: string;
-      }>;
-      const { slotId, lecturerName, signedAt, status, week, date } =
-        customEvent.detail;
-      if (status !== 1) return;
-
-      setAttendanceRecords((prev) => {
-        // Find the record for this slotId, week, and date, update lecturerSignature and lecturerSignedAt
-        const updated = prev.map((rec) => {
-          const recDate =
-            rec.date instanceof Date
-              ? rec.date.toISOString().split("T")[0]
-              : rec.date;
-          if (
-            rec.slotId === slotId &&
-            (typeof week === "undefined" || rec.week === week) &&
-            (typeof date === "undefined" || recDate === date)
-          ) {
-            return {
-              ...rec,
-              lecturerSignature: lecturerName,
-              lecturerSignedAt:
-                typeof signedAt === "string" ? new Date(signedAt) : signedAt,
-            };
-          }
-          return rec;
-        });
-        localStorage.setItem(LECTURER_ATTENDANCE_KEY, JSON.stringify(updated));
-        return updated;
-      });
-    };
-
-    window.addEventListener("lecturer-signed-in", handleLecturerSignedIn);
-    return () =>
-      window.removeEventListener("lecturer-signed-in", handleLecturerSignedIn);
-  }, []);
-
-  // Check if the selected topic has an active session right now
-  const isSelectedTopicActive = useMemo(() => {
-    if (!selectedTopic) return false;
-    const timetables = modulesService.getTimetables();
-    for (const timetable of timetables) {
-      const slot = timetable.slots.find(
-        (s) => s.subtopicId === selectedTopic && activeSessions.has(s.id),
-      );
-      if (slot) return true;
-    }
-    return false;
-  }, [selectedTopic, activeSessions]);
-
-  // Available levels based on role
-  const availableLevels = useMemo(() => {
-    if (isAdmin) return LEVELS;
-    if (isLecturer && user?.id) {
-      // Find all modules where this lecturer is assigned to any subtopic
-      const modules = modulesService.getModules();
-      const assignedLevels = new Set<number>();
-      modules.forEach((mod) => {
-        if (
-          mod.subtopics.some(
-            (sub) =>
-              sub.lecturerId === user.id || sub.lecturerName === user.name,
-          )
-        ) {
-          assignedLevels.add(mod.level);
-        }
-      });
-      return Array.from(assignedLevels).sort((a, b) => a - b);
-    }
-    const userLevel = user?.student?.level || 100;
-    return [userLevel];
-  }, [isAdmin, isLecturer, user?.id, user?.name, user?.student?.level]);
-
-  // Load attendance records and active sessions from localStorage
-  useEffect(() => {
-    const storedRecords = localStorage.getItem(LECTURER_ATTENDANCE_KEY);
-    if (storedRecords) {
-      try {
-        const parsed = JSON.parse(storedRecords);
-        // Convert date strings back to Date objects
-        const records = parsed.map((r: LecturerAttendanceRecord) => ({
-          ...r,
-          date: new Date(r.date),
-          classRepSignedAt: r.classRepSignedAt
-            ? new Date(r.classRepSignedAt)
-            : undefined,
-          lecturerSignedAt: r.lecturerSignedAt
-            ? new Date(r.lecturerSignedAt)
-            : undefined,
-        }));
-        setAttendanceRecords(records);
-      } catch {
-        setAttendanceRecords([]);
-      }
-    }
-
-    const storedActiveSessions = localStorage.getItem(ACTIVE_SESSIONS_KEY);
-    if (storedActiveSessions) {
-      try {
-        setActiveSessions(new Set(JSON.parse(storedActiveSessions)));
-      } catch {
-        setActiveSessions(new Set());
-      }
-    }
-  }, []);
-
-  // Generate attendance records from timetable data
-  const generateRecordsFromTimetable = useMemo(() => {
-    const timetables = modulesService.getTimetables();
-    const modules = modulesService.getModules();
-
-    if (timetables.length === 0 || modules.length === 0) {
-      return [];
-    }
-
-    // Filter by selected level and semester
-    const filteredTimetables = timetables.filter(
-      (t) => t.level === selectedLevel && t.semester === selectedSemester,
-    );
-
-    const now = new Date();
-    // Get Monday of the current week
-    const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon, ...
-    const monday = new Date(now);
-    monday.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
-    monday.setHours(0, 0, 0, 0);
-
-    const dayIndexMap: Record<string, number> = {
-      MONDAY: 0,
-      TUESDAY: 1,
-      WEDNESDAY: 2,
-      THURSDAY: 3,
-      FRIDAY: 4,
-      SATURDAY: 5,
-      SUNDAY: 6,
-    };
-
-    const records: LecturerAttendanceRecord[] = [];
-
-    filteredTimetables.forEach((timetable) => {
-      const mod = modules.find((m) => m.id === timetable.moduleId);
-      if (!mod) return;
-
-      // Get start date for the timetable
-      const startDate = timetable.startDate
-        ? new Date(timetable.startDate)
-        : new Date(now.getFullYear(), 0, 1); // Default to Jan 1
-
-      // Filter for LECTURE activities only (ignoring week filter - we'll generate for all weeks)
-      const lectureSlots = timetable.slots.filter(
-        (slot) => slot.activityType === "LECTURE",
-      );
-
-      // Generate records for ALL weeks (cumulative attendance)
-      for (let week = 1; week <= timetable.totalWeeks; week++) {
-        lectureSlots.forEach((slot) => {
-          // Skip if this slot specifies a different week
-          if (slot.week && slot.week !== week) return;
-
-          const dayOffset = dayIndexMap[slot.day.toUpperCase()];
-          if (dayOffset === undefined) return;
-
-          // Calculate the actual date for this week
-          const weekStartDate = new Date(startDate);
-          weekStartDate.setDate(startDate.getDate() + (week - 1) * 7);
-
-          // Get the Monday of this week
-          const weekDay = weekStartDate.getDay();
-          const mondayOffset = weekDay === 0 ? -6 : 1 - weekDay;
-          const weekMonday = new Date(weekStartDate);
-          weekMonday.setDate(weekStartDate.getDate() + mondayOffset);
-
-          // Calculate slot date based on day of week
-          const slotDate = new Date(weekMonday);
-          slotDate.setDate(weekMonday.getDate() + dayOffset);
-
-          const subtopic = mod.subtopics.find((s) => s.id === slot.subtopicId);
-
-          // Check if we have stored attendance data for this slot and week
-          const existingRecord = attendanceRecords.find(
-            (ar) =>
-              ar.slotId === slot.id &&
-              ar.week === week &&
-              formatDate(ar.date) === formatDate(slotDate),
-          );
-
-          const isSessionActive = activeSessions.has(slot.id);
-
-          records.push({
-            id:
-              existingRecord?.id ||
-              `${slot.id}-week${week}-${formatDate(slotDate)}`,
-            slotId: slot.id,
-            week: week,
-            date: slotDate,
-            startTime: slot.startTime,
-            endTime: slot.endTime,
-            duration: calculateDuration(slot.startTime, slot.endTime),
-            moduleCode: mod.code,
-            moduleName: mod.name,
-            subtopicName: subtopic?.name || "Lecture",
-            lecturerName:
-              slot.lecturerName || subtopic?.lecturerName || "Not Assigned",
-            lecturerId: slot.lecturerId || subtopic?.lecturerId,
-            venue: slot.venue,
-            classRepSignature: existingRecord?.classRepSignature,
-            classRepSignedAt: existingRecord?.classRepSignedAt,
-            lecturerSignature: existingRecord?.lecturerSignature,
-            lecturerSignedAt: existingRecord?.lecturerSignedAt,
-            sessionStarted: isSessionActive || !!existingRecord?.sessionStarted,
-            sessionId: existingRecord?.sessionId,
-          });
-        });
-      }
-    });
-
-    // Sort by week, then date, then start time
-    records.sort((a, b) => {
-      if (a.week !== b.week) return a.week - b.week;
-      const dateCompare = a.date.getTime() - b.date.getTime();
-      if (dateCompare !== 0) return dateCompare;
-      return a.startTime.localeCompare(b.startTime);
-    });
-
-    return records;
-  }, [selectedLevel, selectedSemester, attendanceRecords, activeSessions]);
-
-  // Filter records by selected topic
-  const filteredRecords = useMemo(() => {
-    if (!selectedTopic) return [];
-
-    const modules = modulesService.getModules();
-    // Find the subtopic name for the selected topic ID
-    let subtopicName = "";
-    for (const mod of modules) {
-      const subtopic = mod.subtopics.find((s) => s.id === selectedTopic);
-      if (subtopic) {
-        subtopicName = subtopic.name;
-        break;
-      }
-    }
-
-    return generateRecordsFromTimetable.filter(
-      (record) => record.subtopicName === subtopicName,
-    );
-  }, [generateRecordsFromTimetable, selectedTopic]);
-
-  // Save attendance records to localStorage
-  const saveAttendanceRecords = (records: LecturerAttendanceRecord[]) => {
-    localStorage.setItem(LECTURER_ATTENDANCE_KEY, JSON.stringify(records));
-    setAttendanceRecords(records);
-  };
-
-  // Save active sessions to localStorage
-  const saveActiveSessions = (sessions: Set<string>) => {
-    localStorage.setItem(
-      ACTIVE_SESSIONS_KEY,
-      JSON.stringify(Array.from(sessions)),
-    );
-    setActiveSessions(sessions);
-  };
-
-  // Note: Session starting is now handled from the Sessions page SessionCard
-
-  // Open signature modal
-  const openSignatureModal = (
-    record: LecturerAttendanceRecord,
-    type: "rep" | "lecturer",
-  ) => {
-    setEditingRecord(record);
-    setSignatureType(type);
-    setSignatureInput(
-      type === "rep"
-        ? record.classRepSignature || ""
-        : record.lecturerSignature || "",
-    );
-    setSignatureModalOpen(true);
-  };
-
-  // Save signature
-  const handleSaveSignature = () => {
-    if (!editingRecord || !signatureInput.trim()) {
-      toast.error("Please enter a signature");
-      return;
-    }
-
-    const updatedRecords = [...attendanceRecords];
-    const existingIndex = updatedRecords.findIndex(
+  /* stats */
+  const stats = useMemo(() => {
+    const present = filteredRows.filter(
       (r) =>
-        r.slotId === editingRecord.slotId &&
-        formatDate(r.date) === formatDate(editingRecord.date),
-    );
+        r.status === "PRESENT" ||
+        r.status === "LATE" ||
+        r.status === "CHECKED_IN",
+    ).length;
+    const absent = filteredRows.filter((r) => r.status === "ABSENT").length;
+    const unmarked = filteredRows.filter((r) => r.status === "UNMARKED").length;
+    return { present, absent, unmarked, total: filteredRows.length };
+  }, [filteredRows]);
 
-    const updatedRecord = {
-      ...editingRecord,
-      ...(signatureType === "rep"
-        ? {
-            classRepSignature: signatureInput.trim(),
-            classRepSignedAt: new Date(),
-          }
-        : {
-            lecturerSignature: signatureInput.trim(),
-            lecturerSignedAt: new Date(),
-          }),
-    };
-
-    if (existingIndex >= 0) {
-      updatedRecords[existingIndex] = updatedRecord;
-    } else {
-      updatedRecords.push(updatedRecord);
-    }
-
-    saveAttendanceRecords(updatedRecords);
-    setSignatureModalOpen(false);
-    setEditingRecord(null);
-    setSignatureInput("");
-    toast.success(
-      `${signatureType === "rep" ? "Class Rep" : "Lecturer"} signature saved`,
-    );
-  };
-
-  // Check if a record can be edited by the current user
-  // Signatures are ONLY editable when sessionStarted is true
-  const canEditRecord = (record: LecturerAttendanceRecord): boolean => {
-    if (!record.sessionStarted) return false; // Must have session started
-    if (isAdmin || isRep) return true;
-    if (isLecturer) return true;
-    return false;
-  };
-
-  // Render Level/Semester header info
-  const renderHeaderInfo = () => {
-    const modules = modulesService.getModulesByLevelAndSemester(
-      selectedLevel,
-      selectedSemester,
-    );
-    const currentModule = modules.length > 0 ? modules[0] : null;
-    const timetables = modulesService.getTimetablesForLevelSemester(
-      selectedLevel,
-      selectedSemester,
-    );
-    const timetable = timetables.length > 0 ? timetables[0] : null;
-
-    return (
-      <div className="bg-card border border-border rounded-lg p-4 mb-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <GraduationCap className="w-5 h-5 text-primary" />
-              <span className="font-semibold">Programme:</span>
-              <span className="text-muted-foreground">MBChB</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <BookOpen className="w-5 h-5 text-primary" />
-              <span className="font-semibold">Semester:</span>
-              <span className="text-muted-foreground">
-                {selectedSemester === 1 ? "ONE (1)" : "TWO (2)"}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-primary" />
-              <span className="font-semibold">Year:</span>
-              <span className="text-muted-foreground">
-                {new Date().getFullYear()}
-              </span>
-            </div>
-          </div>
-          {currentModule && (
-            <div className="flex items-center gap-2">
-              <FileText className="w-5 h-5 text-primary" />
-              <span className="font-semibold">Module:</span>
-              <span className="text-muted-foreground">
-                {currentModule.name} ({currentModule.code})
-              </span>
-            </div>
-          )}
-        </div>
-        {currentModule && (
-          <div className="mt-3 pt-3 border-t border-border space-y-3">
-            {/* Topic Selector */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <BookOpen className="w-5 h-5 text-primary" />
-              <span className="font-semibold text-sm">Topic:</span>
-              <Select
-                value={selectedTopic || ""}
-                onValueChange={(v) => setSelectedTopic(v || null)}
-              >
-                <SelectTrigger className="w-[300px]">
-                  <SelectValue placeholder="Select a topic" />
-                </SelectTrigger>
-                <SelectContent>
-                  {currentModule.subtopics.map((subtopic) => (
-                    <SelectItem key={subtopic.id} value={subtopic.id}>
-                      {subtopic.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {isSelectedTopicActive && (
-                <Badge className="bg-green-500 hover:bg-green-500 text-white gap-1">
-                  <Clock className="w-3 h-3" />
-                  Active Session
-                </Badge>
-              )}
-            </div>
-            {/* Lecturer for selected topic */}
-            {selectedTopic && (
-              <div className="flex items-center gap-2">
-                <User className="w-5 h-5 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">
-                  Lecturer/Technician:{" "}
-                  <span className="font-medium text-foreground">
-                    {currentModule.subtopics.find((s) => s.id === selectedTopic)
-                      ?.lecturerName || "Prof. Not Assigned"}
-                  </span>
-                </span>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  };
-
+  /* render guards */
   if (!canView) {
     return (
       <div className="flex flex-col items-center justify-center py-12">
@@ -683,326 +425,304 @@ const LecturerAttendanceTab = () => {
     );
   }
 
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12">
+        <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
+        <p className="text-muted-foreground">
+          Loading lecturer attendance data...
+        </p>
+      </div>
+    );
+  }
+
+  if (rows.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12">
+        <Calendar className="w-12 h-12 text-muted-foreground mb-4" />
+        <h3 className="text-lg font-semibold">No Sessions Found</h3>
+        <p className="text-muted-foreground text-center max-w-md">
+          Lecturer attendance records will appear here once sessions with
+          assigned lecturers are created.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      {/* Header with Level/Semester Selector */}
-      <div className="flex items-center justify-between">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-2">
           <FileText className="w-5 h-5 text-primary" />
           <h2 className="text-lg font-semibold">Lecturer Attendance Record</h2>
+          <Badge variant="secondary" className="ml-2">
+            {filteredRows.length} session{filteredRows.length !== 1 ? "s" : ""}
+          </Badge>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={loadData}
+            disabled={isLoading}
+            className="ml-1"
+          >
+            <RefreshCw className={cn("w-4 h-4", isLoading && "animate-spin")} />
+          </Button>
         </div>
 
-        <div className="flex items-center gap-3">
-          <Button variant="outline" onClick={exportToExcel}>
-            Export to Excel
-          </Button>
-          {/* Level Selector: Only show dropdown if >1 level for lecturer */}
-          {isAdmin ? (
-            <Select
-              value={selectedLevel.toString()}
-              onValueChange={(v) => setSelectedLevel(parseInt(v))}
-            >
-              <SelectTrigger className="w-[120px]">
-                <SelectValue placeholder="Level" />
-              </SelectTrigger>
-              <SelectContent>
-                {availableLevels.map((level) => (
-                  <SelectItem key={level} value={level.toString()}>
-                    Level {level}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : isLecturer && availableLevels.length > 1 ? (
-            <Select
-              value={selectedLevel.toString()}
-              onValueChange={(v) => setSelectedLevel(parseInt(v))}
-            >
-              <SelectTrigger className="w-[120px]">
-                <SelectValue placeholder="Level" />
-              </SelectTrigger>
-              <SelectContent>
-                {availableLevels.map((level) => (
-                  <SelectItem key={level} value={level.toString()}>
-                    Level {level}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : (
-            <Badge variant="outline">Level {selectedLevel}</Badge>
-          )}
-
-          {/* Semester Selector */}
-          <Select
-            value={selectedSemester.toString()}
-            onValueChange={(v) => setSelectedSemester(parseInt(v))}
-          >
-            <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="Semester" />
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Module filter */}
+          <Select value={selectedModule} onValueChange={setSelectedModule}>
+            <SelectTrigger className="w-[220px]">
+              <SelectValue placeholder="Filter by module" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="1">Semester 1</SelectItem>
-              <SelectItem value="2">Semester 2</SelectItem>
+              <SelectItem value="all">All Modules</SelectItem>
+              {availableModuleCodes.map((code) => (
+                <SelectItem key={code} value={code}>
+                  {code}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
+
+          {canEdit && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={bulkMarking}
+              onClick={handleBulkMarkPresent}
+            >
+              {bulkMarking ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <CheckSquare className="w-4 h-4 mr-2" />
+              )}
+              Mark All Present
+            </Button>
+          )}
+
+          <Button variant="outline" size="sm" onClick={exportToExcel}>
+            Export to Excel
+          </Button>
         </div>
       </div>
 
-      {/* Programme Info Header */}
-      {renderHeaderInfo()}
+      {/* Programme info */}
+      <div className="bg-card border border-border rounded-lg p-4">
+        <div className="flex flex-wrap items-center gap-4 text-sm">
+          <div className="flex items-center gap-2">
+            <GraduationCap className="w-4 h-4 text-primary" />
+            <span className="font-medium">Programme:</span>
+            <span className="text-muted-foreground">MBChB</span>
+          </div>
+          {user?.student?.level && (
+            <div className="flex items-center gap-2">
+              <BookOpen className="w-4 h-4 text-primary" />
+              <span className="font-medium">Level:</span>
+              <span className="text-muted-foreground">
+                {user.student.level}
+              </span>
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-primary" />
+            <span className="font-medium">Year:</span>
+            <span className="text-muted-foreground">
+              {new Date().getFullYear()}
+            </span>
+          </div>
+        </div>
+      </div>
 
-      {/* Attendance Table */}
+      {/* Stats */}
+      <div className="flex gap-4 text-sm">
+        <div className="flex items-center gap-2">
+          <span className="w-3 h-3 rounded-full bg-green-500" />
+          Present: {stats.present}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="w-3 h-3 rounded-full bg-red-500" />
+          Absent: {stats.absent}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="w-3 h-3 rounded-full bg-gray-400" />
+          Unmarked: {stats.unmarked}
+        </div>
+      </div>
+
+      {/* Table */}
       <div className="border border-border rounded-lg overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50">
-              <TableHead className="w-12 text-center font-semibold">
+              <TableHead className="w-[5%] text-center font-semibold">
                 S/N
               </TableHead>
-              <TableHead className="w-16 text-center font-semibold">
+              <TableHead className="w-[7%] text-center font-semibold">
                 Week
               </TableHead>
-              <TableHead className="font-semibold">Date</TableHead>
-              <TableHead className="font-semibold">Start Time</TableHead>
-              <TableHead className="font-semibold">End Time</TableHead>
-              <TableHead className="font-semibold text-center">
-                Duration (hrs)
+              <TableHead className="w-[10%] font-semibold">Date</TableHead>
+              <TableHead className="w-[9%] font-semibold">Start</TableHead>
+              <TableHead className="w-[9%] font-semibold">End</TableHead>
+              <TableHead className="w-[7%] text-center font-semibold">
+                Hrs
               </TableHead>
-              <TableHead className="font-semibold">
-                Class Rep&apos;s Signature
-              </TableHead>
-              <TableHead className="font-semibold">
-                Lecturer&apos;s Signature
-              </TableHead>
-              <TableHead className="font-semibold text-center">
-                Sign Out
-              </TableHead>
-              <TableHead className="font-semibold text-center">
-                Status
+              <TableHead className="w-[12%] font-semibold">Module</TableHead>
+              <TableHead className="w-[14%] font-semibold">Topic</TableHead>
+              <TableHead className="w-[13%] font-semibold">Lecturer</TableHead>
+              <TableHead className="w-[14%] text-center font-semibold">
+                Attendance
               </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {!selectedTopic ? (
+            {filteredRows.length === 0 ? (
               <TableRow>
                 <TableCell
                   colSpan={10}
                   className="text-center py-8 text-muted-foreground"
                 >
-                  Please select a topic above to view attendance records.
-                </TableCell>
-              </TableRow>
-            ) : filteredRecords.length === 0 ? (
-              <TableRow>
-                <TableCell
-                  colSpan={10}
-                  className="text-center py-8 text-muted-foreground"
-                >
-                  No lecture sessions found for the selected topic.
-                  <br />
-                  <span className="text-sm">
-                    Add activities in the Activities tab to see them here.
-                  </span>
+                  No sessions match the selected filter.
                 </TableCell>
               </TableRow>
             ) : (
-              filteredRecords.map((record, index) => (
-                <TableRow
-                  key={record.id}
-                  className={cn(
-                    "transition-colors",
-                    record.sessionStarted ? "bg-success/5" : "opacity-60",
-                  )}
-                >
-                  <TableCell className="text-center font-medium">
-                    {index + 1}
-                  </TableCell>
-                  <TableCell className="text-center font-medium">
-                    {record.week}
-                  </TableCell>
-                  <TableCell>{formatDate(record.date)}</TableCell>
-                  <TableCell>{formatTime(record.startTime)}</TableCell>
-                  <TableCell>{formatTime(record.endTime)}</TableCell>
-                  <TableCell className="text-center">
-                    {record.duration}
-                  </TableCell>
+              filteredRows.map((row, idx) => {
+                const key = `${row.sessionId}-${row.lecturerUserId}`;
+                const isMarking = markingKey === key;
+                const isPresent =
+                  row.status === "PRESENT" ||
+                  row.status === "LATE" ||
+                  row.status === "CHECKED_IN";
 
-                  {/* Class Rep Signature */}
-                  <TableCell>
-                    {record.classRepSignature ? (
-                      <div className="flex items-center gap-2">
-                        <CheckCircle className="w-4 h-4 text-success" />
-                        <span className="italic text-muted-foreground">
-                          {record.classRepSignature}
-                        </span>
-                        {canEditRecord(record) && canEdit && (
+                return (
+                  <TableRow
+                    key={row.sessionId}
+                    className={cn(
+                      "transition-colors",
+                      row.isOpen ? "bg-success/5" : "",
+                    )}
+                  >
+                    <TableCell className="text-center font-medium text-muted-foreground">
+                      {idx + 1}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {row.week ?? "\u2014"}
+                    </TableCell>
+                    <TableCell>{row.date}</TableCell>
+                    <TableCell>{row.startTime}</TableCell>
+                    <TableCell>{row.endTime}</TableCell>
+                    <TableCell className="text-center">
+                      {row.duration}
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-xs font-medium">
+                        {row.moduleCode}
+                      </span>
+                    </TableCell>
+                    <TableCell className="truncate max-w-[160px]">
+                      {row.subtopicName}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1.5">
+                        <User className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                        <span className="truncate">{row.lecturerName}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {canEdit && row.lecturerUserId ? (
+                        <div className="flex items-center justify-center gap-1.5">
                           <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6"
-                            onClick={() => openSignatureModal(record, "rep")}
+                            size="sm"
+                            variant={isPresent ? "default" : "outline"}
+                            className={cn(
+                              "h-7 px-2 text-xs",
+                              isPresent
+                                ? "bg-green-500 hover:bg-green-600 text-white"
+                                : "hover:bg-green-50 hover:text-green-700",
+                            )}
+                            disabled={isMarking || bulkMarking}
+                            onClick={() => handleMark(row, "PRESENT")}
                           >
-                            <Pencil className="w-3 h-3" />
+                            {isMarking ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <CheckCircle className="w-3 h-3 mr-0.5" />
+                            )}
+                            P
                           </Button>
-                        )}
-                      </div>
-                    ) : canEditRecord(record) && canEdit ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => openSignatureModal(record, "rep")}
-                      >
-                        Sign
-                      </Button>
-                    ) : (
-                      <span className="text-muted-foreground">-</span>
-                    )}
-                  </TableCell>
-
-                  {/* Lecturer Signature */}
-                  <TableCell>
-                    {record.lecturerSignature && record.lecturerSignedAt ? (
-                      <div className="flex items-center gap-2">
-                        <CheckCircle className="w-4 h-4 text-success" />
-                        <span className="italic text-muted-foreground">
-                          {record.lecturerSignature}
-                        </span>
-                      </div>
-                    ) : canEditRecord(record) ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => openSignatureModal(record, "lecturer")}
-                      >
-                        Sign
-                      </Button>
-                    ) : (
-                      <span className="text-muted-foreground">-</span>
-                    )}
-                  </TableCell>
-
-                  {/* Sign Out */}
-                  <TableCell className="text-center">
-                    {record.sessionStarted &&
-                    checkedOutSessions.has(record.slotId) ? (
-                      <div className="flex flex-col items-center gap-1">
-                        <span className="text-sm font-medium text-success">
-                          {formatTime(record.endTime)}
-                        </span>
+                          <Button
+                            size="sm"
+                            variant={
+                              row.status === "ABSENT" ? "default" : "outline"
+                            }
+                            className={cn(
+                              "h-7 px-2 text-xs",
+                              row.status === "ABSENT"
+                                ? "bg-red-500 hover:bg-red-600 text-white"
+                                : "hover:bg-red-50 hover:text-red-700",
+                            )}
+                            disabled={isMarking || bulkMarking}
+                            onClick={() => handleMark(row, "ABSENT")}
+                          >
+                            {isMarking ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <XCircle className="w-3 h-3 mr-0.5" />
+                            )}
+                            A
+                          </Button>
+                        </div>
+                      ) : row.lecturerUserId ? (
                         <Badge
                           variant="outline"
-                          className="bg-success/10 text-success text-xs"
+                          className={cn(
+                            "text-xs",
+                            isPresent
+                              ? "bg-green-50 text-green-700 border-green-200"
+                              : row.status === "ABSENT"
+                                ? "bg-red-50 text-red-700 border-red-200"
+                                : "bg-gray-50 text-gray-500 border-gray-200",
+                          )}
                         >
-                          <CheckCircle className="w-3 h-3 mr-1" />
-                          Signed Out
+                          {isPresent ? (
+                            <>
+                              <CheckCircle className="w-3 h-3 mr-1" />
+                              Present
+                            </>
+                          ) : row.status === "ABSENT" ? (
+                            <>
+                              <XCircle className="w-3 h-3 mr-1" />
+                              Absent
+                            </>
+                          ) : (
+                            "\u2014"
+                          )}
                         </Badge>
-                      </div>
-                    ) : record.sessionStarted ? (
-                      <span className="text-muted-foreground">-</span>
-                    ) : (
-                      <span className="text-muted-foreground">-</span>
-                    )}
-                  </TableCell>
-
-                  {/* Status */}
-                  <TableCell className="text-center">
-                    {record.sessionStarted ? (
-                      <Badge variant="outline" className="bg-success/10">
-                        <CheckCircle className="w-3 h-3 mr-1" />
-                        Active
-                      </Badge>
-                    ) : (
-                      <Badge variant="secondary">Inactive</Badge>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))
+                      ) : (
+                        <span className="text-xs text-muted-foreground">
+                          No Lecturer
+                        </span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
       </div>
 
-      {/* Footer Instructions */}
+      {/* Footer note */}
       <div className="text-xs text-muted-foreground bg-muted/30 p-4 rounded-lg border border-border">
-        <p className="font-medium mb-2">Instructions:</p>
+        <p className="font-medium mb-1">Instructions:</p>
         <p>
-          This form should be signed at the end of each lecturer session by the
-          two (2) parties shown above and thereafter kept by the Class
-          Representative, who will hand it over to the Coordinator at the end of
-          the month.
+          This record tracks lecturer attendance for all sessions at your level.
+          Mark each lecturer as Present or Absent after their lecture. Use
+          &ldquo;Mark All Present&rdquo; to bulk-mark all unmarked lecturers.
+          The sheet can be exported to Excel for record-keeping.
         </p>
       </div>
-
-      {/* Signature Modal */}
-      <Dialog open={signatureModalOpen} onOpenChange={setSignatureModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {signatureType === "rep" ? "Class Rep" : "Lecturer"} Signature
-            </DialogTitle>
-            <DialogDescription>
-              Enter your signature to confirm attendance for this lecture
-              session.
-            </DialogDescription>
-          </DialogHeader>
-
-          {editingRecord && (
-            <div className="space-y-4">
-              <div className="bg-muted/50 p-3 rounded-lg text-sm">
-                <p>
-                  <strong>Week:</strong> {editingRecord.week}
-                </p>
-                <p>
-                  <strong>Date:</strong> {formatDate(editingRecord.date)}
-                </p>
-                <p>
-                  <strong>Time:</strong> {formatTime(editingRecord.startTime)} -{" "}
-                  {formatTime(editingRecord.endTime)}
-                </p>
-                <p>
-                  <strong>Module:</strong> {editingRecord.moduleName} (
-                  {editingRecord.moduleCode})
-                </p>
-                <p>
-                  <strong>Topic:</strong> {editingRecord.subtopicName}
-                </p>
-                <p>
-                  <strong>Lecturer:</strong> {editingRecord.lecturerName}
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">
-                  Enter your signature (type your name):
-                </label>
-                <Input
-                  value={signatureInput}
-                  onChange={(e) => setSignatureInput(e.target.value)}
-                  placeholder="e.g., Prof. John Doe"
-                  className="font-serif italic"
-                />
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setSignatureModalOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="gradient"
-              onClick={handleSaveSignature}
-              disabled={!signatureInput.trim()}
-            >
-              Save Signature
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

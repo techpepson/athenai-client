@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   TrendingUp,
   DollarSign,
@@ -6,70 +6,102 @@ import {
   GraduationCap,
   ClipboardCheck,
   CalendarCheck,
+  Calendar,
+  TrendingDown,
+  Receipt,
 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/contexts/AuthContext";
 import { PayrollStatsCard } from "@/components/staff/PayrollStatsCard";
-import {
-  getLecturerEarnings,
-  LecturerEarning,
-} from "@/services/payroll.service";
+import { getMyPayroll, LecturerEarning } from "@/services/payroll.service";
 import { Role } from "@/enums/enums";
 
-// Extended type with sessions count
-interface LecturerEarningExtended extends LecturerEarning {
-  totalSessions: number;
+// ─── Helpers ────────────────────────────────────────────
+
+function buildMonthOptions(count = 12) {
+  const months: { value: string; label: string }[] = [];
+  const now = new Date();
+  for (let i = 0; i < count; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const label = d.toLocaleString("default", {
+      month: "long",
+      year: "numeric",
+    });
+    months.push({ value, label });
+  }
+  return months;
 }
+
+const fmt = (n: number) => `$${n.toFixed(2)}`;
+
+// ─── Component ──────────────────────────────────────────
 
 const Payroll = () => {
   const { user, token } = useAuth();
-  const [lecturerData, setLecturerData] =
-    useState<LecturerEarningExtended | null>(null);
+  const [lecturerData, setLecturerData] = useState<LecturerEarning | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
+  const [selectedMonth, setSelectedMonth] = useState<string>("all");
 
   const isLecturer = user?.role === Role.LECTURER;
+  const monthOptions = useMemo(() => buildMonthOptions(12), []);
 
+  // Re-fetch whenever month or token changes
   useEffect(() => {
-    const loadPayrollData = async () => {
-      // Use mock data for development/preview
-      const mockLecturerData: LecturerEarningExtended = {
-        name: user?.name || "Dr. John Smith",
-        email: user?.email || "john.smith@university.edu",
-        staffNo: user?.lecturer?.staffNo || "LEC-2024-001",
-        hourlyRate: 75.0,
-        totalHours: 42.5,
-        totalSessions: 12,
-        earnings: 3187.5,
-      };
-
-      // Try to fetch real data if available, otherwise use mock
-      if (token && isLecturer) {
-        try {
-          const earningsResponse = await getLecturerEarnings(token);
-          if (earningsResponse.success && earningsResponse.data?.result) {
-            const myEarnings = earningsResponse.data.result.find(
-              (e) => e.email === user?.email,
-            );
-            if (myEarnings) {
-              setLecturerData({
-                ...myEarnings,
-                totalSessions: Math.round(myEarnings.totalHours / 3.5) || 12, // Estimate sessions
-              });
-              setLoading(false);
-              return;
-            }
-          }
-        } catch (error) {
-          console.error("Failed to load payroll data:", error);
-        }
-      }
-
-      // Fallback to mock data
-      setLecturerData(mockLecturerData);
+    if (!token || !isLecturer) {
       setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const loadPayrollData = async () => {
+      setLoading(true);
+      try {
+        const month = selectedMonth === "all" ? undefined : selectedMonth;
+        const response = await getMyPayroll(token, month);
+        if (cancelled) return;
+        if (response.success && response.data) {
+          setLecturerData(response.data);
+        } else {
+          setLecturerData(null);
+        }
+      } catch (error) {
+        if (cancelled) return;
+        console.error("Failed to load payroll data:", error);
+        setLecturerData(null);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     };
 
     loadPayrollData();
-  }, [token, user?.email, user?.name, user?.lecturer?.staffNo, isLecturer]);
+    return () => {
+      cancelled = true;
+    };
+  }, [token, isLecturer, selectedMonth]);
+
+  const monthLabel =
+    selectedMonth === "all"
+      ? "All Time"
+      : (monthOptions.find((m) => m.value === selectedMonth)?.label ??
+        selectedMonth);
 
   if (!isLecturer) {
     return (
@@ -97,13 +129,36 @@ const Payroll = () => {
     );
   }
 
+  const gross = lecturerData?.grossEarnings ?? lecturerData?.earnings ?? 0;
+  const tax = lecturerData?.taxDeduction ?? 0;
+  const net = lecturerData?.earnings ?? 0;
+  const taxPct = ((lecturerData?.taxRate ?? 0.1) * 100).toFixed(0);
+  const sessionCount = lecturerData?.sessions?.length ?? 0;
+
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">My Payroll</h1>
-        <p className="text-muted-foreground mt-1">
-          Track your attendance hours and earnings
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">My Payroll</h1>
+          <p className="text-muted-foreground mt-1">
+            Track your attendance hours, earnings &amp; tax deductions
+          </p>
+        </div>
+
+        <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+          <SelectTrigger className="w-52">
+            <Calendar className="w-4 h-4 mr-2 text-muted-foreground" />
+            <SelectValue placeholder="Select month" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Time</SelectItem>
+            {monthOptions.map((m) => (
+              <SelectItem key={m.value} value={m.value}>
+                {m.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Lecturer Info Card */}
@@ -118,7 +173,8 @@ const Payroll = () => {
                 {lecturerData.name}
               </h2>
               <p className="text-sm text-muted-foreground">
-                {lecturerData.staffNo || "No Staff ID"} • {lecturerData.email}
+                {lecturerData.staffNo || "No Staff ID"} &middot;{" "}
+                {lecturerData.email}
               </p>
             </div>
           </div>
@@ -126,23 +182,35 @@ const Payroll = () => {
       )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <PayrollStatsCard
-          label="Total Sessions Attended"
-          value={`${lecturerData?.totalSessions || 0} Sessions`}
+          label="Sessions Attended"
+          value={sessionCount}
           icon={CalendarCheck}
           variant="primary"
         />
         <PayrollStatsCard
           label="Hourly Rate"
-          value={`$${lecturerData?.hourlyRate.toFixed(2) || 0}`}
+          value={fmt(lecturerData?.hourlyRate ?? 0)}
           icon={DollarSign}
           variant="warning"
         />
         <PayrollStatsCard
-          label="Total Earnings"
-          value={`$${lecturerData?.earnings.toFixed(2) || 0}`}
+          label="Gross Earnings"
+          value={fmt(gross)}
           icon={TrendingUp}
+          variant="success"
+        />
+        <PayrollStatsCard
+          label={`Tax (${taxPct}%)`}
+          value={fmt(tax)}
+          icon={TrendingDown}
+          variant="warning"
+        />
+        <PayrollStatsCard
+          label="Net Payable"
+          value={fmt(net)}
+          icon={Receipt}
           variant="success"
         />
       </div>
@@ -153,7 +221,7 @@ const Payroll = () => {
           <div className="flex items-center gap-2">
             <ClipboardCheck className="w-5 h-5 text-primary" />
             <h2 className="text-lg font-semibold text-foreground">
-              Attendance-Based Earnings
+              Earnings Breakdown &mdash; {monthLabel}
             </h2>
           </div>
           <p className="text-sm text-muted-foreground mt-1">
@@ -165,69 +233,93 @@ const Payroll = () => {
         {lecturerData ? (
           <div className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Calculation breakdown */}
               <div className="bg-muted/30 rounded-lg p-6">
-                <h3 className="text-sm font-medium text-muted-foreground mb-2">
+                <h3 className="text-sm font-medium text-muted-foreground mb-4">
                   How Your Earnings Are Calculated
                 </h3>
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
-                    <span className="text-foreground">
-                      Total Sessions Attended
-                    </span>
+                    <span className="text-foreground">Total Hours Worked</span>
                     <span className="font-semibold text-foreground">
-                      {lecturerData.totalSessions}
+                      {lecturerData.totalHours.toFixed(1)}h
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-foreground">
-                      Total Hours Attended
-                    </span>
+                    <span className="text-foreground">&times; Hourly Rate</span>
                     <span className="font-semibold text-foreground">
-                      {lecturerData.totalHours}h
+                      {fmt(lecturerData.hourlyRate)}
+                    </span>
+                  </div>
+                  <Separator />
+                  <div className="flex justify-between items-center">
+                    <span className="text-foreground font-medium">
+                      Gross Earnings
+                    </span>
+                    <span className="font-bold text-foreground">
+                      {fmt(gross)}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-foreground">× Hourly Rate</span>
-                    <span className="font-semibold text-foreground">
-                      ${lecturerData.hourlyRate.toFixed(2)}
+                    <span className="text-red-500">
+                      &minus; Tax Deduction ({taxPct}%)
+                    </span>
+                    <span className="font-semibold text-red-500">
+                      -{fmt(tax)}
                     </span>
                   </div>
-                  <div className="border-t border-border pt-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-foreground font-medium">
-                        Total Earnings
-                      </span>
-                      <span className="font-bold text-xl text-emerald-600">
-                        ${lecturerData.earnings.toFixed(2)}
-                      </span>
-                    </div>
+                  <Separator />
+                  <div className="flex justify-between items-center">
+                    <span className="text-foreground font-medium">
+                      Net Payable
+                    </span>
+                    <span className="font-bold text-xl text-emerald-600">
+                      {fmt(net)}
+                    </span>
                   </div>
                 </div>
               </div>
 
+              {/* Progress visual */}
               <div className="bg-primary/5 rounded-lg p-6">
                 <h3 className="text-sm font-medium text-muted-foreground mb-4">
-                  Earnings Breakdown
+                  Earnings Summary
                 </h3>
                 <div className="space-y-4">
                   <div>
                     <div className="flex justify-between text-sm mb-1">
                       <span className="text-muted-foreground">
-                        {lecturerData.totalSessions} Sessions ·{" "}
-                        {lecturerData.totalHours}h Worked
-                      </span>
-                      <span className="text-foreground font-medium">
-                        ${lecturerData.earnings.toFixed(2)}
+                        {sessionCount} Session{sessionCount !== 1 ? "s" : ""}{" "}
+                        &middot; {lecturerData.totalHours.toFixed(1)}h Worked
                       </span>
                     </div>
-                    <div className="w-full bg-muted rounded-full h-2">
+                    <div className="w-full bg-muted rounded-full h-2.5 mt-2">
                       <div
-                        className="bg-primary h-2 rounded-full"
+                        className="bg-primary h-2.5 rounded-full transition-all"
                         style={{
                           width: `${Math.min((lecturerData.totalHours / 100) * 100, 100)}%`,
                         }}
                       />
                     </div>
+                  </div>
+                  <Separator />
+                  <div className="grid grid-cols-2 gap-3 text-center">
+                    <div className="bg-background rounded-lg p-3">
+                      <p className="text-xs text-muted-foreground">Gross</p>
+                      <p className="text-lg font-bold">{fmt(gross)}</p>
+                    </div>
+                    <div className="bg-background rounded-lg p-3">
+                      <p className="text-xs text-red-400">Tax</p>
+                      <p className="text-lg font-bold text-red-500">
+                        -{fmt(tax)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="bg-emerald-500/10 rounded-lg p-4 text-center">
+                    <p className="text-xs text-emerald-600">Net Take-Home</p>
+                    <p className="text-2xl font-bold text-emerald-600">
+                      {fmt(net)}
+                    </p>
                   </div>
                   <p className="text-xs text-muted-foreground">
                     Earnings are based on completed attendance records where you
@@ -236,6 +328,54 @@ const Payroll = () => {
                 </div>
               </div>
             </div>
+
+            {/* Session breakdown table */}
+            {lecturerData.sessions && lecturerData.sessions.length > 0 && (
+              <div className="mt-6">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+                  Session Details
+                </h3>
+                <div className="rounded-lg border border-border overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Session</TableHead>
+                        <TableHead className="text-right">Hours</TableHead>
+                        <TableHead className="text-right">Gross</TableHead>
+                        <TableHead className="text-right">Tax</TableHead>
+                        <TableHead className="text-right">Net</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {lecturerData.sessions.map((s) => {
+                        const sGross = s.hours * lecturerData.hourlyRate;
+                        const sTax = sGross * (lecturerData.taxRate ?? 0.1);
+                        const sNet = sGross - sTax;
+                        return (
+                          <TableRow key={s.sessionId}>
+                            <TableCell className="font-medium">
+                              {s.sessionName}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {s.hours.toFixed(2)}h
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {fmt(sGross)}
+                            </TableCell>
+                            <TableCell className="text-right text-red-500">
+                              -{fmt(sTax)}
+                            </TableCell>
+                            <TableCell className="text-right font-semibold text-green-600">
+                              {fmt(sNet)}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="p-12 text-center">

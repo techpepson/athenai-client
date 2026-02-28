@@ -203,7 +203,7 @@ export interface AssignRepResponse {
   data: {
     id: string;
     studentId: string;
-    courseId: string;
+    assignedAt?: string;
   };
 }
 
@@ -234,24 +234,32 @@ export interface FetchStudentsResponse {
   })[];
 }
 
-export interface FetchCourseRepsResponse {
-  reps: Array<{
+export interface GetAllRepsResponse {
+  success: boolean;
+  data: Array<{
     id: string;
     studentId: string;
-    courseId: string;
-    assignedAt: Date;
+    assignedAt: string;
+    updatedAt: string;
     student: IStudent & {
       user: {
         id: string;
         email: string;
         name: string;
+        phone?: string;
       };
+      enrollments?: Array<{
+        id: string;
+        studentId: string;
+        courseId: string;
+        course: {
+          id: string;
+          code: string;
+          title: string;
+        };
+      }>;
     };
-    course: {
-      id: string;
-      title: string;
-      code: string;
-    };
+    thresholds?: IThresholds | null;
   }>;
 }
 

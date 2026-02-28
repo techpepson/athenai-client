@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Loader2,
   RefreshCw,
@@ -12,13 +13,15 @@ import {
   Users,
   Send,
   AlertCircle,
+  CheckCircle,
+  ExternalLink,
+  Link,
+  Radio,
 } from "lucide-react";
 import TimetableTab from "@/components/modules/TimetableTab";
 import LecturerAttendanceTab from "@/components/sessions/LecturerAttendanceTab";
-import StudentAttendanceTab from "@/components/sessions/StudentAttendanceTab";
 import MyAttendanceSheet from "@/components/sessions/MyAttendanceSheet";
 import MasterAttendanceSheet from "@/components/sessions/MasterAttendanceSheet";
-import { hasEnrolledModules } from "@/data/mockAttendanceData";
 import { Button } from "@/components/ui/button";
 import { SessionCard } from "@/components/sessions/SessionCard";
 import { SessionReportModal } from "@/components/sessions/SessionReportModal";
@@ -30,12 +33,13 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
-import { useAttendance } from "@/contexts/AttendanceContext";
 import { Role } from "@/enums/enums";
 import {
   getAllSessionsAdmin,
   getCreatorSessions,
+  getLecturerSessions,
   closeSession,
+  createSession,
   deleteSession,
   toggleSessionMode,
   generateSessionQrCode,
@@ -53,10 +57,28 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { modulesService, TimetableSlot } from "@/services/modules.service";
+import {
+  modulesService,
+  TimetableSlot,
+  Module,
+  ModuleTimetable,
+} from "@/services/modules.service";
+import { usersServices } from "@/services/users.services";
+import { IUser, IStudent, ILecturer } from "@/interface/user.interface";
+import {
+  getUserAttendance,
+  AttendanceRecord,
+} from "@/services/attendance.services";
 
 // Helper function to map API Session to AttendanceSession
-const mapSessionToAttendanceSession = (session: Session): AttendanceSession => {
+const mapSessionToAttendanceSession = (
+  session: Session,
+  allUsers: (IUser & {
+    student?: IStudent | null;
+    lecturer?: ILecturer | null;
+  })[],
+  allModules: Module[],
+): AttendanceSession => {
   // Map session type
   const typeMap: Record<SessionType, AttendanceSession["type"]> = {
     [SessionType.CLASS]: "class",
@@ -92,33 +114,79 @@ const mapSessionToAttendanceSession = (session: Session): AttendanceSession => {
       status: a.status as SessionAttendanceRecord["status"],
     })) || [];
 
-  // Map expected attendees from course enrollments
-  // Schema path: CourseEnrollment → Student → User
-  const mappedExpectedAttendees: ExpectedAttendee[] =
-    session.course?.enrollments?.map((e: CourseEnrollment) => ({
-      id: e.id,
-      userId: e.student?.user?.id || "",
-      name: e.student?.user?.name || "Unknown",
-      email: e.student?.user?.email,
-      studentId: e.student?.studentId || e.student?.matricNo,
-      department: undefined, // Note: department is not in Student model
-    })) || [];
-
-  // Calculate present count from attendances - only PRESENT (fully completed) and LATE count
+  // Calculate present count from attendances - PRESENT and LATE count
   const presentCount =
     session.attendances?.filter(
       (a) => a.status === "PRESENT" || a.status === "LATE",
     ).length || 0;
-  // Note: CHECKED_IN without checkout doesn't count as present
 
-  // Expected count is from course enrollments or provided count
-  // Priority: expectedAttendeesCount > course._count.enrollments > course.enrollments.length > attendances.length
-  const expectedCount =
-    session.expectedAttendeesCount ||
-    session.course?._count?.enrollments ||
-    session.course?.enrollments?.length ||
-    session.attendances?.length ||
-    0;
+  // ── Compute expected attendees ──
+  // For module-based sessions: students at the module's level + assigned lecturer(s)
+  // For course-based sessions: fall back to course enrollments
+  let mappedExpectedAttendees: ExpectedAttendee[] = [];
+  let expectedCount = 0;
+
+  const moduleLevel =
+    session.module?.level ||
+    allModules.find((m) => m.id === session.moduleId)?.level;
+
+  if (moduleLevel && allUsers.length > 0) {
+    // Students at this module's level
+    const levelStudents = allUsers.filter(
+      (u) => u.student && u.student.level === moduleLevel,
+    );
+    mappedExpectedAttendees = levelStudents.map((u) => ({
+      id: u.student!.id,
+      userId: u.id,
+      name: u.name,
+      email: u.email,
+      studentId: u.student!.studentId || u.student!.matricNo || undefined,
+    }));
+
+    // Add the assigned lecturer(s)
+    if (session.lecturerId) {
+      // session.lecturer is the Lecturer record; find the User
+      const lecturerUser = session.lecturer?.user
+        ? {
+            id: session.lecturer.user.id,
+            name: session.lecturer.user.name,
+            email: session.lecturer.user.email,
+          }
+        : allUsers.find((u) => u.lecturer?.id === session.lecturerId);
+
+      if (lecturerUser) {
+        mappedExpectedAttendees.push({
+          id: session.lecturerId,
+          userId: lecturerUser.id,
+          name: lecturerUser.name,
+          email: lecturerUser.email,
+        });
+      }
+    }
+
+    expectedCount = mappedExpectedAttendees.length;
+  } else if (session.course?.enrollments?.length) {
+    // Fallback: course enrollment-based
+    mappedExpectedAttendees = session.course.enrollments.map(
+      (e: CourseEnrollment) => ({
+        id: e.id,
+        userId: e.student?.user?.id || "",
+        name: e.student?.user?.name || "Unknown",
+        email: e.student?.user?.email,
+        studentId: e.student?.studentId || e.student?.matricNo,
+        department: undefined,
+      }),
+    );
+    expectedCount =
+      session.expectedAttendeesCount ||
+      session.course._count?.enrollments ||
+      session.course.enrollments.length;
+  } else {
+    expectedCount =
+      session.expectedAttendeesCount ||
+      session.course?._count?.enrollments ||
+      0;
+  }
 
   return {
     id: session.id,
@@ -132,8 +200,11 @@ const mapSessionToAttendanceSession = (session: Session): AttendanceSession => {
     location: session.location || undefined,
     expectedCount: expectedCount,
     presentCount: presentCount,
-    courseId: session.courseId || undefined,
-    courseName: session.course?.title || undefined,
+    courseId: session.courseId || session.moduleId || undefined,
+    courseName: session.module
+      ? `${session.module.name} (${session.module.code})`
+      : session.course?.title || undefined,
+    department: session.module?.code || undefined,
     createdBy: session.userId,
     createdByRole: session.createdBy?.name ? Role.LECTURER : undefined,
     attendances: mappedAttendances,
@@ -141,18 +212,93 @@ const mapSessionToAttendanceSession = (session: Session): AttendanceSession => {
   };
 };
 
+// Wrapper that binds allUsers/allModules for use in .map()
+const createSessionMapper = (
+  allUsers: (IUser & {
+    student?: IStudent | null;
+    lecturer?: ILecturer | null;
+  })[],
+  allModules: Module[],
+) => {
+  return (session: Session): AttendanceSession =>
+    mapSessionToAttendanceSession(session, allUsers, allModules);
+};
+
 const Sessions = () => {
+  const navigate = useNavigate();
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [selectedSession, setSelectedSession] =
     useState<AttendanceSession | null>(null);
   const [activeTab, setActiveTab] = useState("all");
   const [mainTab, setMainTab] = useState("sessions");
   const [sessions, setSessions] = useState<AttendanceSession[]>([]);
+  const [lecturerActiveSessions, setLecturerActiveSessions] = useState<
+    Session[]
+  >([]);
+  const [isLoadingLecturerSessions, setIsLoadingLecturerSessions] =
+    useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [allModules, setAllModules] = useState<Module[]>([]);
+  const [allTimetables, setAllTimetables] = useState<ModuleTimetable[]>([]);
+  const [allUsers, setAllUsers] = useState<
+    (IUser & {
+      student?: IStudent | null;
+      lecturer?: ILecturer | null;
+    })[]
+  >([]);
+  const [selectedWeek, setSelectedWeek] = useState(1);
+  const [studentLevel, setStudentLevel] = useState<number | undefined>();
+  const [userAttendanceRecords, setUserAttendanceRecords] = useState<
+    AttendanceRecord[]
+  >([]);
 
-  // Get AttendanceContext for shared state
-  const { startSession: ctxStartSession, endSession: ctxEndSession } =
-    useAttendance();
+  // Get auth context early (needed by useEffects below)
+  const { user, token } = useAuth();
+
+  // Load modules, timetables, and students from API
+  useEffect(() => {
+    const loadModuleData = async () => {
+      try {
+        const modRes = await modulesService.getModules();
+        if (modRes.success && modRes.data?.data) {
+          const modules = modRes.data.data;
+          setAllModules(modules);
+
+          // Fetch full timetable (with slots) for each module
+          const ttPromises = modules.map((m) =>
+            modulesService.getTimetableForModule(m.id),
+          );
+          const ttResults = await Promise.all(ttPromises);
+          const timetables: ModuleTimetable[] = [];
+          ttResults.forEach((res) => {
+            if (res.success && res.data?.data) {
+              timetables.push(res.data.data);
+            }
+          });
+          setAllTimetables(timetables);
+        }
+      } catch (e) {
+        console.error("Failed to load module data for sessions:", e);
+      }
+    };
+    loadModuleData();
+  }, []);
+
+  // Fetch all users (students + lecturers) for attendee counts
+  useEffect(() => {
+    const loadUsers = async () => {
+      try {
+        const res = await usersServices.getAllUsers();
+        if (res.success && res.data?.users) {
+          setAllUsers(res.data.users);
+        }
+      } catch (e) {
+        console.error("Failed to load users:", e);
+      }
+    };
+    loadUsers();
+  }, []);
+
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [togglingSessionId, setTogglingSessionId] = useState<string | null>(
     null,
@@ -164,33 +310,60 @@ const Sessions = () => {
   const [qrCodeData, setQrCodeData] = useState<string | null>(null);
   const [qrCodeSessionName, setQrCodeSessionName] = useState<string>("");
   const [generatingQrCode, setGeneratingQrCode] = useState<string | null>(null);
-  const { user, token } = useAuth();
+  const [endingSessionId, setEndingSessionId] = useState<string | null>(null);
 
   // Check if user is admin (can see all sessions)
   const isAdmin = user?.role === Role.ADMIN || user?.role === Role.SYSTEM_ADMIN;
 
-  // Check if user can view lecturer attendance (REP, LECTURER, ADMIN, SYSTEM_ADMIN)
-  const canViewLecturerAttendance =
-    isAdmin || user?.role === Role.REP || user?.role === Role.LECTURER;
-
-  // Check if user can view student attendance (everyone except lecturers)
-  const canViewStudentAttendance = user?.role !== Role.LECTURER;
+  // Check if user can view lecturer attendance (REP, ADMIN, SYSTEM_ADMIN only — lecturers cannot mark their own attendance)
+  const canViewLecturerAttendance = isAdmin || user?.role === Role.REP;
 
   // Check if user is a student (for My Attendance Sheet)
   const isStudent = user?.role === Role.STUDENT;
   const isRep = user?.role === Role.REP;
   const isLecturer = user?.role === Role.LECTURER;
 
-  // Check if user can view My Attendance Sheet (students and reps)
-  const canViewMyAttendanceSheet = isStudent || isRep;
+  // Check if user can view My Attendance Sheet (students only; reps use the Student Attendance Sheet)
+  const canViewMyAttendanceSheet = isStudent;
 
   // Check if user can view/edit Master Attendance Sheet (reps and lecturers)
   const canViewMasterAttendanceSheet = isRep || isLecturer || isAdmin;
+
+  // Fetch student level and attendance records (for students/reps)
+  useEffect(() => {
+    const loadStudentData = async () => {
+      if (!token) return;
+      try {
+        // Get student level
+        const userRes = await usersServices.getUserById(token);
+        if (userRes.success && userRes.data?.user?.student?.level) {
+          setStudentLevel(userRes.data.user.student.level);
+        }
+        // Get attendance records for the current user
+        const attRes = await getUserAttendance(token);
+        if (attRes.success && attRes.data) {
+          setUserAttendanceRecords(attRes.data);
+        }
+      } catch (e) {
+        console.error("Failed to load student data:", e);
+      }
+    };
+    if (isStudent || isRep) {
+      loadStudentData();
+    }
+  }, [token, isStudent, isRep]);
 
   // SMS modal state for session start
   const [smsModalOpen, setSmsModalOpen] = useState(false);
   const [startingSession, setStartingSession] =
     useState<AttendanceSession | null>(null);
+  const [isCreatingSession, setIsCreatingSession] = useState(false);
+  const [createdSessionData, setCreatedSessionData] = useState<{
+    attendanceLink?: string;
+    smsSentToLecturer?: boolean;
+    studentsSmsCount?: number;
+    sessionId?: string;
+  } | null>(null);
 
   // Day name mapping for display
   const dayNames = [
@@ -203,11 +376,11 @@ const Sessions = () => {
     "Saturday",
   ];
 
-  // Build weekly lecture cards from timetable activities (LECTURES ONLY)
+  // Build weekly lecture cards from timetable activities
+  // Reps: show ALL subtopic sessions for today (startable)
+  // Others: show this week's remaining lectures
   const weeklyLectureSessions = useMemo((): AttendanceSession[] => {
-    const timetables = modulesService.getTimetables();
-    const modules = modulesService.getModules();
-    if (timetables.length === 0) return [];
+    if (allTimetables.length === 0) return [];
 
     const now = new Date();
     // Get Monday of the current week
@@ -216,9 +389,12 @@ const Sessions = () => {
     monday.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
     monday.setHours(0, 0, 0, 0);
 
-    // Today at start of day for filtering past days
+    // Today at start of day for filtering
     const todayStart = new Date(now);
     todayStart.setHours(0, 0, 0, 0);
+
+    const todayEnd = new Date(now);
+    todayEnd.setHours(23, 59, 59, 999);
 
     const dayIndexMap: Record<string, number> = {
       MONDAY: 0,
@@ -239,28 +415,33 @@ const Sessions = () => {
 
     const lectureCards: AttendanceSession[] = [];
 
-    timetables.forEach((timetable) => {
-      const mod = modules.find((m) => m.id === timetable.moduleId);
+    allTimetables.forEach((timetable) => {
+      const mod = allModules.find((m) => m.id === timetable.moduleId);
       if (!mod) return;
 
       // Determine current week number within the timetable
       let currentWeek = 1;
-      if (timetable.startDate) {
+      if (isRep) {
+        // Reps manually select the week
+        currentWeek = selectedWeek;
+      } else if (timetable.startDate) {
         const start = new Date(timetable.startDate);
         const diffMs = now.getTime() - start.getTime();
         currentWeek = Math.max(
           1,
           Math.ceil(diffMs / (7 * 24 * 60 * 60 * 1000)),
         );
-        if (currentWeek > timetable.totalWeeks) return; // past this module
       }
+      if (currentWeek > timetable.totalWeeks) return; // past this module
 
-      // Filter slots for the current week AND only LECTURE activities
-      const weekSlots = timetable.slots.filter(
-        (slot) =>
-          (!slot.week || slot.week === currentWeek) &&
-          slot.activityType === "LECTURE",
-      );
+      // Filter slots for the current week
+      // Reps: ALL activity types; others: only LECTURE
+      const weekSlots = timetable.slots.filter((slot) => {
+        const weekMatch = !slot.week || slot.week === currentWeek;
+        if (!weekMatch) return false;
+        if (!isRep) return slot.activityType === "LECTURE";
+        return true; // Reps see all activity types
+      });
 
       weekSlots.forEach((slot) => {
         const dayOffset = dayIndexMap[slot.day.toUpperCase()];
@@ -269,8 +450,13 @@ const Sessions = () => {
         const slotDate = new Date(monday);
         slotDate.setDate(monday.getDate() + dayOffset);
 
-        // Skip past days (only show today and upcoming days)
-        if (slotDate < todayStart) return;
+        // Reps: show ONLY today's sessions
+        if (isRep) {
+          if (slotDate < todayStart || slotDate > todayEnd) return;
+        } else {
+          // Non-reps: skip past days (only show today and upcoming)
+          if (slotDate < todayStart) return;
+        }
 
         const start = parseTime(slot.startTime);
         const end = parseTime(slot.endTime);
@@ -291,9 +477,42 @@ const Sessions = () => {
 
         const subtopic = mod.subtopics.find((s) => s.id === slot.subtopicId);
 
+        // Filter students at the same level as this module
+        const levelStudents = allUsers.filter(
+          (u) => u.student && u.student.level === mod.level,
+        );
+
+        // Build expected attendees: students at this level
+        const expectedAttendees: ExpectedAttendee[] = levelStudents.map(
+          (u) => ({
+            id: u.student!.id,
+            userId: u.id,
+            name: u.name,
+            email: u.email,
+            studentId: u.student!.studentId || u.student!.matricNo || undefined,
+          }),
+        );
+
+        // Add lecturer(s) assigned to this subtopic or slot
+        const lecturerId = slot.lecturerId || subtopic?.lecturerId;
+        if (lecturerId) {
+          const lecturerUser = allUsers.find((u) => u.id === lecturerId);
+          expectedAttendees.push({
+            id: lecturerId,
+            userId: lecturerId,
+            name:
+              lecturerUser?.name ||
+              slot.lecturerName ||
+              subtopic?.lecturerName ||
+              "Lecturer",
+            email: lecturerUser?.email,
+          });
+        }
+
         lectureCards.push({
           id: `timetable-${slot.id}`,
-          name: subtopic?.name || `${mod.name} - Lecture`,
+          name:
+            subtopic?.name || `${mod.name} - ${slot.activityType || "Lecture"}`,
           type: "class",
           attendanceType: "checkin",
           department: mod.code,
@@ -301,20 +520,21 @@ const Sessions = () => {
           endTime,
           status,
           location: slot.venue || undefined,
-          expectedCount: 0,
+          expectedCount: expectedAttendees.length,
           presentCount: 0,
           courseId: undefined,
           courseName: `${mod.name} (${mod.code})`,
           createdBy: undefined,
+          expectedAttendees,
         });
       });
     });
 
-    // Sort by day then start time
+    // Sort by start time
     lectureCards.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
 
     return lectureCards;
-  }, []);
+  }, [allModules, allTimetables, allUsers, isRep, selectedWeek]);
 
   // Group lectures by day for display
   const lecturesByDay = useMemo(() => {
@@ -366,14 +586,20 @@ const Sessions = () => {
         if (isAdmin) {
           // Admins can see all sessions
           response = await getAllSessionsAdmin(token);
-        } else {
-          // Non-admins see only sessions they created
+        } else if (isLecturer) {
+          // Lecturers: use getLecturerSessions as primary source (subtopic-based)
+          response = await getLecturerSessions(token);
+        } else if (isRep) {
+          // Reps see sessions they created
           response = await getCreatorSessions(token);
+        } else {
+          // Students: fetch all sessions, then filter to their level
+          response = await getAllSessionsAdmin(token);
         }
 
         if (response.success && response.data) {
           // Handle different response structures
-          const sessionsData = Array.isArray(response.data)
+          let sessionsData = Array.isArray(response.data)
             ? response.data
             : "data" in response.data
               ? response.data.data
@@ -381,13 +607,41 @@ const Sessions = () => {
                 ? response.data.sessions
                 : [];
 
+          // For students (non-rep): filter to sessions matching their level modules
+          if (isStudent && studentLevel) {
+            const levelModuleIds = allModules
+              .filter((m) => m.level === studentLevel)
+              .map((m) => m.id);
+            const levelSubtopicIds = allModules
+              .filter((m) => m.level === studentLevel)
+              .flatMap((m) => (m.subtopics || []).map((st) => st.id));
+
+            sessionsData = (sessionsData as Session[]).filter((s) => {
+              // Match by module level
+              if (s.moduleId && levelModuleIds.includes(s.moduleId)) return true;
+              if (s.module?.level === studentLevel) return true;
+              // Match by subtopic belonging to a level module
+              if (s.subtopicId && levelSubtopicIds.includes(s.subtopicId)) return true;
+              return false;
+            });
+          }
+
           const mappedSessions = (sessionsData as Session[]).map(
-            mapSessionToAttendanceSession,
+            createSessionMapper(allUsers, allModules),
           );
           setSessions(mappedSessions);
 
           if (showRefreshToast) {
             toast.success("Sessions refreshed");
+          }
+
+          // For lecturers, also populate lecturerActiveSessions (OPEN only) from the same data
+          if (isLecturer) {
+            const allLecSessions = sessionsData as Session[];
+            const activeLecSessions = allLecSessions.filter(
+              (s) => s.status === SessionStatus.OPEN,
+            );
+            setLecturerActiveSessions(activeLecSessions);
           }
         } else {
           console.error("Failed to fetch sessions:", response.error);
@@ -403,7 +657,7 @@ const Sessions = () => {
         setIsRefreshing(false);
       }
     },
-    [token, isAdmin],
+    [token, isAdmin, isLecturer, isRep, isStudent, studentLevel, allUsers, allModules],
   );
 
   // Fetch sessions on mount and when dependencies change
@@ -417,72 +671,182 @@ const Sessions = () => {
     return session.status === activeTab;
   });
 
-  const handleStartSession = (session: AttendanceSession) => {
+  const handleStartSession = async (session: AttendanceSession) => {
+    if (!token) {
+      toast.error("You must be logged in to start a session");
+      return;
+    }
+
     // Extract slot ID from the session ID (e.g., "timetable-slotId" -> "slotId")
     const slotId = session.id.replace("timetable-", "");
 
-    // Save to localStorage to mark as active
-    const storedActiveSessions = localStorage.getItem(
-      "active_lecture_sessions",
-    );
-    const activeSessions = storedActiveSessions
-      ? JSON.parse(storedActiveSessions)
-      : [];
+    // Find the timetable slot to get subtopicId, lecturerId, moduleId
+    let timetableSlot: TimetableSlot | undefined;
+    let moduleForSlot: Module | undefined;
+    for (const tt of allTimetables) {
+      const slot = tt.slots.find((s) => s.id === slotId);
+      if (slot) {
+        timetableSlot = slot;
+        moduleForSlot = allModules.find((m) => m.id === tt.moduleId);
+        break;
+      }
+    }
 
-    if (!activeSessions.includes(slotId)) {
-      activeSessions.push(slotId);
-      localStorage.setItem(
-        "active_lecture_sessions",
-        JSON.stringify(activeSessions),
+    if (!timetableSlot || !moduleForSlot) {
+      toast.error("Could not find timetable slot data");
+      return;
+    }
+
+    // Resolve lecturer ID — slot may have lecturerId directly, or via subtopic
+    // Note: subtopic.lecturerId and slot.lecturerId are User IDs,
+    // but the backend Session.lecturerId expects the Lecturer record ID.
+    const subtopic = moduleForSlot.subtopics.find(
+      (s) => s.id === timetableSlot!.subtopicId,
+    );
+    const lecturerUserId = timetableSlot.lecturerId || subtopic?.lecturerId;
+
+    if (!lecturerUserId) {
+      toast.error(
+        "No lecturer assigned to this slot. Please assign a lecturer first.",
+      );
+      return;
+    }
+
+    // Resolve the Lecturer record ID from the User ID
+    const lecturerUser = allUsers.find((u) => u.id === lecturerUserId);
+    const lecturerId = lecturerUser?.lecturer?.id;
+
+    if (!lecturerId) {
+      toast.error(
+        "Could not find lecturer record. The assigned user may not have a lecturer profile.",
+      );
+      return;
+    }
+
+    // Get geolocation
+    setIsCreatingSession(true);
+    setStartingSession(session);
+
+    let latitude: number | undefined;
+    let longitude: number | undefined;
+
+    try {
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0,
+        });
+      });
+      latitude = pos.coords.latitude;
+      longitude = pos.coords.longitude;
+    } catch {
+      // Geolocation failed — proceed without it (backend will allow if lat/long not required)
+      toast.warning(
+        "Could not get your location. Session will be created without geofencing.",
       );
     }
 
-    // Also call AttendanceContext's startSession for shared state
-    // This enables the Sign In functionality in MyAttendanceSheet
-    const moduleCode = session.department || "UNKNOWN";
-    const formatTime = (date: Date) => {
-      const h = date.getHours().toString().padStart(2, "0");
-      const m = date.getMinutes().toString().padStart(2, "0");
-      return `${h}:${m}`;
-    };
-    ctxStartSession({
-      sessionId: session.id,
-      slotId,
-      moduleCode,
-      moduleName: session.courseName || session.name,
-      topic: session.name,
-      date: session.startTime.toISOString().split("T")[0],
-      week: 1, // Could calculate from timetable if available
-      startTime: formatTime(session.startTime),
-      endTime: formatTime(session.endTime),
-      startedBy: user?.name || "Level Rep",
-    });
+    try {
+      const response = await createSession(
+        {
+          name:
+            subtopic?.name ||
+            `${moduleForSlot.name} - ${timetableSlot.activityType || "Lecture"}`,
+          type: SessionType.CLASS,
+          mode: SessionMode.CHECK_IN,
+          moduleId: moduleForSlot.id,
+          lecturerId,
+          subtopicId: timetableSlot.subtopicId || undefined,
+          timetableSlotId: timetableSlot.id,
+          location: timetableSlot.venue || undefined,
+          startTime: session.startTime.toISOString(),
+          endTime: session.endTime.toISOString(),
+          latitude,
+          longitude,
+          geofenceRadius: 100,
+          week: selectedWeek,
+        },
+        token,
+      );
 
-    // Dispatch event to notify other components
-    window.dispatchEvent(new Event("session-started"));
+      if (response.success && response.data?.data) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const created = response.data.data as any;
 
-    // Show SMS modal
-    setStartingSession(session);
-    setSmsModalOpen(true);
+        // Store created session info for SMS modal
+        setCreatedSessionData({
+          attendanceLink: created.attendanceLink,
+          smsSentToLecturer: created.smsSentToLecturer,
+          studentsSmsCount: created.studentsSmsCount,
+          sessionId: created.id,
+        });
 
-    toast.success("Session started! Students can now sign in.");
+        // Save to localStorage to mark as active
+        const storedActiveSessions = localStorage.getItem(
+          "active_lecture_sessions",
+        );
+        const activeSessions = storedActiveSessions
+          ? JSON.parse(storedActiveSessions)
+          : [];
+
+        if (!activeSessions.includes(slotId)) {
+          activeSessions.push(slotId);
+          localStorage.setItem(
+            "active_lecture_sessions",
+            JSON.stringify(activeSessions),
+          );
+        }
+
+        // Dispatch event to notify other components
+        window.dispatchEvent(new Event("session-started"));
+
+        // Show SMS modal with result info
+        setSmsModalOpen(true);
+
+        toast.success("Session created successfully!");
+
+        // Refresh sessions list to show the new server session
+        fetchSessions();
+      } else {
+        toast.error(response.error || "Failed to create session");
+        setStartingSession(null);
+      }
+    } catch (error: unknown) {
+      console.error("Error creating session:", error);
+      const errMsg =
+        error instanceof Error ? error.message : "Failed to create session";
+      toast.error(errMsg);
+      setStartingSession(null);
+    } finally {
+      setIsCreatingSession(false);
+    }
   };
 
   // Handle sending SMS link
   const handleSendSms = () => {
     if (!startingSession) return;
 
-    const slotId = startingSession.id.replace("timetable-", "");
-    const kioskLink = `${window.location.origin}/kiosk/lecturer/${slotId}`;
+    const link =
+      createdSessionData?.attendanceLink ||
+      `${window.location.origin}/attend/unknown`;
 
-    navigator.clipboard.writeText(kioskLink).catch(() => {});
+    navigator.clipboard.writeText(link).catch(() => {});
 
-    toast.success("SMS link sent to lecturer", {
-      description: "Link copied to clipboard for testing",
-    });
+    toast.success(
+      createdSessionData?.smsSentToLecturer
+        ? "SMS was already sent to the lecturer automatically"
+        : "Attendance link copied to clipboard",
+      {
+        description: createdSessionData?.smsSentToLecturer
+          ? "Link also copied to clipboard"
+          : "You can share this link manually",
+      },
+    );
 
     setSmsModalOpen(false);
     setStartingSession(null);
+    setCreatedSessionData(null);
   };
 
   const handleEndSession = async (session: AttendanceSession) => {
@@ -491,6 +855,7 @@ const Sessions = () => {
       return;
     }
 
+    setEndingSessionId(session.id);
     try {
       const response = await closeSession(session.id, token);
 
@@ -513,6 +878,8 @@ const Sessions = () => {
     } catch (error) {
       console.error("Error ending session:", error);
       toast.error("Failed to end session");
+    } finally {
+      setEndingSessionId(null);
     }
   };
 
@@ -646,8 +1013,12 @@ const Sessions = () => {
           </h1>
           <p className="text-muted-foreground mt-1">
             {isAdmin
-              ? "View and manage all attendance tracking sessions"
-              : "View your weekly lectures and attendance sessions"}
+              ? "View completed sessions and download reports"
+              : isRep
+                ? "Start and manage today's attendance sessions"
+                : isLecturer
+                  ? "View sessions for your assigned subtopics and mark attendance"
+                  : "View your weekly lectures and attendance sessions"}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -708,151 +1079,466 @@ const Sessions = () => {
                 Loading sessions...
               </span>
             </div>
-          ) : (
-            <Tabs
-              value={activeTab}
-              onValueChange={setActiveTab}
-              className="w-full"
-            >
-              <div className="flex items-center justify-between">
-                <TabsList className="bg-card border border-border">
-                  <TabsTrigger value="all">
-                    All Sessions ({sessions.length})
-                  </TabsTrigger>
-                  <TabsTrigger value="active">
-                    <span className="flex items-center gap-2">
-                      <span className="w-2 h-2 bg-success rounded-full animate-pulse" />
-                      Active ({activeSessions})
+          ) : isRep ? (
+            /* ─── REP VIEW: Today's sessions from timetable ─── */
+            <div className="space-y-6">
+              {/* Week Selector */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium text-muted-foreground mr-1">
+                  Week:
+                </span>
+                {Array.from(
+                  {
+                    length: Math.max(
+                      ...allModules.map((m) =>
+                        m.subtopics.reduce((sum, s) => sum + (s.weeks || 1), 0),
+                      ),
+                      1,
+                    ),
+                  },
+                  (_, i) => i + 1,
+                ).map((week) => (
+                  <button
+                    key={week}
+                    onClick={() => setSelectedWeek(week)}
+                    className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+                      selectedWeek === week
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    }`}
+                  >
+                    {week}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-primary" />
+                <h2 className="text-lg font-semibold text-foreground">
+                  Week {selectedWeek} &mdash; Today&apos;s Sessions
+                </h2>
+                <span className="text-sm text-muted-foreground">
+                  ({weeklyLectureSessions.length} session
+                  {weeklyLectureSessions.length !== 1 ? "s" : ""})
+                </span>
+              </div>
+
+              {weeklyLectureSessions.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {weeklyLectureSessions.map((session) => (
+                    <SessionCard
+                      key={session.id}
+                      session={session}
+                      user={user}
+                      onStart={handleStartSession}
+                      onCheckout={handleCheckout}
+                      onViewReport={handleViewReport}
+                      isStarting={
+                        isCreatingSession && startingSession?.id === session.id
+                      }
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12 bg-card rounded-xl border border-border">
+                  <BookOpen className="w-12 h-12 mx-auto mb-3 text-muted-foreground/50" />
+                  <p className="text-muted-foreground">
+                    No sessions scheduled for today.
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Add subtopics with timetable slots in the Activities tab.
+                  </p>
+                </div>
+              )}
+
+              {/* Also show any API sessions the rep created */}
+              {sessions.length > 0 && (
+                <div className="mt-8">
+                  <div className="flex items-center gap-2 mb-4">
+                    <h2 className="text-lg font-semibold text-foreground">
+                      Your Started Sessions
+                    </h2>
+                    <span className="text-sm text-muted-foreground">
+                      ({sessions.length})
                     </span>
-                  </TabsTrigger>
-                  <TabsTrigger value="completed">
-                    Completed ({completedSessions})
-                  </TabsTrigger>
-                </TabsList>
-                <div className="text-sm text-muted-foreground">
-                  {filteredSessions.length} session
-                  {filteredSessions.length !== 1 ? "s" : ""} shown
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {sessions.map((session) => (
+                      <SessionCard
+                        key={session.id}
+                        session={session}
+                        onStart={handleStartSession}
+                        onEnd={handleEndSession}
+                        onViewReport={handleViewReport}
+                        onDelete={handleDeleteSession}
+                        onToggleMode={handleToggleMode}
+                        onGenerateQrCode={handleGenerateQrCode}
+                        onCheckout={handleCheckout}
+                        user={user}
+                        isStarting={
+                          isCreatingSession &&
+                          startingSession?.id === session.id
+                        }
+                        isEnding={endingSessionId === session.id}
+                        isTogglingMode={togglingSessionId === session.id}
+                        isDeleting={deletingSessionId === session.id}
+                        isGeneratingQrCode={generatingQrCode === session.id}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : isAdmin ? (
+            /* ─── ADMIN VIEW: Only completed/ended sessions for reports ─── */
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-success" />
+                  <h2 className="text-lg font-semibold text-foreground">
+                    Ended Sessions
+                  </h2>
+                  <span className="text-sm text-muted-foreground">
+                    ({sessions.filter((s) => s.status === "completed").length}{" "}
+                    session
+                    {sessions.filter((s) => s.status === "completed").length !==
+                    1
+                      ? "s"
+                      : ""}
+                    )
+                  </span>
                 </div>
               </div>
 
-              <TabsContent value={activeTab} className="mt-6">
-                {/* Weekly Lectures from Timetable - Grouped by Day */}
-                {weeklyLectureSessions.length > 0 && (
-                  <div className="mb-8">
-                    <div className="flex items-center gap-2 mb-4">
-                      <BookOpen className="w-5 h-5 text-primary" />
-                      <h2 className="text-lg font-semibold text-foreground">
-                        This Week's Lectures
-                      </h2>
-                      <span className="text-sm text-muted-foreground">
-                        (
-                        {
-                          weeklyLectureSessions.filter((s) => {
-                            if (activeTab === "all") return true;
-                            return s.status === activeTab;
-                          }).length
-                        }{" "}
-                        lectures remaining)
+              {sessions.filter((s) => s.status === "completed").length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {sessions
+                    .filter((s) => s.status === "completed")
+                    .map((session) => (
+                      <SessionCard
+                        key={session.id}
+                        session={session}
+                        onViewReport={handleViewReport}
+                        onDelete={handleDeleteSession}
+                        user={user}
+                        isDeleting={deletingSessionId === session.id}
+                      />
+                    ))}
+                </div>
+              ) : (
+                <div className="text-center py-12 bg-card rounded-xl border border-border">
+                  <CheckCircle className="w-12 h-12 mx-auto mb-3 text-muted-foreground/50" />
+                  <p className="text-muted-foreground">
+                    No completed sessions found.
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Sessions will appear here once they have been ended by their
+                    creators.
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : (
+            /* ─── DEFAULT VIEW: Lecturers / Students ─── */
+            <div className="space-y-6">
+              {/* ─── Lecturer: Active Sessions to Mark Attendance ─── */}
+              {isLecturer && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Radio className="w-5 h-5 text-success animate-pulse" />
+                    <h2 className="text-lg font-semibold text-foreground">
+                      Active Sessions — Mark Your Attendance
+                    </h2>
+                  </div>
+
+                  {isLoadingLecturerSessions ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                      <span className="ml-2 text-sm text-muted-foreground">
+                        Checking for active sessions…
                       </span>
                     </div>
-
-                    {/* Group lectures by day */}
-                    {Object.entries(lecturesByDay).map(
-                      ([dayName, daySessions]) => {
-                        const filteredDaySessions = daySessions.filter((s) => {
-                          if (activeTab === "all") return true;
-                          return s.status === activeTab;
-                        });
-
-                        if (filteredDaySessions.length === 0) return null;
-
-                        const isToday =
-                          dayNames[new Date().getDay()] === dayName;
-
+                  ) : lecturerActiveSessions.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {lecturerActiveSessions.map((session) => {
+                        const now = new Date();
+                        const start = new Date(session.startTime);
+                        const end = new Date(session.endTime);
+                        const isLive = now >= start && now <= end;
                         return (
-                          <div key={dayName} className="mb-6">
-                            <div className="flex items-center gap-2 mb-3">
-                              <h3
-                                className={`text-md font-medium ${isToday ? "text-primary" : "text-muted-foreground"}`}
-                              >
-                                {dayName}
-                                {isToday && (
-                                  <span className="ml-2 text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">
-                                    Today
-                                  </span>
-                                )}
-                              </h3>
-                              <span className="text-xs text-muted-foreground">
-                                ({filteredDaySessions.length} lecture
-                                {filteredDaySessions.length !== 1 ? "s" : ""})
+                          <div
+                            key={session.id}
+                            className="relative p-5 rounded-xl border border-primary/50 bg-card shadow-glow animate-fade-in"
+                          >
+                            {/* Live badge */}
+                            {isLive && (
+                              <span className="absolute top-3 right-3 flex items-center gap-1.5 px-2 py-0.5 text-xs font-medium rounded-full bg-success/20 text-success">
+                                <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
+                                Live
                               </span>
+                            )}
+
+                            <h3 className="text-lg font-semibold text-foreground mb-1 pr-16">
+                              {session.name}
+                            </h3>
+
+                            {session.module && (
+                              <p className="text-sm text-muted-foreground mb-3">
+                                {session.module.name} ({session.module.code})
+                              </p>
+                            )}
+
+                            <div className="space-y-1.5 text-sm text-muted-foreground mb-4">
+                              <div className="flex items-center gap-2">
+                                <BookOpen className="w-4 h-4" />
+                                <span>
+                                  {session.subtopic?.name ||
+                                    session.type.charAt(0) +
+                                      session.type.slice(1).toLowerCase()}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <CalendarDays className="w-4 h-4" />
+                                <span>
+                                  {start.toLocaleTimeString([], {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })}{" "}
+                                  –{" "}
+                                  {end.toLocaleTimeString([], {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })}
+                                </span>
+                              </div>
+                              {session.location && (
+                                <div className="flex items-center gap-2">
+                                  <ExternalLink className="w-4 h-4" />
+                                  <span>{session.location}</span>
+                                </div>
+                              )}
+                              {session.week && (
+                                <div className="flex items-center gap-2">
+                                  <FileText className="w-4 h-4" />
+                                  <span>Week {session.week}</span>
+                                </div>
+                              )}
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                              {filteredDaySessions.map((session) => (
-                                <SessionCard
-                                  key={session.id}
-                                  session={session}
-                                  user={user}
-                                  onStart={handleStartSession}
-                                  onCheckout={handleCheckout}
-                                  onViewReport={handleViewReport}
-                                />
-                              ))}
+
+                            {/* Attendance link / mark attendance button */}
+                            <div className="flex flex-col gap-2">
+                              <Button
+                                variant="gradient"
+                                className="w-full"
+                                onClick={() => navigate(`/kiosk/${session.id}`)}
+                              >
+                                <CheckCircle className="w-4 h-4 mr-2" />
+                                Mark Attendance (Face Scan)
+                              </Button>
+
+                              {session.attendanceLink && (
+                                <div className="flex items-center gap-2">
+                                  <div className="flex-1 min-w-0 bg-muted/50 rounded-lg px-3 py-2">
+                                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                      <Link className="w-3 h-3 flex-shrink-0" />
+                                      <span className="truncate">
+                                        {session.attendanceLink}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      navigator.clipboard
+                                        .writeText(session.attendanceLink || "")
+                                        .then(() =>
+                                          toast.success(
+                                            "Attendance link copied",
+                                          ),
+                                        );
+                                    }}
+                                  >
+                                    Copy
+                                  </Button>
+                                </div>
+                              )}
                             </div>
                           </div>
                         );
-                      },
-                    )}
-                  </div>
-                )}
-
-                {/* API Sessions (if any) */}
-                {filteredSessions.length > 0 && (
-                  <>
-                    {weeklyLectureSessions.length > 0 && (
-                      <div className="flex items-center gap-2 mb-4">
-                        <h2 className="text-lg font-semibold text-foreground">
-                          Attendance Sessions
-                        </h2>
-                        <span className="text-sm text-muted-foreground">
-                          ({filteredSessions.length})
-                        </span>
-                      </div>
-                    )}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {filteredSessions.map((session) => (
-                        <SessionCard
-                          key={session.id}
-                          session={session}
-                          onStart={handleStartSession}
-                          onEnd={handleEndSession}
-                          onViewReport={handleViewReport}
-                          onDelete={handleDeleteSession}
-                          onToggleMode={handleToggleMode}
-                          onGenerateQrCode={handleGenerateQrCode}
-                          onCheckout={handleCheckout}
-                          user={user}
-                          isTogglingMode={togglingSessionId === session.id}
-                          isDeleting={deletingSessionId === session.id}
-                          isGeneratingQrCode={generatingQrCode === session.id}
-                        />
-                      ))}
+                      })}
                     </div>
-                  </>
-                )}
-
-                {filteredSessions.length === 0 &&
-                  weeklyLectureSessions.length === 0 && (
-                    <div className="text-center py-12 bg-card rounded-xl border border-border">
-                      <p className="text-muted-foreground">
-                        {activeTab === "all"
-                          ? "No lectures scheduled this week. Add activities in the Activities tab."
-                          : `No ${activeTab} sessions found.`}
+                  ) : (
+                    <div className="text-center py-8 bg-card rounded-xl border border-border">
+                      <CheckCircle className="w-10 h-10 mx-auto mb-2 text-muted-foreground/40" />
+                      <p className="text-muted-foreground text-sm">
+                        No active sessions requiring your attendance right now.
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Sessions started by your course rep will appear here
+                        automatically.
                       </p>
                     </div>
                   )}
-              </TabsContent>
-            </Tabs>
+                </div>
+              )}
+
+              <Tabs
+                value={activeTab}
+                onValueChange={setActiveTab}
+                className="w-full"
+              >
+                <div className="flex items-center justify-between">
+                  <TabsList className="bg-card border border-border">
+                    <TabsTrigger value="all">
+                      All Sessions ({sessions.length})
+                    </TabsTrigger>
+                    <TabsTrigger value="active">
+                      <span className="flex items-center gap-2">
+                        <span className="w-2 h-2 bg-success rounded-full animate-pulse" />
+                        Active ({activeSessions})
+                      </span>
+                    </TabsTrigger>
+                    <TabsTrigger value="completed">
+                      Completed ({completedSessions})
+                    </TabsTrigger>
+                  </TabsList>
+                  <div className="text-sm text-muted-foreground">
+                    {filteredSessions.length} session
+                    {filteredSessions.length !== 1 ? "s" : ""} shown
+                  </div>
+                </div>
+
+                <TabsContent value={activeTab} className="mt-6">
+                  {/* Weekly Lectures from Timetable - Grouped by Day */}
+                  {weeklyLectureSessions.length > 0 && (
+                    <div className="mb-8">
+                      <div className="flex items-center gap-2 mb-4">
+                        <BookOpen className="w-5 h-5 text-primary" />
+                        <h2 className="text-lg font-semibold text-foreground">
+                          This Week&apos;s Lectures
+                        </h2>
+                        <span className="text-sm text-muted-foreground">
+                          (
+                          {
+                            weeklyLectureSessions.filter((s) => {
+                              if (activeTab === "all") return true;
+                              return s.status === activeTab;
+                            }).length
+                          }{" "}
+                          lectures remaining)
+                        </span>
+                      </div>
+
+                      {/* Group lectures by day */}
+                      {Object.entries(lecturesByDay).map(
+                        ([dayName, daySessions]) => {
+                          const filteredDaySessions = daySessions.filter(
+                            (s) => {
+                              if (activeTab === "all") return true;
+                              return s.status === activeTab;
+                            },
+                          );
+
+                          if (filteredDaySessions.length === 0) return null;
+
+                          const isToday =
+                            dayNames[new Date().getDay()] === dayName;
+
+                          return (
+                            <div key={dayName} className="mb-6">
+                              <div className="flex items-center gap-2 mb-3">
+                                <h3
+                                  className={`text-md font-medium ${isToday ? "text-primary" : "text-muted-foreground"}`}
+                                >
+                                  {dayName}
+                                  {isToday && (
+                                    <span className="ml-2 text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">
+                                      Today
+                                    </span>
+                                  )}
+                                </h3>
+                                <span className="text-xs text-muted-foreground">
+                                  ({filteredDaySessions.length} lecture
+                                  {filteredDaySessions.length !== 1 ? "s" : ""})
+                                </span>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {filteredDaySessions.map((session) => (
+                                  <SessionCard
+                                    key={session.id}
+                                    session={session}
+                                    user={user}
+                                    onStart={handleStartSession}
+                                    onCheckout={handleCheckout}
+                                    onViewReport={handleViewReport}
+                                    isStarting={
+                                      isCreatingSession &&
+                                      startingSession?.id === session.id
+                                    }
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        },
+                      )}
+                    </div>
+                  )}
+
+                  {/* API Sessions (if any) */}
+                  {filteredSessions.length > 0 && (
+                    <>
+                      {weeklyLectureSessions.length > 0 && (
+                        <div className="flex items-center gap-2 mb-4">
+                          <h2 className="text-lg font-semibold text-foreground">
+                            Attendance Sessions
+                          </h2>
+                          <span className="text-sm text-muted-foreground">
+                            ({filteredSessions.length})
+                          </span>
+                        </div>
+                      )}
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {filteredSessions.map((session) => (
+                          <SessionCard
+                            key={session.id}
+                            session={session}
+                            onStart={handleStartSession}
+                            onEnd={handleEndSession}
+                            onViewReport={handleViewReport}
+                            onDelete={handleDeleteSession}
+                            onToggleMode={handleToggleMode}
+                            onGenerateQrCode={handleGenerateQrCode}
+                            onCheckout={handleCheckout}
+                            user={user}
+                            isStarting={
+                              isCreatingSession &&
+                              startingSession?.id === session.id
+                            }
+                            isEnding={endingSessionId === session.id}
+                            isTogglingMode={togglingSessionId === session.id}
+                            isDeleting={deletingSessionId === session.id}
+                            isGeneratingQrCode={generatingQrCode === session.id}
+                          />
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  {filteredSessions.length === 0 &&
+                    weeklyLectureSessions.length === 0 && (
+                      <div className="text-center py-12 bg-card rounded-xl border border-border">
+                        <p className="text-muted-foreground">
+                          {activeTab === "all"
+                            ? "No lectures scheduled this week. Add activities in the Activities tab."
+                            : `No ${activeTab} sessions found.`}
+                        </p>
+                      </div>
+                    )}
+                </TabsContent>
+              </Tabs>
+            </div>
           )}
         </TabsContent>
 
@@ -939,16 +1625,25 @@ const Sessions = () => {
       </Dialog>
 
       {/* SMS Link Modal for Session Start */}
-      <Dialog open={smsModalOpen} onOpenChange={setSmsModalOpen}>
+      <Dialog
+        open={smsModalOpen}
+        onOpenChange={(open) => {
+          setSmsModalOpen(open);
+          if (!open) {
+            setStartingSession(null);
+            setCreatedSessionData(null);
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Send className="w-5 h-5" />
-              Send Attendance Link
+              Session Created
             </DialogTitle>
             <DialogDescription>
-              Send a link to the lecturer&apos;s device for face recognition
-              attendance.
+              The session has been created on the server and attendance tracking
+              is now active.
             </DialogDescription>
           </DialogHeader>
 
@@ -973,37 +1668,82 @@ const Sessions = () => {
                     minute: "2-digit",
                   })}
                 </p>
+                <p>
+                  <strong>Week:</strong> {selectedWeek}
+                </p>
               </div>
 
-              <div className="p-3 bg-primary/10 rounded-lg">
-                <p className="text-sm text-muted-foreground mb-2">
-                  A link will be sent to the lecturer&apos;s registered phone
-                  number:
-                </p>
-                <code className="text-xs bg-muted px-2 py-1 rounded break-all">
-                  {window.location.origin}/kiosk/lecturer/
-                  {startingSession.id.replace("timetable-", "")}
-                </code>
-              </div>
+              {/* SMS Status */}
+              {createdSessionData && (
+                <div className="space-y-2">
+                  <div
+                    className={`p-3 rounded-lg flex items-center gap-2 text-sm ${
+                      createdSessionData.smsSentToLecturer
+                        ? "bg-success/10 text-success"
+                        : "bg-warning/10 text-warning"
+                    }`}
+                  >
+                    {createdSessionData.smsSentToLecturer ? (
+                      <CheckCircle className="w-4 h-4 flex-shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                    )}
+                    <span>
+                      {createdSessionData.smsSentToLecturer
+                        ? "SMS with attendance link sent to lecturer automatically"
+                        : "SMS could not be sent — lecturer may not have a phone number registered"}
+                    </span>
+                  </div>
+
+                  {(createdSessionData.studentsSmsCount ?? 0) > 0 && (
+                    <div className="p-3 rounded-lg bg-success/10 text-success flex items-center gap-2 text-sm">
+                      <CheckCircle className="w-4 h-4 flex-shrink-0" />
+                      <span>
+                        SMS sent to {createdSessionData.studentsSmsCount}{" "}
+                        enrolled students
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Attendance Link */}
+              {createdSessionData?.attendanceLink && (
+                <div className="p-3 bg-primary/10 rounded-lg">
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Attendance link:
+                  </p>
+                  <code className="text-xs bg-muted px-2 py-1 rounded break-all">
+                    {createdSessionData.attendanceLink}
+                  </code>
+                </div>
+              )}
 
               <div className="flex items-start gap-2 text-sm text-muted-foreground">
                 <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
                 <p>
-                  The lecturer can use this link to verify their attendance
-                  through face recognition, or sign manually on the attendance
-                  sheet.
+                  The lecturer can use the attendance link to verify their
+                  presence through face recognition. Students within the
+                  geofence radius can mark attendance via the same link.
                 </p>
               </div>
             </div>
           )}
 
           <div className="flex justify-end gap-2 mt-4">
-            <Button variant="outline" onClick={() => setSmsModalOpen(false)}>
-              Cancel
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSmsModalOpen(false);
+                setStartingSession(null);
+                setCreatedSessionData(null);
+              }}
+            >
+              Close
             </Button>
             <Button variant="gradient" onClick={handleSendSms}>
               <Send className="w-4 h-4 mr-2" />
-              Send SMS
+              Copy Link
             </Button>
           </div>
         </DialogContent>

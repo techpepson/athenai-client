@@ -1,15 +1,8 @@
-import { useState, useEffect } from "react";
-import { format } from "date-fns";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Calendar as CalendarPicker } from "@/components/ui/calendar";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -47,15 +40,18 @@ import {
   User,
   Layers,
   Calendar,
+  MapPin,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
   modulesService,
   Module,
   SubTopic,
-  ScheduledDay,
   LEVELS,
   SEMESTERS,
+  DAYS_OF_WEEK,
+  formatTimeDisplay,
 } from "@/services/modules.service";
 import { usersServices } from "@/services/users.services";
 import { IUserPublic } from "@/interface/user.interface";
@@ -92,8 +88,9 @@ const ACTIVITY_LABELS: Record<string, string> = {
   OTHER: "Other",
 };
 
-// Time options for dropdowns
+// Time options for dropdowns (7:00 AM to 8:00 PM)
 const TIME_OPTIONS = [
+  "7:00",
   "7:30",
   "8:00",
   "8:30",
@@ -115,6 +112,11 @@ const TIME_OPTIONS = [
   "4:30",
   "5:00",
   "5:30",
+  "6:00",
+  "6:30",
+  "19:00",
+  "19:30",
+  "20:00",
 ];
 
 const LEVEL_COLORS: Record<number, string> = {
@@ -148,6 +150,8 @@ const ModulesManagement = () => {
   const [modules, setModules] = useState<Module[]>([]);
   const [staffList, setStaffList] = useState<IUserPublic[]>([]);
   const [selectedLevel, setSelectedLevel] = useState<number>(100);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [expandedModules, setExpandedModules] = useState<Set<string>>(
     new Set(),
   );
@@ -169,12 +173,15 @@ const ModulesManagement = () => {
   const [subtopicLecturerId, setSubtopicLecturerId] = useState("");
   const [subtopicWeeks, setSubtopicWeeks] = useState("2");
   const [subtopicActivityType, setSubtopicActivityType] = useState("LECTURE");
-  const [subtopicSelectedDates, setSubtopicSelectedDates] = useState<Date[]>(
-    [],
+  // Timetable slot fields (auto-create slot when adding subtopic)
+  const [subtopicDay, setSubtopicDay] = useState("");
+  const [subtopicStartTime, setSubtopicStartTime] = useState("7:30");
+  const [subtopicEndTime, setSubtopicEndTime] = useState("9:30");
+  const [subtopicVenue, setSubtopicVenue] = useState("");
+  const [subtopicSlotWeek, setSubtopicSlotWeek] = useState("1");
+  const [subtopicAcademicYear, setSubtopicAcademicYear] = useState(
+    `${new Date().getFullYear()}/${new Date().getFullYear() + 1}`,
   );
-  const [subtopicDateTimes, setSubtopicDateTimes] = useState<
-    Record<string, { startTime: string; endTime: string }>
-  >({});
 
   // Delete dialogs
   const [deleteModuleDialogOpen, setDeleteModuleDialogOpen] = useState(false);
@@ -191,9 +198,19 @@ const ModulesManagement = () => {
     loadStaff();
   }, []);
 
-  const loadModules = () => {
-    setModules(modulesService.getModules());
-  };
+  const loadModules = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await modulesService.getModules();
+      if (response.success && response.data?.data) {
+        setModules(response.data.data);
+      }
+    } catch {
+      toast.error("Failed to load modules");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   const loadStaff = async () => {
     const response = await usersServices.getAllUsers();
@@ -240,49 +257,71 @@ const ModulesManagement = () => {
     setModuleModalOpen(true);
   };
 
-  const handleSaveModule = () => {
+  const handleSaveModule = async () => {
     if (!moduleCode.trim() || !moduleName.trim()) {
       toast.error("Please fill in module code and name");
       return;
     }
 
-    if (editingModule) {
-      modulesService.updateModule(editingModule.id, {
-        code: moduleCode.trim().toUpperCase(),
-        name: moduleName.trim(),
-        credits: parseInt(moduleCredits) || 3,
-        level: parseInt(moduleLevel),
-        semester: parseInt(moduleSemester),
-      });
-      toast.success(`Module "${moduleName}" updated successfully`);
-    } else {
-      modulesService.addModule({
-        code: moduleCode.trim().toUpperCase(),
-        name: moduleName.trim(),
-        credits: parseInt(moduleCredits) || 3,
-        level: parseInt(moduleLevel),
-        semester: parseInt(moduleSemester),
-        subtopics: [],
-        order:
-          modulesService.getModulesByLevelAndSemester(
-            parseInt(moduleLevel),
-            parseInt(moduleSemester),
-          ).length + 1,
-      });
-      toast.success(`Module "${moduleName}" added successfully`);
-    }
+    setSaving(true);
+    try {
+      if (editingModule) {
+        const res = await modulesService.updateModule(editingModule.id, {
+          code: moduleCode.trim().toUpperCase(),
+          name: moduleName.trim(),
+          credits: parseInt(moduleCredits) || 3,
+          level: parseInt(moduleLevel),
+          semester: parseInt(moduleSemester),
+        });
+        if (res.success) {
+          toast.success(`Module "${moduleName}" updated successfully`);
+        } else {
+          toast.error(res.error || "Failed to update module");
+          return;
+        }
+      } else {
+        const res = await modulesService.addModule({
+          code: moduleCode.trim().toUpperCase(),
+          name: moduleName.trim(),
+          credits: parseInt(moduleCredits) || 3,
+          level: parseInt(moduleLevel),
+          semester: parseInt(moduleSemester),
+        });
+        if (res.success) {
+          toast.success(`Module "${moduleName}" added successfully`);
+        } else {
+          toast.error(res.error || "Failed to add module");
+          return;
+        }
+      }
 
-    setModuleModalOpen(false);
-    loadModules();
+      setModuleModalOpen(false);
+      await loadModules();
+    } catch {
+      toast.error("Failed to save module");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleDeleteModule = () => {
+  const handleDeleteModule = async () => {
     if (!moduleToDelete) return;
-    modulesService.deleteModule(moduleToDelete.id);
-    toast.success(`Module "${moduleToDelete.name}" deleted`);
-    setDeleteModuleDialogOpen(false);
-    setModuleToDelete(null);
-    loadModules();
+    setSaving(true);
+    try {
+      const res = await modulesService.deleteModule(moduleToDelete.id);
+      if (res.success) {
+        toast.success(`Module "${moduleToDelete.name}" deleted`);
+      } else {
+        toast.error(res.error || "Failed to delete module");
+      }
+      setDeleteModuleDialogOpen(false);
+      setModuleToDelete(null);
+      await loadModules();
+    } catch {
+      toast.error("Failed to delete module");
+    } finally {
+      setSaving(false);
+    }
   };
 
   // --- Subtopic CRUD ---
@@ -294,8 +333,11 @@ const ModulesManagement = () => {
     setSubtopicLecturerId("");
     setSubtopicWeeks("2");
     setSubtopicActivityType("LECTURE");
-    setSubtopicSelectedDates([]);
-    setSubtopicDateTimes({});
+    setSubtopicDay("");
+    setSubtopicStartTime("7:30");
+    setSubtopicEndTime("9:30");
+    setSubtopicVenue("");
+    setSubtopicSlotWeek("1");
     setSubtopicModalOpen(true);
   };
 
@@ -306,80 +348,108 @@ const ModulesManagement = () => {
     setSubtopicLecturerId(subtopic.lecturerId || "");
     setSubtopicWeeks(String(subtopic.weeks || 2));
     setSubtopicActivityType(subtopic.activityType || "LECTURE");
-
-    // Populate scheduled dates
-    const days = subtopic.scheduledDays || [];
-    const dates: Date[] = [];
-    const times: Record<string, { startTime: string; endTime: string }> = {};
-    days.forEach((d) => {
-      const date = new Date(d.day);
-      if (!isNaN(date.getTime())) {
-        dates.push(date);
-        times[d.day] = { startTime: d.startTime, endTime: d.endTime };
-      }
-    });
-    setSubtopicSelectedDates(dates);
-    setSubtopicDateTimes(times);
-
+    // Clear slot fields for edit (slot editing is done in Timetable tab)
+    setSubtopicDay("");
+    setSubtopicStartTime("7:30");
+    setSubtopicEndTime("9:30");
+    setSubtopicVenue("");
+    setSubtopicSlotWeek("1");
     setSubtopicModalOpen(true);
   };
 
-  const handleSaveSubtopic = () => {
+  const handleSaveSubtopic = async () => {
     if (!subtopicName.trim()) {
       toast.error("Please fill in the subtopic name");
       return;
     }
 
-    const lecturer = staffList.find((s) => s.id === subtopicLecturerId);
+    setSaving(true);
+    try {
+      if (editingSubtopic) {
+        const res = await modulesService.updateSubtopic(
+          subtopicModuleId,
+          editingSubtopic.id,
+          {
+            name: subtopicName.trim(),
+            lecturerId:
+              subtopicLecturerId && subtopicLecturerId !== "none"
+                ? subtopicLecturerId
+                : undefined,
+            weeks: parseInt(subtopicWeeks) || 2,
+          },
+        );
+        if (res.success) {
+          toast.success(`Subtopic "${subtopicName}" updated`);
+        } else {
+          toast.error(res.error || "Failed to update subtopic");
+          return;
+        }
+      } else {
+        // Build slot creation fields if day is selected
+        const slotFields =
+          subtopicDay && subtopicDay !== "none"
+            ? {
+                day: subtopicDay,
+                startTime: subtopicStartTime,
+                endTime: subtopicEndTime,
+                activityType: subtopicActivityType,
+                venue: subtopicVenue || undefined,
+                academicYear: subtopicAcademicYear,
+                slotWeek: parseInt(subtopicSlotWeek) || 1,
+              }
+            : {};
 
-    // Build scheduledDays array from selected dates and times
-    const scheduledDays: ScheduledDay[] = subtopicSelectedDates
-      .sort((a, b) => a.getTime() - b.getTime())
-      .map((date) => {
-        const dateKey = format(date, "yyyy-MM-dd");
-        return {
-          day: dateKey,
-          startTime: subtopicDateTimes[dateKey]?.startTime || "7:30",
-          endTime: subtopicDateTimes[dateKey]?.endTime || "9:30",
-        };
-      });
+        const res = await modulesService.addSubtopic(subtopicModuleId, {
+          name: subtopicName.trim(),
+          lecturerId:
+            subtopicLecturerId && subtopicLecturerId !== "none"
+              ? subtopicLecturerId
+              : undefined,
+          weeks: parseInt(subtopicWeeks) || 2,
+          hoursPerWeek: 1,
+          ...slotFields,
+        });
+        if (res.success) {
+          const slotCreated = subtopicDay && subtopicDay !== "none";
+          toast.success(
+            `Subtopic "${subtopicName}" added${slotCreated ? " with timetable slot" : ""}`,
+          );
+        } else {
+          toast.error(res.error || "Failed to add subtopic");
+          return;
+        }
+      }
 
-    if (editingSubtopic) {
-      modulesService.updateSubtopic(subtopicModuleId, editingSubtopic.id, {
-        name: subtopicName.trim(),
-        lecturerId: subtopicLecturerId || undefined,
-        lecturerName: lecturer?.name || undefined,
-        weeks: parseInt(subtopicWeeks) || 2,
-        activityType: subtopicActivityType,
-        scheduledDays,
-      });
-      toast.success(`Subtopic "${subtopicName}" updated`);
-    } else {
-      modulesService.addSubtopic(subtopicModuleId, {
-        name: subtopicName.trim(),
-        lecturerId: subtopicLecturerId || undefined,
-        lecturerName: lecturer?.name || undefined,
-        weeks: parseInt(subtopicWeeks) || 2,
-        activityType: subtopicActivityType,
-        scheduledDays,
-      });
-      toast.success(`Subtopic "${subtopicName}" added`);
+      setSubtopicModalOpen(false);
+      await loadModules();
+    } catch {
+      toast.error("Failed to save subtopic");
+    } finally {
+      setSaving(false);
     }
-
-    setSubtopicModalOpen(false);
-    loadModules();
   };
 
-  const handleDeleteSubtopic = () => {
+  const handleDeleteSubtopic = async () => {
     if (!subtopicToDelete) return;
-    modulesService.removeSubtopic(
-      subtopicToDelete.moduleId,
-      subtopicToDelete.subtopic.id,
-    );
-    toast.success(`Subtopic "${subtopicToDelete.subtopic.name}" removed`);
-    setDeleteSubtopicDialogOpen(false);
-    setSubtopicToDelete(null);
-    loadModules();
+    setSaving(true);
+    try {
+      const res = await modulesService.removeSubtopic(
+        subtopicToDelete.moduleId,
+        subtopicToDelete.subtopic.id,
+      );
+      if (res.success) {
+        toast.success(`Subtopic "${subtopicToDelete.subtopic.name}" removed`);
+      } else {
+        toast.error(res.error || "Failed to remove subtopic");
+      }
+      setDeleteSubtopicDialogOpen(false);
+      setSubtopicToDelete(null);
+      await loadModules();
+    } catch {
+      toast.error("Failed to remove subtopic");
+    } finally {
+      setSaving(false);
+    }
   };
 
   // --- Render helpers ---
@@ -548,14 +618,6 @@ const ModulesManagement = () => {
                                 subtopic.activityType}
                             </Badge>
                           )}
-                          {subtopic.scheduledDays &&
-                            subtopic.scheduledDays.length > 0 && (
-                              <span className="flex items-center gap-1">
-                                <Calendar className="w-3 h-3" />
-                                {subtopic.scheduledDays.length} date
-                                {subtopic.scheduledDays.length !== 1 ? "s" : ""}
-                              </span>
-                            )}
                         </div>
                       </div>
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -727,7 +789,8 @@ const ModulesManagement = () => {
             >
               Cancel
             </Button>
-            <Button onClick={handleSaveModule}>
+            <Button onClick={handleSaveModule} disabled={saving}>
+              {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               {editingModule ? "Update Module" : "Add Module"}
             </Button>
           </DialogFooter>
@@ -802,138 +865,121 @@ const ModulesManagement = () => {
               />
             </div>
 
-            <div className="space-y-3">
-              <Label>Scheduled Dates & Times</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start text-left font-normal"
-                  >
-                    <Calendar className="mr-2 h-4 w-4" />
-                    {subtopicSelectedDates.length > 0
-                      ? `${subtopicSelectedDates.length} date(s) selected`
-                      : "Pick dates"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <CalendarPicker
-                    mode="multiple"
-                    selected={subtopicSelectedDates}
-                    onSelect={(dates) => {
-                      const newDates = dates || [];
-                      setSubtopicSelectedDates(newDates);
-                      // Initialize times for new dates
-                      const newTimes = { ...subtopicDateTimes };
-                      newDates.forEach((date) => {
-                        const dateKey = format(date, "yyyy-MM-dd");
-                        if (!newTimes[dateKey]) {
-                          newTimes[dateKey] = {
-                            startTime: "7:30",
-                            endTime: "9:30",
-                          };
-                        }
-                      });
-                      setSubtopicDateTimes(newTimes);
-                    }}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
+            {/* Auto-create timetable slot section (only for new subtopics) */}
+            {!editingSubtopic && (
+              <div className="space-y-3 border-t pt-4">
+                <Label className="text-sm font-semibold flex items-center gap-2">
+                  <Calendar className="w-4 h-4" />
+                  Timetable Slot (Optional)
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Select a day to automatically create a timetable slot for this
+                  subtopic.
+                </p>
 
-              {subtopicSelectedDates.length > 0 && (
-                <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {subtopicSelectedDates
-                    .sort((a, b) => a.getTime() - b.getTime())
-                    .map((date) => {
-                      const dateKey = format(date, "yyyy-MM-dd");
-                      const displayDate = format(date, "EEEE, do MMMM yyyy");
-                      return (
-                        <div
-                          key={dateKey}
-                          className="flex items-center gap-2 p-2 bg-muted rounded-md"
-                        >
-                          <span className="flex-1 text-sm font-medium">
-                            {displayDate}
-                          </span>
-                          <Select
-                            value={
-                              subtopicDateTimes[dateKey]?.startTime || "7:30"
-                            }
-                            onValueChange={(val) =>
-                              setSubtopicDateTimes((prev) => ({
-                                ...prev,
-                                [dateKey]: {
-                                  ...prev[dateKey],
-                                  startTime: val,
-                                },
-                              }))
-                            }
-                          >
-                            <SelectTrigger className="w-[90px]">
-                              <SelectValue placeholder="Start" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {TIME_OPTIONS.map((t) => (
-                                <SelectItem key={t} value={t}>
-                                  {t}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <span className="text-muted-foreground text-sm">
-                            to
-                          </span>
-                          <Select
-                            value={
-                              subtopicDateTimes[dateKey]?.endTime || "9:30"
-                            }
-                            onValueChange={(val) =>
-                              setSubtopicDateTimes((prev) => ({
-                                ...prev,
-                                [dateKey]: {
-                                  ...prev[dateKey],
-                                  endTime: val,
-                                },
-                              }))
-                            }
-                          >
-                            <SelectTrigger className="w-[90px]">
-                              <SelectValue placeholder="End" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {TIME_OPTIONS.map((t) => (
-                                <SelectItem key={t} value={t}>
-                                  {t}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => {
-                              setSubtopicSelectedDates((prev) =>
-                                prev.filter(
-                                  (d) => format(d, "yyyy-MM-dd") !== dateKey,
-                                ),
-                              );
-                              setSubtopicDateTimes((prev) => {
-                                const next = { ...prev };
-                                delete next[dateKey];
-                                return next;
-                              });
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      );
-                    })}
+                <div className="space-y-2">
+                  <Label>Day of Week</Label>
+                  <Select value={subtopicDay} onValueChange={setSubtopicDay}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="No timetable slot" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No timetable slot</SelectItem>
+                      {DAYS_OF_WEEK.map((d) => (
+                        <SelectItem key={d} value={d.toUpperCase()}>
+                          {d}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-              )}
-            </div>
+
+                {subtopicDay && subtopicDay !== "none" && (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label>Start Time</Label>
+                        <Select
+                          value={subtopicStartTime}
+                          onValueChange={setSubtopicStartTime}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {TIME_OPTIONS.map((t) => (
+                              <SelectItem key={t} value={t}>
+                                {formatTimeDisplay(t)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>End Time</Label>
+                        <Select
+                          value={subtopicEndTime}
+                          onValueChange={setSubtopicEndTime}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {TIME_OPTIONS.map((t) => (
+                              <SelectItem key={t} value={t}>
+                                {formatTimeDisplay(t)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label>Venue (Optional)</Label>
+                        <Input
+                          placeholder="e.g., Lecture Hall A"
+                          value={subtopicVenue}
+                          onChange={(e) => setSubtopicVenue(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Week</Label>
+                        <Select
+                          value={subtopicSlotWeek}
+                          onValueChange={setSubtopicSlotWeek}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Week" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: 20 }, (_, i) => i + 1).map(
+                              (w) => (
+                                <SelectItem key={w} value={String(w)}>
+                                  Week {w}
+                                </SelectItem>
+                              ),
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Academic Year</Label>
+                      <Input
+                        placeholder="e.g., 2025/2026"
+                        value={subtopicAcademicYear}
+                        onChange={(e) =>
+                          setSubtopicAcademicYear(e.target.value)
+                        }
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button
@@ -945,7 +991,8 @@ const ModulesManagement = () => {
             >
               Cancel
             </Button>
-            <Button onClick={handleSaveSubtopic}>
+            <Button onClick={handleSaveSubtopic} disabled={saving}>
+              {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               {editingSubtopic ? "Update Subtopic" : "Add Subtopic"}
             </Button>
           </DialogFooter>
@@ -1074,8 +1121,19 @@ const ModulesManagement = () => {
 
         {/* Semesters */}
         <div className="space-y-8">
-          {renderSemesterGroup(1, semester1Modules)}
-          {renderSemesterGroup(2, semester2Modules)}
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              <span className="ml-2 text-sm text-muted-foreground">
+                Loading modules...
+              </span>
+            </div>
+          ) : (
+            <>
+              {renderSemesterGroup(1, semester1Modules)}
+              {renderSemesterGroup(2, semester2Modules)}
+            </>
+          )}
         </div>
       </div>
     </>

@@ -48,6 +48,8 @@ interface SessionCardProps {
   onGenerateQrCode?: (session: AttendanceSession) => void;
   onCheckout?: (session: AttendanceSession) => void;
   user: User | null;
+  isStarting?: boolean;
+  isEnding?: boolean;
   isTogglingMode?: boolean;
   isDeleting?: boolean;
   isGeneratingQrCode?: boolean;
@@ -86,6 +88,8 @@ export const SessionCard = ({
   onGenerateQrCode,
   onCheckout,
   user,
+  isStarting = false,
+  isEnding = false,
   isTogglingMode = false,
   isDeleting = false,
   isGeneratingQrCode = false,
@@ -94,6 +98,9 @@ export const SessionCard = ({
   const [isCheckedOut, setIsCheckedOut] = useState(() =>
     isSessionCheckedOut(session.id),
   );
+
+  // Dev mode flag — in dev, allow starting even ended sessions
+  const isDev = import.meta.env.DEV;
 
   // Check if past end time
   const now = new Date();
@@ -293,20 +300,28 @@ export const SessionCard = ({
 
       {/* Actions */}
       <div className="flex gap-2 flex-wrap">
-        {/* Scheduled timetable session - only REP can start session */}
-        {session.status === "scheduled" &&
-          session.id.startsWith("timetable-") &&
-          isRep && (
-            <Button
-              className="flex-1"
-              variant="gradient"
-              size="sm"
-              onClick={() => onStart?.(session)}
-            >
+        {/* Timetable session - REP can start session */}
+        {/* Dev mode: show Start for any status; Prod: only scheduled */}
+        {(isDev
+          ? session.id.startsWith("timetable-") && isRep
+          : session.status === "scheduled" &&
+            session.id.startsWith("timetable-") &&
+            isRep) && (
+          <Button
+            className="flex-1"
+            variant="gradient"
+            size="sm"
+            onClick={() => onStart?.(session)}
+            disabled={isStarting}
+          >
+            {isStarting ? (
+              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
               <Play className="w-4 h-4 mr-2" />
-              Start Session
-            </Button>
-          )}
+            )}
+            {isStarting ? "Starting..." : "Start Session"}
+          </Button>
+        )}
 
         {/* Active session past end time - show Checkout for REP/LECTURER */}
         {session.status === "active" &&
@@ -354,9 +369,14 @@ export const SessionCard = ({
               variant="outline"
               size="sm"
               onClick={() => onEnd?.(session)}
+              disabled={isEnding}
             >
-              <Pause className="w-4 h-4 mr-2" />
-              End Session
+              {isEnding ? (
+                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Pause className="w-4 h-4 mr-2" />
+              )}
+              {isEnding ? "Ending..." : "End Session"}
             </Button>
           </>
         )}

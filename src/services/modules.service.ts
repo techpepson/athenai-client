@@ -1,60 +1,79 @@
 // ==================== Module Types ====================
 
+import { api, ApiResponse } from "@/apis/api";
+import { UtilServices } from "./utils.services";
+
 export interface ScheduledDay {
-    day: string; // Date string in ISO format (e.g. "2026-02-28") or day name (e.g. "MONDAY")
-    startTime: string; // e.g. "7:30"
-    endTime: string; // e.g. "9:30"
+  id?: string;
+  subtopicId?: string;
+  day: string; // Date string in ISO format (e.g. "2026-02-28") or day name (e.g. "MONDAY")
+  startTime: string; // e.g. "7:30"
+  endTime: string; // e.g. "9:30"
 }
 
 export interface SubTopic {
-    id: string;
-    name: string;
-    lecturerId?: string;
-    lecturerName?: string;
-    weeks?: number; // number of weeks allocated
-    hoursPerWeek?: number; // hours per week (deprecated - kept for backwards compatibility)
-    activityType?: string; // LECTURE, PBL, SDL, TUTORIAL, PRACTICAL, etc.
-    scheduledDays?: ScheduledDay[]; // days and times when this topic is scheduled
+  id: string;
+  name: string;
+  moduleId?: string;
+  lecturerId?: string;
+  lecturerName?: string;
+  weeks?: number; // number of weeks allocated
+  hoursPerWeek?: number; // hours per week (deprecated - kept for backwards compatibility)
+  activityType?: string; // LECTURE, PBL, SDL, TUTORIAL, PRACTICAL, etc.
+  scheduledDays?: ScheduledDay[]; // days and times when this topic is scheduled
+  lecturer?: { id: string; name: string }; // populated relation from backend
 }
 
 export interface Module {
-    id: string;
-    code: string;
-    name: string;
-    credits: number;
-    level: number; // 100, 200, 300, 400, 500, 600
-    semester: number; // 1 or 2
-    subtopics: SubTopic[];
-    order?: number; // order within the semester (modules are sequential)
-    createdAt: string;
-    updatedAt: string;
+  id: string;
+  code: string;
+  name: string;
+  credits: number;
+  level: number; // 100, 200, 300, 400, 500, 600
+  semester: number; // 1 or 2
+  subtopics: SubTopic[];
+  order?: number; // order within the semester (modules are sequential)
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface TimetableSlot {
-    id: string;
-    moduleId: string;
-    subtopicId: string;
-    day: string; // MONDAY, TUESDAY, etc.
-    startTime: string; // e.g. "7:30"
-    endTime: string; // e.g. "9:30"
-    lecturerId?: string;
-    lecturerName?: string;
-    venue?: string;
-    week?: number; // which week in the module this slot belongs to
-    activityType?: string; // LECTURE, PBL, SDL, TUTORIAL, PRACTICAL, etc.
-    colSpan?: number; // how many time columns this slot spans
+  id: string;
+  timetableId?: string;
+  moduleId: string;
+  subtopicId: string;
+  day: string; // MONDAY, TUESDAY, etc.
+  startTime: string; // e.g. "7:30"
+  endTime: string; // e.g. "9:30"
+  lecturerId?: string;
+  lecturerName?: string;
+  venue?: string;
+  week?: number; // which week in the module this slot belongs to
+  activityType?: string; // LECTURE, PBL, SDL, TUTORIAL, PRACTICAL, etc.
+  colSpan?: number; // how many time columns this slot spans
+  subtopic?: SubTopic; // populated relation from backend
+  lecturer?: { id: string; name: string }; // populated relation from backend
 }
 
 export interface ModuleTimetable {
-    id: string;
-    moduleId: string;
-    level: number;
-    semester: number;
-    academicYear: string;
-    totalWeeks: number;
-    startDate?: string;
-    endDate?: string;
-    slots: TimetableSlot[];
+  id: string;
+  moduleId: string;
+  level: number;
+  semester: number;
+  academicYear: string;
+  totalWeeks: number;
+  startDate?: string;
+  endDate?: string;
+  slots: TimetableSlot[];
+  module?: Module; // populated relation from backend
+}
+
+// ==================== Backend response wrappers ====================
+
+export interface BackendResponse<T> {
+  success: boolean;
+  data: T;
+  message?: string;
 }
 
 // ==================== Constants ====================
@@ -62,260 +81,647 @@ export interface ModuleTimetable {
 export const LEVELS = [100, 200, 300, 400, 500, 600];
 export const SEMESTERS = [1, 2];
 export const DAYS_OF_WEEK = [
-    "Monday",
-    "Tuesday",
-    "Wednesday",
-    "Thursday",
-    "Friday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
 ];
 export const TIME_SLOTS = [
-    "07:00",
-    "08:00",
-    "09:00",
-    "10:00",
-    "11:00",
-    "12:00",
-    "13:00",
-    "14:00",
-    "15:00",
-    "16:00",
-    "17:00",
+  "07:00",
+  "07:30",
+  "08:00",
+  "08:30",
+  "09:00",
+  "09:30",
+  "10:00",
+  "10:30",
+  "11:00",
+  "11:30",
+  "12:00",
+  "12:30",
+  "13:00",
+  "13:30",
+  "14:00",
+  "14:30",
+  "15:00",
+  "15:30",
+  "16:00",
+  "16:30",
+  "17:00",
+  "17:30",
+  "18:00",
+  "18:30",
+  "19:00",
+  "19:30",
+  "20:00",
 ];
 
-const MODULES_STORAGE_KEY = "college_modules";
-const TIMETABLES_STORAGE_KEY = "college_timetables";
+// ==================== Time Display Helper ====================
 
-// ==================== Utility ====================
+/**
+ * Format a time string for display with AM/PM.
+ * Handles both 12-hour (e.g. "1:30" = PM) and 24-hour (e.g. "19:30") formats.
+ */
+export const formatTimeDisplay = (time: string): string => {
+  const [h, m] = time.split(":").map(Number);
+  const mins = String(m).padStart(2, "0");
+  if (h >= 13) return `${h - 12}:${mins} PM`;
+  if (h === 12) return `12:${mins} PM`;
+  if (h >= 7) return `${h}:${mins} AM`;
+  return `${h}:${mins} PM`; // 1-6 assumed PM
+};
 
-const generateId = (): string =>
-    `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+/**
+ * Convert a time string ("7:30", "1:30", "19:00") to total minutes since midnight.
+ * Handles the mixed 12h/24h format used in the timetable grid:
+ *  - 7-12  → AM (7:30 = 450, 12:30 = 750)
+ *  - 1-6   → PM (1:30 = 810, 6:30 = 1110)
+ *  - 13-23 → 24h (19:00 = 1140, 20:00 = 1200)
+ */
+export const timeToMinutes = (time: string): number => {
+  const [h, m] = time.split(":").map(Number);
+  if (h >= 13) return h * 60 + m; // 24-hour (19:00 etc.)
+  if (h >= 7) return h * 60 + m; // AM (7:30 – 12:30)
+  return (h + 12) * 60 + m; // PM (1:00 – 6:59)
+};
 
 // ==================== Modules Service ====================
 
 class ModulesService {
-    // --- Modules CRUD ---
+  private readonly basePath = "/activities";
+  private utilService = new UtilServices();
 
-    getModules(): Module[] {
-        try {
-            const stored = localStorage.getItem(MODULES_STORAGE_KEY);
-            return stored ? JSON.parse(stored) : [];
-        } catch {
-            return [];
-        }
+  private async getToken(): Promise<string | null> {
+    return this.utilService.getTokenFromLocalStorage();
+  }
+
+  /**
+   * Normalize a subtopic from the backend to match the frontend interface.
+   * The backend may return `lecturer` as a relation; we flatten it to lecturerName.
+   */
+  private normalizeSubtopic(st: SubTopic): SubTopic {
+    return {
+      ...st,
+      lecturerName: st.lecturerName || st.lecturer?.name,
+      lecturerId: st.lecturerId || st.lecturer?.id,
+    };
+  }
+
+  /**
+   * Normalize a module from the backend.
+   */
+  private normalizeModule(mod: Module): Module {
+    return {
+      ...mod,
+      subtopics: (mod.subtopics || []).map((st) => this.normalizeSubtopic(st)),
+    };
+  }
+
+  /**
+   * Normalize a timetable slot from the backend.
+   */
+  private normalizeSlot(slot: TimetableSlot): TimetableSlot {
+    return {
+      ...slot,
+      lecturerName: slot.lecturerName || slot.lecturer?.name,
+      lecturerId: slot.lecturerId || slot.lecturer?.id,
+    };
+  }
+
+  /**
+   * Normalize a timetable from the backend.
+   */
+  private normalizeTimetable(tt: ModuleTimetable): ModuleTimetable {
+    return {
+      ...tt,
+      slots: (tt.slots || []).map((s) => this.normalizeSlot(s)),
+    };
+  }
+
+  // --- Modules CRUD ---
+
+  /**
+   * Get all modules, optionally filtered by level and semester.
+   * GET /activities/modules?level=&semester=
+   */
+  async getModules(
+    level?: number,
+    semester?: number,
+  ): Promise<ApiResponse<BackendResponse<Module[]>>> {
+    const token = await this.getToken();
+    const params: Record<string, string | number | boolean> = {};
+    if (level !== undefined) params.level = level;
+    if (semester !== undefined) params.semester = semester;
+
+    const response = await api.get<BackendResponse<Module[]>>(
+      `${this.basePath}/modules`,
+      token || undefined,
+      { params },
+    );
+
+    // Normalize modules
+    if (response.success && response.data?.data) {
+      response.data.data = response.data.data.map((m) =>
+        this.normalizeModule(m),
+      );
     }
 
-    getModulesByLevel(level: number): Module[] {
-        return this.getModules().filter((m) => m.level === level);
+    return response;
+  }
+
+  /**
+   * Get modules filtered by level.
+   * GET /activities/modules?level=
+   */
+  async getModulesByLevel(
+    level: number,
+  ): Promise<ApiResponse<BackendResponse<Module[]>>> {
+    return this.getModules(level);
+  }
+
+  /**
+   * Get modules filtered by level and semester.
+   * GET /activities/modules?level=&semester=
+   */
+  async getModulesByLevelAndSemester(
+    level: number,
+    semester: number,
+  ): Promise<ApiResponse<BackendResponse<Module[]>>> {
+    return this.getModules(level, semester);
+  }
+
+  /**
+   * Get a single module by ID.
+   * GET /activities/modules/:id
+   */
+  async getModuleById(
+    id: string,
+  ): Promise<ApiResponse<BackendResponse<Module>>> {
+    const token = await this.getToken();
+    const response = await api.get<BackendResponse<Module>>(
+      `${this.basePath}/modules/${id}`,
+      token || undefined,
+    );
+
+    if (response.success && response.data?.data) {
+      response.data.data = this.normalizeModule(response.data.data);
     }
 
-    getModulesByLevelAndSemester(level: number, semester: number): Module[] {
-        return this.getModules()
-            .filter((m) => m.level === level && m.semester === semester)
-            .sort((a, b) => (a.order || 0) - (b.order || 0));
+    return response;
+  }
+
+  /**
+   * Create a new module.
+   * POST /activities/create-modules
+   */
+  async addModule(module: {
+    code: string;
+    name: string;
+    credits: number;
+    level: number;
+    semester: number;
+    order?: number;
+  }): Promise<ApiResponse<BackendResponse<Module>>> {
+    const token = await this.getToken();
+    const response = await api.post<BackendResponse<Module>>(
+      `${this.basePath}/create-modules`,
+      module,
+      token || undefined,
+    );
+
+    if (response.success && response.data?.data) {
+      response.data.data = this.normalizeModule(response.data.data);
     }
 
-    getModuleById(id: string): Module | undefined {
-        return this.getModules().find((m) => m.id === id);
+    return response;
+  }
+
+  /**
+   * Update a module.
+   * PATCH /activities/update-modules/:id
+   */
+  async updateModule(
+    id: string,
+    updates: Partial<{
+      code: string;
+      name: string;
+      credits: number;
+      level: number;
+      semester: number;
+      order: number;
+    }>,
+  ): Promise<ApiResponse<BackendResponse<Module>>> {
+    const token = await this.getToken();
+    const response = await api.patch<BackendResponse<Module>>(
+      `${this.basePath}/update-modules/${id}`,
+      updates,
+      token || undefined,
+    );
+
+    if (response.success && response.data?.data) {
+      response.data.data = this.normalizeModule(response.data.data);
     }
 
-    addModule(
-        module: Omit<Module, "id" | "createdAt" | "updatedAt">
-    ): Module {
-        const modules = this.getModules();
-        const newModule: Module = {
-            ...module,
-            id: generateId(),
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-        };
-        modules.push(newModule);
-        localStorage.setItem(MODULES_STORAGE_KEY, JSON.stringify(modules));
-        return newModule;
+    return response;
+  }
+
+  /**
+   * Delete a module.
+   * DELETE /activities/modules/:id
+   */
+  async deleteModule(
+    id: string,
+  ): Promise<ApiResponse<BackendResponse<Module>>> {
+    const token = await this.getToken();
+    return api.delete<BackendResponse<Module>>(
+      `${this.basePath}/modules/${id}`,
+      token || undefined,
+    );
+  }
+
+  // --- Subtopics ---
+
+  /**
+   * Get subtopics for a module.
+   * GET /activities/modules/:moduleId/get-subtopics
+   */
+  async getSubtopics(
+    moduleId: string,
+  ): Promise<ApiResponse<BackendResponse<SubTopic[]>>> {
+    const token = await this.getToken();
+    const response = await api.get<BackendResponse<SubTopic[]>>(
+      `${this.basePath}/modules/${moduleId}/get-subtopics`,
+      token || undefined,
+    );
+
+    if (response.success && response.data?.data) {
+      response.data.data = response.data.data.map((st) =>
+        this.normalizeSubtopic(st),
+      );
     }
 
-    updateModule(
-        id: string,
-        updates: Partial<Omit<Module, "id" | "createdAt">>
-    ): Module | null {
-        const modules = this.getModules();
-        const index = modules.findIndex((m) => m.id === id);
-        if (index === -1) return null;
+    return response;
+  }
 
-        modules[index] = {
-            ...modules[index],
-            ...updates,
-            updatedAt: new Date().toISOString(),
-        };
-        localStorage.setItem(MODULES_STORAGE_KEY, JSON.stringify(modules));
-        return modules[index];
+  /**
+   * Create a subtopic for a module.
+   * POST /activities/modules/:moduleId/create-subtopic
+   */
+  async addSubtopic(
+    moduleId: string,
+    subtopic: {
+      name: string;
+      lecturerId?: string;
+      weeks?: number;
+      hoursPerWeek?: number;
+      // Auto-create timetable slot fields (backend creates slot when day+startTime+endTime provided)
+      day?: string;
+      startTime?: string;
+      endTime?: string;
+      activityType?: string;
+      venue?: string;
+      academicYear?: string;
+      slotWeek?: number;
+      colSpan?: number;
+    },
+  ): Promise<ApiResponse<BackendResponse<SubTopic>>> {
+    const token = await this.getToken();
+    const response = await api.post<BackendResponse<SubTopic>>(
+      `${this.basePath}/modules/${moduleId}/create-subtopic`,
+      subtopic,
+      token || undefined,
+    );
+
+    if (response.success && response.data?.data) {
+      // Backend returns { subtopic, timetableSlot? } — extract the subtopic
+      const rawData = response.data.data as any;
+      const subtopic = rawData.subtopic || rawData;
+      response.data.data = this.normalizeSubtopic(subtopic);
     }
 
-    deleteModule(id: string): boolean {
-        const modules = this.getModules();
-        const filtered = modules.filter((m) => m.id !== id);
-        if (filtered.length === modules.length) return false;
-        localStorage.setItem(MODULES_STORAGE_KEY, JSON.stringify(filtered));
-        // Also remove associated timetables
-        const timetables = this.getTimetables().filter((t) => t.moduleId !== id);
-        localStorage.setItem(TIMETABLES_STORAGE_KEY, JSON.stringify(timetables));
-        return true;
+    return response;
+  }
+
+  /**
+   * Update a subtopic.
+   * PATCH /activities/modules/:moduleId/update-subtopic/:id
+   */
+  async updateSubtopic(
+    moduleId: string,
+    subtopicId: string,
+    updates: Partial<{
+      name: string;
+      lecturerId: string;
+      weeks: number;
+      hoursPerWeek: number;
+      order: number;
+    }>,
+  ): Promise<ApiResponse<BackendResponse<SubTopic>>> {
+    const token = await this.getToken();
+    const response = await api.patch<BackendResponse<SubTopic>>(
+      `${this.basePath}/modules/${moduleId}/update-subtopic/${subtopicId}`,
+      updates,
+      token || undefined,
+    );
+
+    if (response.success && response.data?.data) {
+      response.data.data = this.normalizeSubtopic(response.data.data);
     }
 
-    // --- Subtopics ---
+    return response;
+  }
 
-    addSubtopic(moduleId: string, subtopic: Omit<SubTopic, "id">): SubTopic | null {
-        const modules = this.getModules();
-        const index = modules.findIndex((m) => m.id === moduleId);
-        if (index === -1) return null;
+  /**
+   * Delete a subtopic.
+   * DELETE /activities/modules/:moduleId/subtopics/:id
+   */
+  async removeSubtopic(
+    moduleId: string,
+    subtopicId: string,
+  ): Promise<ApiResponse<BackendResponse<SubTopic>>> {
+    const token = await this.getToken();
+    return api.delete<BackendResponse<SubTopic>>(
+      `${this.basePath}/modules/${moduleId}/subtopics/${subtopicId}`,
+      token || undefined,
+    );
+  }
 
-        const newSubtopic: SubTopic = {
-            ...subtopic,
-            id: generateId(),
-        };
-        modules[index].subtopics.push(newSubtopic);
-        modules[index].updatedAt = new Date().toISOString();
-        localStorage.setItem(MODULES_STORAGE_KEY, JSON.stringify(modules));
-        return newSubtopic;
+  // --- Timetable CRUD ---
+
+  /**
+   * Get timetables, optionally filtered by level, semester, and academicYear.
+   * GET /activities/timetables?level=&semester=&academicYear=
+   */
+  async getTimetables(
+    level?: number,
+    semester?: number,
+    academicYear?: string,
+  ): Promise<ApiResponse<BackendResponse<ModuleTimetable[]>>> {
+    const token = await this.getToken();
+    const params: Record<string, string | number | boolean> = {};
+    if (level !== undefined) params.level = level;
+    if (semester !== undefined) params.semester = semester;
+    if (academicYear) params.academicYear = academicYear;
+
+    const response = await api.get<BackendResponse<ModuleTimetable[]>>(
+      `${this.basePath}/timetables`,
+      token || undefined,
+      { params },
+    );
+
+    if (response.success && response.data?.data) {
+      response.data.data = response.data.data.map((tt) =>
+        this.normalizeTimetable(tt),
+      );
     }
 
-    updateSubtopic(
-        moduleId: string,
-        subtopicId: string,
-        updates: Partial<Omit<SubTopic, "id">>
-    ): boolean {
-        const modules = this.getModules();
-        const modIndex = modules.findIndex((m) => m.id === moduleId);
-        if (modIndex === -1) return false;
+    return response;
+  }
 
-        const subIndex = modules[modIndex].subtopics.findIndex(
-            (s) => s.id === subtopicId
-        );
-        if (subIndex === -1) return false;
+  /**
+   * Get a single timetable by ID.
+   * GET /activities/timetables/:id
+   */
+  async getTimetableById(
+    id: string,
+  ): Promise<ApiResponse<BackendResponse<ModuleTimetable>>> {
+    const token = await this.getToken();
+    const response = await api.get<BackendResponse<ModuleTimetable>>(
+      `${this.basePath}/timetables/${id}`,
+      token || undefined,
+    );
 
-        modules[modIndex].subtopics[subIndex] = {
-            ...modules[modIndex].subtopics[subIndex],
-            ...updates,
-        };
-        modules[modIndex].updatedAt = new Date().toISOString();
-        localStorage.setItem(MODULES_STORAGE_KEY, JSON.stringify(modules));
-        return true;
+    if (response.success && response.data?.data) {
+      response.data.data = this.normalizeTimetable(response.data.data);
     }
 
-    removeSubtopic(moduleId: string, subtopicId: string): boolean {
-        const modules = this.getModules();
-        const modIndex = modules.findIndex((m) => m.id === moduleId);
-        if (modIndex === -1) return false;
+    return response;
+  }
 
-        modules[modIndex].subtopics = modules[modIndex].subtopics.filter(
-            (s) => s.id !== subtopicId
-        );
-        modules[modIndex].updatedAt = new Date().toISOString();
-        localStorage.setItem(MODULES_STORAGE_KEY, JSON.stringify(modules));
-        return true;
+  /**
+   * Get the timetable for a specific module.
+   * GET /activities/modules/:moduleId/timetable?academicYear=
+   */
+  async getTimetableForModule(
+    moduleId: string,
+    academicYear?: string,
+  ): Promise<ApiResponse<BackendResponse<ModuleTimetable>>> {
+    const token = await this.getToken();
+    const params: Record<string, string | number | boolean> = {};
+    if (academicYear) params.academicYear = academicYear;
+
+    const response = await api.get<BackendResponse<ModuleTimetable>>(
+      `${this.basePath}/modules/${moduleId}/timetable`,
+      token || undefined,
+      { params },
+    );
+
+    if (response.success && response.data?.data) {
+      response.data.data = this.normalizeTimetable(response.data.data);
     }
 
-    // --- Timetable CRUD ---
+    return response;
+  }
 
-    getTimetables(): ModuleTimetable[] {
-        try {
-            const stored = localStorage.getItem(TIMETABLES_STORAGE_KEY);
-            return stored ? JSON.parse(stored) : [];
-        } catch {
-            return [];
-        }
+  /**
+   * Create a new timetable (or upsert via backend).
+   * POST /activities/create-timetable
+   */
+  async createTimetable(timetable: {
+    moduleId: string;
+    level: number;
+    semester: number;
+    academicYear: string;
+    totalWeeks: number;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<ApiResponse<BackendResponse<ModuleTimetable>>> {
+    const token = await this.getToken();
+    const response = await api.post<BackendResponse<ModuleTimetable>>(
+      `${this.basePath}/create-timetable`,
+      timetable,
+      token || undefined,
+    );
+
+    if (response.success && response.data?.data) {
+      response.data.data = this.normalizeTimetable(response.data.data);
     }
 
-    getTimetableForModule(moduleId: string): ModuleTimetable | undefined {
-        return this.getTimetables().find((t) => t.moduleId === moduleId);
+    return response;
+  }
+
+  /**
+   * Update an existing timetable.
+   * PATCH /activities/update-timetable/:id
+   */
+  async updateTimetable(
+    id: string,
+    updates: Partial<{
+      academicYear: string;
+      totalWeeks: number;
+      startDate: string;
+      endDate: string;
+    }>,
+  ): Promise<ApiResponse<BackendResponse<ModuleTimetable>>> {
+    const token = await this.getToken();
+    const response = await api.patch<BackendResponse<ModuleTimetable>>(
+      `${this.basePath}/update-timetable/${id}`,
+      updates,
+      token || undefined,
+    );
+
+    if (response.success && response.data?.data) {
+      response.data.data = this.normalizeTimetable(response.data.data);
     }
 
-    getTimetablesForLevelSemester(
-        level: number,
-        semester: number
-    ): ModuleTimetable[] {
-        return this.getTimetables().filter(
-            (t) => t.level === level && t.semester === semester
-        );
+    return response;
+  }
+
+  /**
+   * Delete a timetable.
+   * DELETE /activities/timetables/:id
+   */
+  async deleteTimetable(
+    id: string,
+  ): Promise<ApiResponse<BackendResponse<ModuleTimetable>>> {
+    const token = await this.getToken();
+    return api.delete<BackendResponse<ModuleTimetable>>(
+      `${this.basePath}/timetables/${id}`,
+      token || undefined,
+    );
+  }
+
+  // --- Timetable Slots ---
+
+  /**
+   * Get slots for a timetable, optionally filtered by week.
+   * GET /activities/timetables/:timetableId/slots?week=
+   */
+  async getTimetableSlots(
+    timetableId: string,
+    week?: number,
+  ): Promise<ApiResponse<BackendResponse<TimetableSlot[]>>> {
+    const token = await this.getToken();
+    const params: Record<string, string | number | boolean> = {};
+    if (week !== undefined) params.week = week;
+
+    const response = await api.get<BackendResponse<TimetableSlot[]>>(
+      `${this.basePath}/timetables/${timetableId}/slots`,
+      token || undefined,
+      { params },
+    );
+
+    if (response.success && response.data?.data) {
+      response.data.data = response.data.data.map((s) => this.normalizeSlot(s));
     }
 
-    saveTimetable(
-        timetable: Omit<ModuleTimetable, "id"> & { id?: string }
-    ): ModuleTimetable {
-        const timetables = this.getTimetables();
-        const existingIndex = timetable.id
-            ? timetables.findIndex((t) => t.id === timetable.id)
-            : timetables.findIndex((t) => t.moduleId === timetable.moduleId);
+    return response;
+  }
 
-        const saved: ModuleTimetable = {
-            ...timetable,
-            id: timetable.id || generateId(),
-        };
+  /**
+   * Add a slot to a timetable.
+   * POST /activities/timetables/:timetableId/slots
+   */
+  async addTimetableSlot(
+    timetableId: string,
+    slot: {
+      moduleId: string;
+      subtopicId: string;
+      day: string;
+      startTime: string;
+      endTime: string;
+      lecturerId?: string;
+      venue?: string;
+      week?: number;
+      activityType?: string;
+      colSpan?: number;
+    },
+  ): Promise<ApiResponse<BackendResponse<TimetableSlot>>> {
+    const token = await this.getToken();
+    const response = await api.post<BackendResponse<TimetableSlot>>(
+      `${this.basePath}/timetables/${timetableId}/slots`,
+      slot,
+      token || undefined,
+    );
 
-        if (existingIndex !== -1) {
-            timetables[existingIndex] = saved;
-        } else {
-            timetables.push(saved);
-        }
-        localStorage.setItem(TIMETABLES_STORAGE_KEY, JSON.stringify(timetables));
-        return saved;
+    if (response.success && response.data?.data) {
+      response.data.data = this.normalizeSlot(response.data.data);
     }
 
-    addTimetableSlot(
-        timetableId: string,
-        slot: Omit<TimetableSlot, "id">
-    ): TimetableSlot | null {
-        const timetables = this.getTimetables();
-        const index = timetables.findIndex((t) => t.id === timetableId);
-        if (index === -1) return null;
+    return response;
+  }
 
-        const newSlot: TimetableSlot = {
-            ...slot,
-            id: generateId(),
-        };
-        timetables[index].slots.push(newSlot);
-        localStorage.setItem(TIMETABLES_STORAGE_KEY, JSON.stringify(timetables));
-        return newSlot;
+  /**
+   * Update a timetable slot.
+   * PATCH /activities/timetables/:timetableId/slots/:id
+   */
+  async updateTimetableSlot(
+    timetableId: string,
+    slotId: string,
+    updates: Partial<{
+      day: string;
+      startTime: string;
+      endTime: string;
+      subtopicId: string;
+      moduleId: string;
+      lecturerId: string;
+      venue: string;
+      week: number;
+      activityType: string;
+      colSpan: number;
+    }>,
+  ): Promise<ApiResponse<BackendResponse<TimetableSlot>>> {
+    const token = await this.getToken();
+    const response = await api.patch<BackendResponse<TimetableSlot>>(
+      `${this.basePath}/timetables/${timetableId}/slots/${slotId}`,
+      updates,
+      token || undefined,
+    );
+
+    if (response.success && response.data?.data) {
+      response.data.data = this.normalizeSlot(response.data.data);
     }
 
-    updateTimetableSlot(
-        timetableId: string,
-        slotId: string,
-        updates: Partial<Omit<TimetableSlot, "id">>
-    ): boolean {
-        const timetables = this.getTimetables();
-        const tIndex = timetables.findIndex((t) => t.id === timetableId);
-        if (tIndex === -1) return false;
+    return response;
+  }
 
-        const sIndex = timetables[tIndex].slots.findIndex((s) => s.id === slotId);
-        if (sIndex === -1) return false;
+  /**
+   * Remove a timetable slot.
+   * DELETE /activities/timetables/:timetableId/slots/:id
+   */
+  async removeTimetableSlot(
+    timetableId: string,
+    slotId: string,
+  ): Promise<ApiResponse<BackendResponse<TimetableSlot>>> {
+    const token = await this.getToken();
+    return api.delete<BackendResponse<TimetableSlot>>(
+      `${this.basePath}/timetables/${timetableId}/slots/${slotId}`,
+      token || undefined,
+    );
+  }
 
-        timetables[tIndex].slots[sIndex] = {
-            ...timetables[tIndex].slots[sIndex],
-            ...updates,
-        };
-        localStorage.setItem(TIMETABLES_STORAGE_KEY, JSON.stringify(timetables));
-        return true;
+  // --- Lecturer Schedule ---
+
+  /**
+   * Get a lecturer's teaching schedule.
+   * GET /activities/lecturers/:lecturerId/schedule
+   */
+  async getLecturerSchedule(
+    lecturerId: string,
+  ): Promise<ApiResponse<BackendResponse<TimetableSlot[]>>> {
+    const token = await this.getToken();
+    const response = await api.get<BackendResponse<TimetableSlot[]>>(
+      `${this.basePath}/lecturers/${lecturerId}/schedule`,
+      token || undefined,
+    );
+
+    if (response.success && response.data?.data) {
+      response.data.data = response.data.data.map((s) => this.normalizeSlot(s));
     }
 
-    removeTimetableSlot(timetableId: string, slotId: string): boolean {
-        const timetables = this.getTimetables();
-        const tIndex = timetables.findIndex((t) => t.id === timetableId);
-        if (tIndex === -1) return false;
-
-        timetables[tIndex].slots = timetables[tIndex].slots.filter(
-            (s) => s.id !== slotId
-        );
-        localStorage.setItem(TIMETABLES_STORAGE_KEY, JSON.stringify(timetables));
-        return true;
-    }
-
-    deleteTimetable(timetableId: string): boolean {
-        const timetables = this.getTimetables();
-        const filtered = timetables.filter((t) => t.id !== timetableId);
-        if (filtered.length === timetables.length) return false;
-        localStorage.setItem(TIMETABLES_STORAGE_KEY, JSON.stringify(filtered));
-        return true;
-    }
+    return response;
+  }
 }
 
 export const modulesService = new ModulesService();

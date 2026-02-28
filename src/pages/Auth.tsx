@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Eye, EyeOff, Fingerprint, Loader2, ArrowLeft } from "lucide-react";
+import { Eye, EyeOff, Fingerprint, Loader2, ArrowLeft, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { StudentForm } from "@/components/auth/StudentForm";
 import { StaffForm } from "@/components/auth/StaffForm";
 import { KioskScanner } from "@/components/ui/kiosk-scanner";
+import { authServices } from "@/services/auth.services";
 import comasLogo from "../../public/logo.jpg";
 
 const Auth = () => {
@@ -23,6 +24,16 @@ const Auth = () => {
     | "staff-registration"
     | "forgot-password"
   >("login");
+
+  // Forgot password flow state
+  const [resetStep, setResetStep] = useState<1 | 2 | 3>(1);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetToken, setResetToken] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   const { user, login } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -168,7 +179,7 @@ const Auth = () => {
               </form>
             </>
           ) : view === "forgot-password" ? (
-            /* Forgot Password View */
+            /* Forgot Password - Multi-step Flow */
             <div className="space-y-8 animate-fade-in">
               <div className="text-center space-y-2">
                 <div className="flex justify-center mb-6">
@@ -179,74 +190,384 @@ const Auth = () => {
                   />
                 </div>
                 <h1 className="text-3xl font-bold tracking-tight text-foreground">
-                  Forgot password?
+                  {resetStep === 1
+                    ? "Forgot password?"
+                    : resetStep === 2
+                      ? "Enter reset code"
+                      : "Set new password"}
                 </h1>
                 <p className="text-muted-foreground">
-                  No worries, we'll send you reset instructions.
+                  {resetStep === 1
+                    ? "Enter your email to receive a reset code via SMS."
+                    : resetStep === 2
+                      ? "Enter the 6-digit code sent to your phone."
+                      : "Choose a new password for your account."}
                 </p>
               </div>
 
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  setIsLoading(true);
-                  // Simulate API call
-                  setTimeout(() => {
-                    setIsLoading(false);
-                    toast({
-                      title: "Check your email",
-                      description:
-                        "We've sent a password reset link to your email.",
-                    });
-                    setView("login");
-                  }, 1500);
-                }}
-                className="space-y-6"
-              >
-                <div className="space-y-2">
-                  <Label
-                    htmlFor="reset-email"
-                    className="text-base font-medium"
-                  >
-                    Email
-                  </Label>
-                  <Input
-                    id="reset-email"
-                    type="email"
-                    placeholder="Enter your email address"
-                    required
-                    disabled={isLoading}
-                    className="h-12 rounded-xl border-muted-foreground/20 focus-visible:ring-primary/30"
+              {/* Step indicators */}
+              <div className="flex items-center justify-center gap-2">
+                {[1, 2, 3].map((step) => (
+                  <div
+                    key={step}
+                    className={`h-2 rounded-full transition-all duration-300 ${
+                      step === resetStep
+                        ? "w-8 bg-primary"
+                        : step < resetStep
+                          ? "w-8 bg-primary/50"
+                          : "w-8 bg-muted-foreground/20"
+                    }`}
                   />
-                </div>
+                ))}
+              </div>
 
-                <Button
-                  type="submit"
-                  size="lg"
-                  className="w-full h-12 rounded-xl text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-300"
-                  disabled={isLoading}
+              {/* Step 1: Enter email */}
+              {resetStep === 1 && (
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    setIsLoading(true);
+                    const response =
+                      await authServices.forgotPassword(resetEmail);
+                    setIsLoading(false);
+
+                    if (response.success) {
+                      toast({
+                        title: "Reset code sent",
+                        description:
+                          response.data?.message ||
+                          "A reset code has been sent to your registered phone number.",
+                      });
+                      setResetStep(2);
+                    } else {
+                      toast({
+                        title: "Request failed",
+                        description:
+                          response.error ||
+                          "Failed to send reset code. Please try again.",
+                        variant: "destructive",
+                      });
+                    }
+                  }}
+                  className="space-y-6"
                 >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />{" "}
-                      Sending...
-                    </>
-                  ) : (
-                    "Send Reset Link"
-                  )}
-                </Button>
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="reset-email"
+                      className="text-base font-medium"
+                    >
+                      Email
+                    </Label>
+                    <Input
+                      id="reset-email"
+                      type="email"
+                      placeholder="Enter your email address"
+                      value={resetEmail}
+                      onChange={(e) => setResetEmail(e.target.value)}
+                      required
+                      disabled={isLoading}
+                      className="h-12 rounded-xl border-muted-foreground/20 focus-visible:ring-primary/30"
+                    />
+                  </div>
 
-                <div className="text-center pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setView("login")}
-                    className="text-sm text-muted-foreground hover:text-foreground flex items-center justify-center gap-2 mx-auto font-medium"
+                  <Button
+                    type="submit"
+                    size="lg"
+                    className="w-full h-12 rounded-xl text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-300"
+                    disabled={isLoading}
                   >
-                    <ArrowLeft className="w-4 h-4" />
-                    Back to login
-                  </button>
-                </div>
-              </form>
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />{" "}
+                        Sending...
+                      </>
+                    ) : (
+                      "Send Reset Code"
+                    )}
+                  </Button>
+
+                  <div className="text-center pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setView("login");
+                        setResetStep(1);
+                        setResetEmail("");
+                        setResetToken("");
+                        setNewPassword("");
+                        setConfirmPassword("");
+                      }}
+                      className="text-sm text-muted-foreground hover:text-foreground flex items-center justify-center gap-2 mx-auto font-medium"
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                      Back to login
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* Step 2: Enter reset token */}
+              {resetStep === 2 && (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (resetToken.length !== 6) {
+                      toast({
+                        title: "Invalid code",
+                        description: "Please enter the 6-digit code.",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+                    setResetStep(3);
+                  }}
+                  className="space-y-6"
+                >
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="reset-token"
+                      className="text-base font-medium"
+                    >
+                      Reset Code
+                    </Label>
+                    <Input
+                      id="reset-token"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]{6}"
+                      maxLength={6}
+                      placeholder="Enter 6-digit code"
+                      value={resetToken}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, "");
+                        if (val.length <= 6) setResetToken(val);
+                      }}
+                      required
+                      disabled={isLoading}
+                      className="h-12 rounded-xl border-muted-foreground/20 focus-visible:ring-primary/30 text-center text-2xl tracking-[0.5em] font-mono"
+                    />
+                    <p className="text-xs text-muted-foreground text-center">
+                      Code was sent to your registered phone number
+                    </p>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    size="lg"
+                    className="w-full h-12 rounded-xl text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-300"
+                    disabled={resetToken.length !== 6}
+                  >
+                    Continue
+                  </Button>
+
+                  <div className="flex items-center justify-between pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setResetStep(1);
+                        setResetToken("");
+                      }}
+                      className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-2 font-medium"
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                      Back
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setIsLoading(true);
+                        const response =
+                          await authServices.forgotPassword(resetEmail);
+                        setIsLoading(false);
+
+                        if (response.success) {
+                          toast({
+                            title: "Code resent",
+                            description:
+                              "A new reset code has been sent to your phone.",
+                          });
+                        } else {
+                          toast({
+                            title: "Resend failed",
+                            description:
+                              response.error || "Failed to resend code.",
+                            variant: "destructive",
+                          });
+                        }
+                      }}
+                      disabled={isLoading}
+                      className="text-sm text-primary hover:underline font-medium"
+                    >
+                      {isLoading ? "Resending..." : "Resend code"}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* Step 3: Set new password */}
+              {resetStep === 3 && (
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+
+                    if (newPassword.length < 6) {
+                      toast({
+                        title: "Password too short",
+                        description:
+                          "Password must be at least 6 characters long.",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+
+                    if (newPassword !== confirmPassword) {
+                      toast({
+                        title: "Passwords don't match",
+                        description:
+                          "Please make sure both passwords are the same.",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+
+                    setIsLoading(true);
+                    const response =
+                      await authServices.resetPasswordWithToken({
+                        email: resetEmail,
+                        token: resetToken,
+                        newPassword,
+                      });
+                    setIsLoading(false);
+
+                    if (response.success) {
+                      toast({
+                        title: "Password reset successful",
+                        description:
+                          response.data?.message ||
+                          "You can now log in with your new password.",
+                      });
+                      // Reset all forgot-password state and go to login
+                      setView("login");
+                      setResetStep(1);
+                      setResetEmail("");
+                      setResetToken("");
+                      setNewPassword("");
+                      setConfirmPassword("");
+                    } else {
+                      toast({
+                        title: "Reset failed",
+                        description:
+                          response.error ||
+                          "Failed to reset password. The code may be invalid or expired.",
+                        variant: "destructive",
+                      });
+                    }
+                  }}
+                  className="space-y-6"
+                >
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="new-password"
+                      className="text-base font-medium"
+                    >
+                      New Password
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        id="new-password"
+                        type={showNewPassword ? "text" : "password"}
+                        placeholder="Enter new password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        required
+                        disabled={isLoading}
+                        className="h-12 rounded-xl border-muted-foreground/20 focus-visible:ring-primary/30 pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {showNewPassword ? (
+                          <EyeOff className="w-5 h-5" />
+                        ) : (
+                          <Eye className="w-5 h-5" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="confirm-password"
+                      className="text-base font-medium"
+                    >
+                      Confirm Password
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        id="confirm-password"
+                        type={showConfirmPassword ? "text" : "password"}
+                        placeholder="Confirm new password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        required
+                        disabled={isLoading}
+                        className="h-12 rounded-xl border-muted-foreground/20 focus-visible:ring-primary/30 pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setShowConfirmPassword(!showConfirmPassword)
+                        }
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {showConfirmPassword ? (
+                          <EyeOff className="w-5 h-5" />
+                        ) : (
+                          <Eye className="w-5 h-5" />
+                        )}
+                      </button>
+                    </div>
+                    {confirmPassword && newPassword !== confirmPassword && (
+                      <p className="text-xs text-destructive">
+                        Passwords do not match
+                      </p>
+                    )}
+                  </div>
+
+                  <Button
+                    type="submit"
+                    size="lg"
+                    className="w-full h-12 rounded-xl text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-300"
+                    disabled={isLoading || !newPassword || !confirmPassword}
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />{" "}
+                        Resetting...
+                      </>
+                    ) : (
+                      "Reset Password"
+                    )}
+                  </Button>
+
+                  <div className="text-center pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setResetStep(2);
+                        setNewPassword("");
+                        setConfirmPassword("");
+                      }}
+                      className="text-sm text-muted-foreground hover:text-foreground flex items-center justify-center gap-2 mx-auto font-medium"
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                      Back
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           ) : (
             /* Student Registration - Form on left panel */

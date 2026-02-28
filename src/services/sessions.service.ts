@@ -28,9 +28,16 @@ export interface CreateSessionPayload {
   mode: SessionMode;
   courseId?: string;
   lecturerId?: string;
+  moduleId?: string;
+  subtopicId?: string;
+  timetableSlotId?: string;
   location?: string;
   startTime: Date | string;
   endTime: Date | string;
+  latitude?: number;
+  longitude?: number;
+  geofenceRadius?: number;
+  week?: number;
 }
 
 export interface UpdateSessionPayload {
@@ -98,6 +105,15 @@ export interface Session {
   location?: string;
   lecturerId?: string;
   courseId?: string;
+  moduleId?: string;
+  subtopicId?: string;
+  timetableSlotId?: string;
+  latitude?: number;
+  longitude?: number;
+  geofenceRadius?: number;
+  attendanceLink?: string;
+  smsSentToLecturer?: boolean;
+  week?: number;
   startTime: Date;
   endTime: Date;
   mode: SessionMode;
@@ -133,11 +149,34 @@ export interface Session {
     };
   };
   attendances?: Attendance[];
+  // Module and subtopic (populated from backend)
+  module?: {
+    id: string;
+    name: string;
+    code: string;
+    level?: number;
+  };
+  subtopic?: {
+    id: string;
+    name: string;
+    lecturerId?: string;
+    lecturerName?: string;
+    lecturer?: {
+      id: string;
+      name: string;
+      email: string;
+    };
+  };
   // Expected attendees count (from course enrollments)
   expectedAttendeesCount?: number;
 }
 
 // Session Service Functions
+
+// Create session response includes extra metadata
+export interface CreateSessionResponse extends Session {
+  studentsSmsCount?: number;
+}
 
 /**
  * Create a new session
@@ -145,7 +184,7 @@ export interface Session {
 export const createSession = async (
   payload: CreateSessionPayload,
   token: string,
-): Promise<ApiResponse<{ success: boolean; data: Session }>> => {
+): Promise<ApiResponse<{ success: boolean; data: CreateSessionResponse }>> => {
   return api.post("/sessions/create", payload, token);
 };
 
@@ -180,18 +219,30 @@ export const getCreatorSessions = async (
 };
 
 /**
+ * Get active sessions where the current user is the assigned lecturer
+ * Falls back to creator-sessions if endpoint not available
+ */
+export const getLecturerSessions = async (
+  token: string,
+): Promise<ApiResponse<{ sessions: Session[] }>> => {
+  return api.get("/sessions/lecturer-sessions", token);
+};
+
+/**
  * Toggle session mode between CHECK_IN and CHECK_OUT
  */
 export const toggleSessionMode = async (
   sessionId: string,
   token: string,
   mail?: string,
-): Promise<ApiResponse<{ success: boolean; message: string }>> => {
+): Promise<
+  ApiResponse<{ success: boolean; message: string; mode?: string }>
+> => {
   const params: Record<string, string> = { sessionId };
   if (mail) {
     params.mail = mail;
   }
-  return api.get("/sessions/toggle-mode", token, { params });
+  return api.patch("/sessions/toggle-mode", {}, token, { params });
 };
 
 /**

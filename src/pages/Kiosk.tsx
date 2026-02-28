@@ -54,6 +54,10 @@ interface SessionInfo {
   endTime: string | Date;
   expectedCount: number;
   presentCount: number;
+  // Geofencing
+  latitude?: number;
+  longitude?: number;
+  geofenceRadius?: number;
 }
 
 const Kiosk = () => {
@@ -84,6 +88,15 @@ const Kiosk = () => {
     adminPhoneNumber: "",
     organizationLogo: null,
   });
+
+  // Geolocation state
+  const [userLocation, setUserLocation] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
+  const [locationStatus, setLocationStatus] = useState<
+    "idle" | "acquiring" | "acquired" | "denied" | "unavailable"
+  >("idle");
 
   // Cooldown between captures (in milliseconds)
   const CAPTURE_COOLDOWN = 4000;
@@ -159,6 +172,9 @@ const Kiosk = () => {
             location: session.location || undefined,
             startTime: session.startTime,
             endTime: session.endTime,
+            latitude: session.latitude ?? undefined,
+            longitude: session.longitude ?? undefined,
+            geofenceRadius: session.geofenceRadius ?? undefined,
             expectedCount:
               session.course?._count?.enrollments ||
               session.course?.enrollments?.length ||
@@ -195,6 +211,41 @@ const Kiosk = () => {
 
     fetchSessionInfo();
   }, [sessionId]);
+
+  // Acquire geolocation when session has geofencing
+  useEffect(() => {
+    if (
+      !sessionInfo ||
+      sessionInfo.latitude == null ||
+      sessionInfo.longitude == null
+    ) {
+      return;
+    }
+
+    setLocationStatus("acquiring");
+
+    if (!navigator.geolocation) {
+      setLocationStatus("unavailable");
+      return;
+    }
+
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        setUserLocation({
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+        });
+        setLocationStatus("acquired");
+      },
+      (err) => {
+        console.error("Geolocation error:", err);
+        setLocationStatus(err.code === 1 ? "denied" : "unavailable");
+      },
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 },
+    );
+
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [sessionInfo]);
 
   // Start camera when session info is loaded
   useEffect(() => {
@@ -276,7 +327,13 @@ const Kiosk = () => {
       setScanState("processing");
 
       try {
-        const response = await markAttendance(sessionId, faceBlob, "kiosk");
+        const response = await markAttendance(
+          sessionId,
+          faceBlob,
+          "kiosk",
+          userLocation?.latitude,
+          userLocation?.longitude,
+        );
 
         if (response.success && response.data) {
           const data = response.data as MarkAttendanceResponse;
@@ -353,7 +410,7 @@ const Kiosk = () => {
         }, 3000);
       }
     },
-    [sessionId],
+    [sessionId, userLocation],
   );
 
   // Face detection loop
@@ -778,6 +835,48 @@ const Kiosk = () => {
                       : "Check Out Mode"}
                   </span>
                 </div>
+                {/* Geofencing status */}
+                {sessionInfo.latitude != null &&
+                  sessionInfo.longitude != null && (
+                    <div className="flex items-center gap-1.5 mt-2 text-xs">
+                      <MapPin
+                        className={cn(
+                          "w-3 h-3",
+                          locationStatus === "acquired"
+                            ? "text-success"
+                            : locationStatus === "denied" ||
+                                locationStatus === "unavailable"
+                              ? "text-destructive"
+                              : "text-muted-foreground",
+                        )}
+                      />
+                      <span
+                        className={cn(
+                          locationStatus === "acquired"
+                            ? "text-success"
+                            : locationStatus === "denied" ||
+                                locationStatus === "unavailable"
+                              ? "text-destructive"
+                              : "text-muted-foreground",
+                        )}
+                      >
+                        {locationStatus === "acquired"
+                          ? "Location verified"
+                          : locationStatus === "acquiring"
+                            ? "Acquiring location..."
+                            : locationStatus === "denied"
+                              ? "Location access denied"
+                              : locationStatus === "unavailable"
+                                ? "Location unavailable"
+                                : "Geofencing enabled"}
+                      </span>
+                      {sessionInfo.geofenceRadius && (
+                        <span className="text-muted-foreground">
+                          ({sessionInfo.geofenceRadius}m radius)
+                        </span>
+                      )}
+                    </div>
+                  )}
               </div>
             )}
 

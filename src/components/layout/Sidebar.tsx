@@ -7,7 +7,6 @@ import {
   Users,
   CalendarClock,
   Camera,
-  BarChart3,
   Settings,
   Bell,
   ChevronLeft,
@@ -102,8 +101,7 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
 
   // Define visibility constants based on user request
   const canSeeDashboard = true; // All roles
-  const canSeeMembers =
-    isSuperAdmin || isAdmin || isLecturer || isCourseRep || isStudent; // Staff not listed for members
+  const canSeeMembers = isSuperAdmin || isAdmin || isCourseRep || isStudent; // Lecturers and Staff not listed for members
   const canSeeSessions = true; // All roles
   const canSeeKiosk = isCourseRep || isSuperAdmin || isAdmin || isStaff; // "course reps... kiosk Mode", assume staff/admins too? User only listed it for CourseRep. Let's stick to request: Course Rep. AND commonly Admins/Staff run sessions.
   // Wait, User request: "course reps - these are prvileges (dashboard ... kiosk Mode ...)"
@@ -121,11 +119,11 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   const canRunSessions =
     isSuperAdmin || isAdmin || isLecturer || isCourseRep || isStaff; // Staff usually can too.
 
-  const canSeeAnalytics = true; // All roles (scoped)
+  const canSeeAnalytics = false; // Analytics page removed — dashboard shows analytics
   const canSeeNotifications = true; // All roles
   const canSeeAdmins = isSuperAdmin || isAdmin; // "admins" listed for Admin
   const canSeeStaffManagement = isSuperAdmin || isAdmin; // "staff mananagment" listed for Admin
-  const canSeeCourseReps = isSuperAdmin || isAdmin || isLecturer; // Listed for Admin, Lecturer. Not Staff.
+  const canSeeCourseReps = isSuperAdmin || isAdmin; // Only admins manage course reps
   const canSeeSettings = true; // All roles
 
   return (
@@ -209,14 +207,7 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
 
           {/* Kiosk mode removed for all roles */}
 
-          {canSeeAnalytics && (
-            <NavItem
-              to={`${rolePrefix}/analytics`}
-              icon={<BarChart3 className="w-5 h-5" />}
-              label="Analytics"
-              collapsed={collapsed}
-            />
-          )}
+          {/* Analytics removed — dashboard shows analytics data */}
 
           {canSeeNotifications && (
             <NavItem
@@ -423,15 +414,7 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
             />
           )}
 
-          {canSeeAnalytics && (
-            <NavItem
-              to={`${rolePrefix}/analytics`}
-              icon={<BarChart3 className="w-5 h-5" />}
-              label="Analytics"
-              collapsed={false}
-              onClick={onClose}
-            />
-          )}
+          {/* Analytics removed — dashboard shows analytics data */}
 
           {canSeeNotifications && (
             <NavItem

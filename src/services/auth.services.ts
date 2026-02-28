@@ -1,5 +1,8 @@
 import { api, ApiResponse } from "@/apis/api";
 import {
+  ChangePasswordPayload,
+  ChangePasswordResponse,
+  ForgotPasswordResponse,
   IRegister,
   LoginPayload,
   LoginResponse,
@@ -7,6 +10,8 @@ import {
   RequestResetCodeResponse,
   ResetPasswordPayload,
   ResetPasswordResponse,
+  ResetPasswordWithTokenPayload,
+  ResetPasswordWithTokenResponse,
   VerifyEmailResponse,
 } from "@/interface/auth.interface";
 
@@ -132,6 +137,88 @@ class AuthServices {
           error instanceof Error
             ? error.message
             : "Failed to request reset code",
+        status: 0,
+        success: false,
+      };
+    }
+  }
+
+  /**
+   * Forgot password (public, no auth required)
+   * POST /auth/forgot-password
+   * Sends a 6-digit reset token to the user's phone via SMS
+   */
+  async forgotPassword(
+    email: string,
+  ): Promise<ApiResponse<ForgotPasswordResponse>> {
+    try {
+      const response = await api.post<ForgotPasswordResponse>(
+        `${this.basePath}/forgot-password`,
+        { email },
+      );
+      return response;
+    } catch (error) {
+      return {
+        data: null,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to send reset token",
+        status: 0,
+        success: false,
+      };
+    }
+  }
+
+  /**
+   * Reset password with token (public, no auth required)
+   * POST /auth/reset-password-with-token
+   * Validates the SMS token and sets a new password
+   */
+  async resetPasswordWithToken(
+    payload: ResetPasswordWithTokenPayload,
+  ): Promise<ApiResponse<ResetPasswordWithTokenResponse>> {
+    try {
+      const response = await api.post<ResetPasswordWithTokenResponse>(
+        `${this.basePath}/reset-password-with-token`,
+        payload,
+      );
+      return response;
+    } catch (error) {
+      return {
+        data: null,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Password reset failed",
+        status: 0,
+        success: false,
+      };
+    }
+  }
+
+  /**
+   * Change password (logged-in user, requires authentication)
+   * POST /auth/change-password
+   */
+  async changePassword(
+    payload: ChangePasswordPayload,
+    token: string,
+  ): Promise<ApiResponse<ChangePasswordResponse>> {
+    try {
+      const response = await api.post<ChangePasswordResponse>(
+        `${this.basePath}/change-password`,
+        payload,
+        token,
+      );
+      return response;
+    } catch (error) {
+      return {
+        data: null,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Password change failed",
         status: 0,
         success: false,
       };

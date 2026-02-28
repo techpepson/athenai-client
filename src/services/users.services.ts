@@ -12,7 +12,7 @@ import {
   CreateAdminPayload,
   CreateAdminResponse,
   FetchStudentsResponse,
-  FetchCourseRepsResponse,
+  GetAllRepsResponse,
   ThresholdsPayload,
   UpdateThresholdsResponse,
   GetUserResponse,
@@ -65,6 +65,50 @@ class UsersServices {
       return {
         data: null,
         error: error instanceof Error ? error.message : "Enrollment failed",
+        status: 0,
+        success: false,
+      };
+    }
+  }
+
+  /**
+   * Enroll face images for a student user (separate from registration)
+   * POST /users/enroll-face
+   * Requires: Auth (ADMIN, SYSTEM_ADMIN, STUDENT)
+   * Supports optional studentId and level parameters
+   */
+  async enrollFace(
+    faceImages: File[],
+    studentId?: string,
+    level?: number,
+  ): Promise<ApiResponse<EnrollUserResponse>> {
+    try {
+      const formData = new FormData();
+      const token = await this.utilService.getTokenFromLocalStorage();
+
+      if (studentId) {
+        formData.append("studentId", studentId);
+      }
+      if (level !== undefined && level !== null) {
+        formData.append("level", String(level));
+      }
+
+      // Append all face images as 'faces'
+      faceImages.forEach((file) => {
+        formData.append("faces", file);
+      });
+
+      const response = await api.upload<EnrollUserResponse>(
+        `${this.basePath}/enroll-face`,
+        formData,
+        token,
+      );
+      return response;
+    } catch (error) {
+      return {
+        data: null,
+        error:
+          error instanceof Error ? error.message : "Face enrollment failed",
         status: 0,
         success: false,
       };
@@ -286,29 +330,26 @@ class UsersServices {
   }
 
   /**
-   * Assign a course representative
-   * GET /users/assign-rep?courseId=xxx&studentId=xxx
-   * Requires: Auth (ADMIN, SYSTEM_ADMIN, LECTURER)
+   * Assign a student as a representative
+   * POST /users/assign-rep?studentId=xxx
+   * Requires: Auth (ADMIN, SYSTEM_ADMIN)
    */
   async assignRep(
-    courseId: string,
     studentId: string,
     token: string,
   ): Promise<ApiResponse<AssignRepResponse>> {
     try {
-      const response = await api.get<AssignRepResponse>(
+      const response = await api.post<AssignRepResponse>(
         `${this.basePath}/assign-rep`,
+        {},
         token,
-        { params: { courseId, studentId } },
+        { params: { studentId } },
       );
       return response;
     } catch (error) {
       return {
         data: null,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to assign course rep",
+        error: error instanceof Error ? error.message : "Failed to assign rep",
         status: 0,
         success: false,
       };
@@ -316,12 +357,11 @@ class UsersServices {
   }
 
   /**
-   * Remove a course representative
-   * DELETE /users/remove/rep?courseId=xxx&studentId=xxx
-   * Requires: Auth (ADMIN, SYSTEM_ADMIN, LECTURER)
+   * Remove a student representative
+   * DELETE /users/remove/rep?studentId=xxx
+   * Requires: Auth (ADMIN, SYSTEM_ADMIN)
    */
-  async removeCourseRep(
-    courseId: string,
+  async removeRep(
     studentId: string,
     token: string,
   ): Promise<ApiResponse<RemoveRepResponse>> {
@@ -329,16 +369,13 @@ class UsersServices {
       const response = await api.delete<RemoveRepResponse>(
         `${this.basePath}/remove/rep`,
         token,
-        { params: { courseId, studentId } },
+        { params: { studentId } },
       );
       return response;
     } catch (error) {
       return {
         data: null,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to remove course rep",
+        error: error instanceof Error ? error.message : "Failed to remove rep",
         status: 0,
         success: false,
       };
@@ -346,17 +383,20 @@ class UsersServices {
   }
 
   /**
-   * Fetch all course representatives with their assigned courses
-   * GET /users/fetch-reps
-   * Requires: Auth (ADMIN, SYSTEM_ADMIN, LECTURER)
+   * Remove a student's rep privilege (demote to regular student)
+   * DELETE /users/remove/rep?studentId=xxx
+   * Requires: Auth (ADMIN, SYSTEM_ADMIN)
+   * @param studentRecordId - The Student record's cuid (Student.id), NOT the matric number
    */
-  async fetchCourseReps(
-    token: string,
-  ): Promise<ApiResponse<FetchCourseRepsResponse>> {
+  async removeRepPrivilege(
+    studentRecordId: string,
+  ): Promise<ApiResponse<RemoveRepResponse>> {
     try {
-      const response = await api.get<FetchCourseRepsResponse>(
-        `${this.basePath}/fetch-reps`,
+      const token = await this.utilService.getTokenFromLocalStorage();
+      const response = await api.delete<RemoveRepResponse>(
+        `${this.basePath}/remove/rep`,
         token,
+        { params: { studentId: studentRecordId } },
       );
       return response;
     } catch (error) {
@@ -365,7 +405,29 @@ class UsersServices {
         error:
           error instanceof Error
             ? error.message
-            : "Failed to fetch course reps",
+            : "Failed to remove rep privilege",
+        status: 0,
+        success: false,
+      };
+    }
+  }
+
+  /**
+   * Fetch all student representatives
+   * GET /users/all-reps
+   * Requires: Auth (ADMIN, SYSTEM_ADMIN, LECTURER, STAFF)
+   */
+  async getAllReps(token: string): Promise<ApiResponse<GetAllRepsResponse>> {
+    try {
+      const response = await api.get<GetAllRepsResponse>(
+        `${this.basePath}/all-reps`,
+        token,
+      );
+      return response;
+    } catch (error) {
+      return {
+        data: null,
+        error: error instanceof Error ? error.message : "Failed to fetch reps",
         status: 0,
         success: false,
       };

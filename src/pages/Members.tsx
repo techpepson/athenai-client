@@ -259,6 +259,7 @@ const Members = () => {
             phone: u.phone || undefined,
             department: undefined,
             studentId: idNumber,
+            studentRecordId: u.student?.id || undefined,
             photoUrl: u.profilePicture || u.imageUrl || undefined,
             isMinor: false,
             createdAt: new Date(u.createdAt),
@@ -482,15 +483,44 @@ const Members = () => {
   const confirmRemovePrivilege = async () => {
     if (!selectedMember) return;
 
-    // TODO: Implement remove level rep privilege via API
-    // For now, show a placeholder message
-    toast({
-      title: "Feature Coming Soon",
-      description:
-        "Level rep privilege removal will be available once the API is integrated.",
-    });
-    setRemovePrivilegeConfirmOpen(false);
-    setSelectedMember(null);
+    if (!selectedMember.studentRecordId) {
+      toast({
+        title: "Error",
+        description:
+          "Cannot find student record ID. The student may not have a proper student profile.",
+        variant: "destructive",
+      });
+      setRemovePrivilegeConfirmOpen(false);
+      return;
+    }
+
+    try {
+      const response = await usersServices.removeRepPrivilege(
+        selectedMember.studentRecordId,
+      );
+      if (response.success) {
+        toast({
+          title: "Privilege Removed",
+          description: `${selectedMember.name} has been demoted to a regular student.`,
+        });
+        loadMembers();
+      } else {
+        toast({
+          title: "Error",
+          description: response.error || "Could not remove rep privilege.",
+          variant: "destructive",
+        });
+      }
+    } catch {
+      toast({
+        title: "Error",
+        description: "Could not remove rep privilege.",
+        variant: "destructive",
+      });
+    } finally {
+      setRemovePrivilegeConfirmOpen(false);
+      setSelectedMember(null);
+    }
   };
 
   const confirmDeleteEntirely = async () => {
