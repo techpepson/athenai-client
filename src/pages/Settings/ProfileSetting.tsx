@@ -18,37 +18,50 @@ import {
   Save,
   BookOpen,
   ScanFace,
-  X,
-  Plus,
   Loader2,
+  GraduationCap,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { Role } from "@/enums/enums";
 import { PhotoCapture } from "@/components/ui/PhotoCapture";
-import { MultiSelect } from "@/components/ui/multi-select";
+// Removed: MultiSelect import no longer needed
 import { FacialRegistration } from "@/components/auth/FacialRegistration";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { usersServices } from "@/services/users.services";
 import { coursesService, Course } from "@/services/courses.services";
+import { modulesService, Module } from "@/services/modules.service";
+import { getStudentLevel } from "@/data/mockAttendanceData";
+import { useAttendance } from "@/contexts/AttendanceContext";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const ProfileSetting = () => {
-  // All courses available in system
-  const [allCourses, setAllCourses] = useState<
-    { id: string; code: string; title: string }[]
-  >([]);
-  const [coursesLoading, setCoursesLoading] = useState(false);
+  // Use AttendanceContext for module enrollment
+  const {
+    enrolledModules: contextEnrolledModules,
+    availableModules: contextAvailableModules,
+    enrollModule: contextEnrollModule,
+    unenrollModule: contextUnenrollModule,
+    autoEnrollByLevel,
+  } = useAttendance();
 
-  // User's enrolled/taught courses
-  const [userCourses, setUserCourses] = useState<Course[]>([]);
-  const [userCoursesLoading, setUserCoursesLoading] = useState(false);
-  const [removingCourse, setRemovingCourse] = useState<string | null>(null);
-  const [addingCourses, setAddingCourses] = useState(false);
+  // Courses where user is assigned as a rep (for Level Rep display only)
+  // Note: userCourses, allCourses removed - no longer displaying Courses Registered/Taught
 
   // Courses where user is assigned as a rep
   const [repAssignedCourses, setRepAssignedCourses] = useState<Course[]>([]);
   const [repCoursesLoading, setRepCoursesLoading] = useState(false);
+
+  // Module enrollment local state (for UI before using context)
+  const [availableModules, setAvailableModules] = useState<Module[]>([]);
 
   const { user, updateUser } = useAuth();
 
@@ -62,87 +75,81 @@ const ProfileSetting = () => {
   const [absentThreshold, setAbsentThreshold] = useState<number>(30);
   const [savingThresholds, setSavingThresholds] = useState(false);
 
-  // Fetch all courses from backend and identify rep-assigned courses
+  // Fetch rep-assigned courses only (for Level Rep display)
   useEffect(() => {
-    const fetchCourses = async () => {
-      setCoursesLoading(true);
-      if (isCourseRep) setRepCoursesLoading(true);
+    const fetchRepCourses = async () => {
+      if (!isCourseRep || !user?.id) return;
+      setRepCoursesLoading(true);
 
       const res = await coursesService.getAllCourses();
       if (res.success && res.data?.data) {
-        setAllCourses(
-          res.data.data.map((c) => ({
-            id: c.id,
-            code: c.code,
-            title: c.title,
-          })),
-        );
-
-        // If user is a course rep, find courses where they are assigned as rep
-        if (isCourseRep && user?.id) {
-          const assignedCourses = res.data.data.filter((course) => {
-            if (!course.reps || !Array.isArray(course.reps)) return false;
-            // Check if current user is in the reps array
-            return course.reps.some(
-              (rep: {
-                userId?: string;
-                studentId?: string;
-                id?: string;
-                student?: { userId?: string };
-              }) => {
-                return (
-                  rep.userId === user.id ||
-                  rep.studentId === user.student?.id ||
-                  rep.id === user.id ||
-                  rep.student?.userId === user.id
-                );
-              },
-            );
-          });
-          setRepAssignedCourses(assignedCourses);
-        }
+        // Find courses where current user is assigned as rep
+        const assignedCourses = res.data.data.filter((course) => {
+          if (!course.reps || !Array.isArray(course.reps)) return false;
+          return course.reps.some(
+            (rep: {
+              userId?: string;
+              studentId?: string;
+              id?: string;
+              student?: { userId?: string };
+            }) => {
+              return (
+                rep.userId === user.id ||
+                rep.studentId === user.student?.id ||
+                rep.id === user.id ||
+                rep.student?.userId === user.id
+              );
+            },
+          );
+        });
+        setRepAssignedCourses(assignedCourses);
       } else {
-        setAllCourses([]);
         setRepAssignedCourses([]);
       }
-      setCoursesLoading(false);
       setRepCoursesLoading(false);
     };
-    fetchCourses();
+    fetchRepCourses();
   }, [isCourseRep, user?.id, user?.student?.id]);
 
-  // Fetch user's enrolled/taught courses
+  // Load modules by student level (API-based)
   useEffect(() => {
-    const fetchUserCourses = async () => {
-      if (!user) return;
-      setUserCoursesLoading(true);
-      try {
-        if (isStudent || isCourseRep) {
-          const res = await coursesService.getStudentCourses();
-          if (res.success && res.data?.data) {
-            setUserCourses(res.data.data);
-          }
-        } else if (isLecturer) {
-          const res = await coursesService.getLecturerCourses();
-          if (res.success && res.data?.data) {
-            setUserCourses(res.data.data);
-          }
+    if (!isStudent && !isCourseRep) return;
+
+    // Get student level from user data or localStorage
+    const level = user?.student?.level || getStudentLevel() || 100;
+
+    // Load modules for the student's level
+    const fetchModules = async () => {
+      const res = await modulesService.getModulesByLevel(level);
+      if (res.success && res.data?.data) {
+        setAvailableModules(res.data.data);
+        // Auto-enroll all modules if none enrolled yet
+        if (contextEnrolledModules.length === 0 && res.data.data.length > 0) {
+          autoEnrollByLevel();
         }
-      } catch (error) {
-        console.error("Failed to fetch user courses:", error);
-      } finally {
-        setUserCoursesLoading(false);
       }
     };
-    fetchUserCourses();
-  }, [user, isStudent, isCourseRep, isLecturer]);
+    fetchModules();
+  }, [
+    isStudent,
+    isCourseRep,
+    user?.student?.level,
+    contextEnrolledModules.length,
+    autoEnrollByLevel,
+  ]);
+
+  // Available student levels
+  const STUDENT_LEVELS = [100, 200, 300, 400, 500, 600];
 
   // State for editable fields
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
-  const [coursesTaken, setCoursesTaken] = useState<string[]>([]);
   const [facialImages, setFacialImages] = useState<string[] | null>(null);
   const [facialData, setFacialData] = useState<string | null>(null);
   const [studentIdCard, setStudentIdCard] = useState<string>("");
+  const [studentLevel, setStudentLevel] = useState<number>(
+    user?.student?.level || 100,
+  );
+  const [savingLevel, setSavingLevel] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showSaveAlert, setShowSaveAlert] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -152,11 +159,6 @@ const ProfileSetting = () => {
     if (!user) return;
 
     let hasChanges = false;
-
-    // Check courses changed (simplified - course data will come from API)
-    if (coursesTaken.length > 0) {
-      hasChanges = true;
-    }
 
     // Check photo changes
     if (profilePhoto !== (user.profilePicture || null)) hasChanges = true;
@@ -169,21 +171,36 @@ const ProfileSetting = () => {
       hasChanges = true;
     }
 
+    // Check level changes (for students and reps)
+    if (
+      (isStudent || isCourseRep) &&
+      studentLevel !== (user.student?.level || 100)
+    ) {
+      hasChanges = true;
+    }
+
     setHasUnsavedChanges(hasChanges);
-  }, [profilePhoto, coursesTaken, facialData, studentIdCard, user, isStudent]);
+  }, [
+    profilePhoto,
+    facialData,
+    studentIdCard,
+    studentLevel,
+    user,
+    isStudent,
+    isCourseRep,
+  ]);
 
   // Initialize state from user data
   useEffect(() => {
     if (user) {
-      // Courses will be loaded from API when available
-      setCoursesTaken([]);
       // Set profile photo from user data
       setProfilePhoto(user.profilePicture || user.imageUrl || null);
       // Facial data status from embeddingStatus
       setFacialData(user.embeddingStatus === "UPLOADED" ? "verified" : null);
       // Set student ID card from user data
       setStudentIdCard(user.student?.studentId || "");
-      // Thresholds will be fetched separately or use defaults
+      // Set student level from user data
+      setStudentLevel(user.student?.level || 100);
     }
   }, [user]);
 
@@ -208,15 +225,15 @@ const ProfileSetting = () => {
         const alreadyEnrolled = !!user.student?.studentId;
         if (alreadyEnrolled) {
           // Only update records (student already exists)
-          const updateRecordsPayload: any = {};
+          const updateRecordsPayload: Record<string, string | number> = {};
           if (
             studentIdCard &&
             studentIdCard !== (user.student?.studentId || "")
           ) {
             updateRecordsPayload.studentId = studentIdCard;
           }
-          if (coursesTaken.length > 0) {
-            updateRecordsPayload.courses = coursesTaken;
+          if (studentLevel !== (user.student?.level || 100)) {
+            updateRecordsPayload.level = studentLevel;
           }
           if (Object.keys(updateRecordsPayload).length > 0) {
             const res = await usersServices.updateRecords(
@@ -226,26 +243,42 @@ const ProfileSetting = () => {
             if (!res.success)
               throw new Error(res.error || "Failed to update records");
           }
+
+          // If facial images were captured, also enroll face with level
+          if (facialImages && facialImages.length === 3) {
+            const files = await Promise.all(
+              facialImages.map(async (img, i) => {
+                const blob = await fetch(img).then((r) => r.blob());
+                return new File([blob], `face${i + 1}.jpg`, {
+                  type: "image/jpeg",
+                });
+              }),
+            );
+            const faceRes = await usersServices.enrollFace(
+              files,
+              studentIdCard || undefined,
+              studentLevel,
+            );
+            if (!faceRes.success)
+              throw new Error(faceRes.error || "Failed to enroll face data");
+          }
         } else {
           // Not enrolled: enroll new student (requires facial images)
           if (facialImages && facialImages.length === 3) {
             const files = await Promise.all(
               facialImages.map(async (img, i) => {
                 const blob = await fetch(img).then((r) => r.blob());
-                console.log(blob);
                 return new File([blob], `face${i + 1}.jpg`, {
                   type: "image/jpeg",
                 });
               }),
             );
 
-            const payload = {
-              role: Role.STUDENT,
-              email: user.email, // Required for backend to find existing user
-              studentId: studentIdCard,
-              courses: coursesTaken,
-            };
-            const res = await usersServices.enrollUser(payload, files);
+            const res = await usersServices.enrollFace(
+              files,
+              studentIdCard || undefined,
+              studentLevel,
+            );
             if (!res.success)
               throw new Error(res.error || "Failed to enroll face data");
           } else {
@@ -270,113 +303,12 @@ const ProfileSetting = () => {
       toast.success("Profile updated successfully");
       setShowSaveAlert(false);
       setHasUnsavedChanges(false);
-      // Refresh user courses after save
-      if (isStudent || isCourseRep) {
-        const res = await coursesService.getStudentCourses();
-        if (res.success && res.data?.data) {
-          setUserCourses(res.data.data);
-        }
-      }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to update profile");
+    } catch (err: unknown) {
+      const errorMessage =
+        err instanceof Error ? err.message : "Failed to update profile";
+      toast.error(errorMessage);
     } finally {
       setSaving(false);
-    }
-  };
-
-  // Handle removing a course
-  const handleRemoveCourse = async (courseId: string, courseCode: string) => {
-    if (!user) return;
-    setRemovingCourse(courseId);
-    try {
-      if (isStudent || isCourseRep) {
-        // For students: remove from course enrollment
-        const studentId = user.student?.id;
-        if (!studentId) {
-          toast.error("Student ID not found");
-          return;
-        }
-        const res = await coursesService.removeStudentFromCourse(
-          courseId,
-          studentId,
-        );
-        if (res.success) {
-          setUserCourses((prev) => prev.filter((c) => c.id !== courseId));
-          toast.success(`Removed from ${courseCode}`);
-        } else {
-          toast.error(res.error || "Failed to remove course");
-        }
-      } else if (isLecturer) {
-        // For lecturers: remove from course assignment
-        const lecturerId = user.lecturer?.id;
-        if (!lecturerId) {
-          toast.error("Lecturer ID not found");
-          return;
-        }
-        const res = await coursesService.removeLecturerFromCourse(
-          courseId,
-          lecturerId,
-        );
-        if (res.success) {
-          setUserCourses((prev) => prev.filter((c) => c.id !== courseId));
-          toast.success(`Removed from ${courseCode}`);
-        } else {
-          toast.error(res.error || "Failed to remove course");
-        }
-      }
-    } catch (error) {
-      toast.error("Failed to remove course");
-    } finally {
-      setRemovingCourse(null);
-    }
-  };
-
-  // Handle adding new courses
-  const handleAddCourses = async () => {
-    if (coursesTaken.length === 0) {
-      toast.error("Please select at least one course to add");
-      return;
-    }
-    setAddingCourses(true);
-    try {
-      const token = await usersServices.utilService.getTokenFromLocalStorage();
-      if (!token) {
-        toast.error("You must be logged in");
-        return;
-      }
-      // Filter out courses already enrolled in
-      const existingCodes = userCourses.map((c) => c.code);
-      const newCourses = coursesTaken.filter(
-        (code) => !existingCodes.includes(code),
-      );
-
-      if (newCourses.length === 0) {
-        toast.info("You are already enrolled in all selected courses");
-        setCoursesTaken([]);
-        return;
-      }
-
-      const res = await usersServices.updateRecords(
-        { courses: newCourses },
-        token,
-      );
-      if (res.success) {
-        toast.success(`Added ${newCourses.length} course(s)`);
-        setCoursesTaken([]);
-        // Refresh user courses
-        if (isStudent || isCourseRep) {
-          const refreshRes = await coursesService.getStudentCourses();
-          if (refreshRes.success && refreshRes.data?.data) {
-            setUserCourses(refreshRes.data.data);
-          }
-        }
-      } else {
-        toast.error(res.error || "Failed to add courses");
-      }
-    } catch (error) {
-      toast.error("Failed to add courses");
-    } finally {
-      setAddingCourses(false);
     }
   };
 
@@ -478,12 +410,86 @@ const ProfileSetting = () => {
                 {user.role?.replace("_", " ")}
               </div>
             </div>
+
+            {/* Student Level Selection */}
+            {(isStudent || isCourseRep) && (
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <GraduationCap className="w-4 h-4" />
+                  Academic Level
+                </Label>
+                <Select
+                  value={String(studentLevel)}
+                  onValueChange={(value) => setStudentLevel(Number(value))}
+                >
+                  <SelectTrigger className="bg-background">
+                    <SelectValue placeholder="Select your level" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {STUDENT_LEVELS.map((level) => (
+                      <SelectItem key={level} value={String(level)}>
+                        Level {level}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Select your current academic year/level
+                </p>
+                {studentLevel !== (user?.student?.level || 100) && (
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      variant="outline"
+                      className="text-xs text-amber-600 border-amber-300 bg-amber-50"
+                    >
+                      Changed from Level {user?.student?.level || 100}
+                    </Badge>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-xs px-2"
+                      onClick={async () => {
+                        const token =
+                          await usersServices.utilService.getTokenFromLocalStorage();
+                        if (!token) {
+                          toast.error("You must be logged in");
+                          return;
+                        }
+                        setSavingLevel(true);
+                        try {
+                          const res = await usersServices.updateRecords(
+                            { level: studentLevel } as any,
+                            token,
+                          );
+                          if (res.success) {
+                            toast.success(`Level updated to ${studentLevel}`);
+                          } else {
+                            toast.error(res.error || "Failed to update level");
+                          }
+                        } catch {
+                          toast.error("Failed to update level");
+                        } finally {
+                          setSavingLevel(false);
+                        }
+                      }}
+                      disabled={savingLevel}
+                    >
+                      {savingLevel ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        "Update Now"
+                      )}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
         {/* Right Column: Facial Data & Courses */}
         <div className="xl:col-span-2 space-y-6">
-          {/* Facial Registration Section - Only for students and course reps */}
+          {/* Facial Registration Section - Only for students and level reps */}
           {(isStudent || isCourseRep) && (
             <div className="bg-card rounded-xl border border-border p-4 sm:p-6 space-y-4">
               <div className="flex flex-wrap items-center gap-2 mb-2">
@@ -516,7 +522,7 @@ const ProfileSetting = () => {
             </div>
           )}
 
-          {/* Attendance Settings Section - Only for lecturers and course reps */}
+          {/* Attendance Settings Section - Only for lecturers and level reps */}
           {(isLecturer || isCourseRep) && (
             <div className="bg-card rounded-xl border border-border p-6 space-y-6">
               <div className="flex items-center gap-2 mb-2">
@@ -607,13 +613,13 @@ const ProfileSetting = () => {
             </div>
           )}
 
-          {/* Course Rep Specifics */}
+          {/* Level Rep Specifics */}
           {isCourseRep && (
             <div className="bg-card rounded-xl border border-border p-6 space-y-4">
               <div className="flex items-center gap-2 mb-2">
                 <Shield className="w-5 h-5 text-primary" />
                 <h3 className="font-semibold text-lg">
-                  Assigned Courses (Course Rep)
+                  Assigned Courses (Level Rep)
                 </h3>
                 {repAssignedCourses.length > 0 && (
                   <Badge variant="secondary" className="ml-auto">
@@ -661,147 +667,179 @@ const ProfileSetting = () => {
             </div>
           )}
 
-          {/* Courses Taken / Taught */}
-          <div className="bg-card rounded-xl border border-border p-6 space-y-4">
-            <div className="flex items-center gap-2 mb-2">
-              <BookOpen className="w-5 h-5 text-primary" />
-              <h3 className="font-semibold text-lg">
-                {isStudent || isCourseRep
-                  ? "Courses Registered"
-                  : "Courses Taught"}
-              </h3>
-              {userCourses.length > 0 && (
-                <Badge variant="secondary" className="ml-auto">
-                  {userCourses.length} course
-                  {userCourses.length !== 1 ? "s" : ""}
-                </Badge>
-              )}
-            </div>
+          {/* Modules Assigned Section - Lecturers only (read-only) */}
+          {isLecturer && (
+            <div className="bg-card rounded-xl border border-border p-6 space-y-4">
+              <div className="flex items-center gap-2 mb-2">
+                <BookOpen className="w-5 h-5 text-primary" />
+                <h3 className="font-semibold text-lg">Topics Assigned</h3>
+              </div>
 
-            {/* Current Courses List */}
-            <div className="space-y-2">
-              <Label>
-                {isStudent || isCourseRep
-                  ? "Your Enrolled Courses"
-                  : "Your Teaching Courses"}
-              </Label>
-              {userCoursesLoading ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground p-4 bg-muted/50 rounded-lg">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Loading your courses...
-                </div>
-              ) : userCourses.length === 0 ? (
-                <div className="text-sm text-muted-foreground p-4 bg-muted/50 rounded-lg">
-                  {isStudent || isCourseRep
-                    ? "You are not enrolled in any courses yet. Add courses below."
-                    : "You are not assigned to teach any courses yet."}
-                </div>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {userCourses.map((course) => (
-                    <div
-                      key={course.id}
-                      className="flex items-center gap-2 px-3 py-2 bg-primary/10 border border-primary/20 rounded-lg group hover:bg-primary/15 transition-colors"
-                    >
-                      <div className="flex flex-col">
-                        <span className="text-sm font-medium text-foreground">
-                          {course.code}
+              {/* Stats Summary */}
+              <div className="flex flex-wrap gap-3">
+                <Badge variant="secondary">2 modules</Badge>
+                <Badge variant="secondary">7 topics</Badge>
+                <Badge variant="outline">Levels: 100, 200</Badge>
+              </div>
+
+              <p className="text-sm text-muted-foreground">
+                These module topics have been assigned to you by the Admin.
+                Contact an administrator to request changes.
+              </p>
+
+              <div className="space-y-3">
+                {/* Lecturer Azumah's assigned module topics */}
+                {[
+                  // CMPC 103 - Professional and Behavioural Studies (Level 100)
+                  {
+                    moduleCode: "CMPC 103",
+                    moduleName: "Professional and Behavioural Studies",
+                    topic: "Medical Professionalism",
+                    level: 100,
+                  },
+                  {
+                    moduleCode: "CMPC 103",
+                    moduleName: "Professional and Behavioural Studies",
+                    topic: "Communication Skills in Healthcare",
+                    level: 100,
+                  },
+                  {
+                    moduleCode: "CMPC 103",
+                    moduleName: "Professional and Behavioural Studies",
+                    topic: "Ethics in Medical Practice",
+                    level: 100,
+                  },
+                  {
+                    moduleCode: "CMPC 103",
+                    moduleName: "Professional and Behavioural Studies",
+                    topic: "Behavioural Sciences Foundation",
+                    level: 100,
+                  },
+                  // CMPC 201 - Human Body Structure and Function II (Level 200)
+                  {
+                    moduleCode: "CMPC 201",
+                    moduleName: "Human Body Structure and Function II",
+                    topic: "Anatomy of Thorax",
+                    level: 200,
+                  },
+                  {
+                    moduleCode: "CMPC 201",
+                    moduleName: "Human Body Structure and Function II",
+                    topic: "Anatomy of Abdomen",
+                    level: 200,
+                  },
+                  {
+                    moduleCode: "CMPC 201",
+                    moduleName: "Human Body Structure and Function II",
+                    topic: "Cardiovascular Physiology",
+                    level: 200,
+                  },
+                ].map((item, index) => (
+                  <div
+                    key={`${item.moduleCode}-${index}`}
+                    className="flex items-start gap-3 p-3 bg-muted/50 border border-border rounded-lg"
+                  >
+                    <BookOpen className="w-4 h-4 text-primary mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium text-sm">
+                          {item.moduleCode}
                         </span>
                         <span className="text-xs text-muted-foreground">
-                          {course.title}
+                          {item.moduleName}
                         </span>
                       </div>
-                      {(isStudent || isCourseRep || isLecturer) && (
-                        <button
-                          onClick={() =>
-                            handleRemoveCourse(course.id, course.code)
-                          }
-                          disabled={removingCourse === course.id}
-                          className="ml-2 p-1 rounded-full hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
-                          title={`Remove ${course.code}`}
-                        >
-                          {removingCourse === course.id ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <X className="w-4 h-4" />
-                          )}
-                        </button>
-                      )}
+                      <p className="text-sm text-foreground mt-1">
+                        {item.topic}
+                      </p>
                     </div>
-                  ))}
+                    <Badge variant="outline" className="text-xs shrink-0">
+                      Level {item.level}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Enroll Modules Section - Students and Reps only */}
+          {(isStudent || isCourseRep) && (
+            <div className="bg-card rounded-xl border border-border p-6 space-y-4">
+              <div className="flex items-center gap-2 mb-2">
+                <BookOpen className="w-5 h-5 text-primary" />
+                <h3 className="font-semibold text-lg">
+                  Enroll Modules (Level{" "}
+                  {user?.student?.level || getStudentLevel() || 100})
+                </h3>
+                {contextEnrolledModules.length > 0 && (
+                  <Badge variant="secondary" className="ml-auto">
+                    {contextEnrolledModules.length} module
+                    {contextEnrolledModules.length !== 1 ? "s" : ""}
+                  </Badge>
+                )}
+              </div>
+
+              <p className="text-sm text-muted-foreground">
+                All modules for your level are pre-selected. Uncheck to remove
+                from enrollment.
+              </p>
+
+              {availableModules.length === 0 ? (
+                <EmptyState
+                  title="No Modules Available"
+                  message="No modules have been added for your level yet."
+                />
+              ) : (
+                <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                  {availableModules.map((mod) => {
+                    const isEnrolled = contextEnrolledModules.includes(
+                      mod.code,
+                    );
+                    return (
+                      <div
+                        key={mod.code}
+                        className="flex items-center space-x-3 p-2 rounded-lg hover:bg-muted/50 cursor-pointer"
+                        onClick={() => {
+                          if (isEnrolled) {
+                            contextUnenrollModule(mod.code);
+                          } else {
+                            contextEnrollModule(mod.code);
+                          }
+                        }}
+                      >
+                        <Checkbox
+                          id={`module-${mod.code}`}
+                          checked={isEnrolled}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              contextEnrollModule(mod.code);
+                            } else {
+                              contextUnenrollModule(mod.code);
+                            }
+                          }}
+                        />
+                        <label
+                          htmlFor={`module-${mod.code}`}
+                          className="flex-1 text-sm cursor-pointer"
+                        >
+                          <span className="font-medium">{mod.code}</span>
+                          <span className="text-muted-foreground">
+                            {" "}
+                            - {mod.name}
+                          </span>
+                        </label>
+                        {isEnrolled && (
+                          <Badge variant="secondary" className="text-xs">
+                            Enrolled
+                          </Badge>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
-
-            {/* Add New Courses Section - Students only */}
-            {(isStudent || isCourseRep) && (
-              <div className="space-y-3 pt-4 border-t border-border">
-                <Label className="flex items-center gap-2">
-                  <Plus className="w-4 h-4" />
-                  Add New Courses
-                </Label>
-                {coursesLoading ? (
-                  <div className="text-sm text-muted-foreground">
-                    Loading available courses...
-                  </div>
-                ) : allCourses.length === 0 ? (
-                  <EmptyState
-                    title="No Courses Available"
-                    message="No courses have been added to the system yet. Please contact an administrator."
-                  />
-                ) : (
-                  <>
-                    <MultiSelect
-                      options={allCourses
-                        .filter(
-                          (c) => !userCourses.some((uc) => uc.code === c.code),
-                        )
-                        .map((c) => ({
-                          label: `${c.code} - ${c.title}`,
-                          value: c.code,
-                        }))}
-                      selected={coursesTaken}
-                      onChange={setCoursesTaken}
-                      placeholder="Select courses to add..."
-                      className="w-full"
-                    />
-                    {coursesTaken.length > 0 && (
-                      <Button
-                        onClick={handleAddCourses}
-                        disabled={addingCourses}
-                        size="sm"
-                        className="mt-2"
-                      >
-                        {addingCourses ? (
-                          <>
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            Adding...
-                          </>
-                        ) : (
-                          <>
-                            <Plus className="w-4 h-4 mr-2" />
-                            Add {coursesTaken.length} Course
-                            {coursesTaken.length !== 1 ? "s" : ""}
-                          </>
-                        )}
-                      </Button>
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      Select additional courses you want to register for.
-                    </p>
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* Lecturer info */}
-            {isLecturer && (
-              <p className="text-xs text-muted-foreground pt-2">
-                You can remove yourself from courses. Contact an admin to be
-                assigned to new courses.
-              </p>
-            )}
-          </div>
+          )}
         </div>
       </div>
     </div>

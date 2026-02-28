@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import {
   Users,
+  BookOpen,
   CalendarClock,
   BarChart3,
   CheckCircle2,
@@ -8,13 +9,17 @@ import {
   UserX,
   CalendarX2,
   Calendar,
+  Award,
   Loader2,
   BookX,
-  Layers,
 } from "lucide-react";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { AttendanceChart } from "@/components/dashboard/AttendanceChart";
 import { ActiveSessionCard } from "@/components/dashboard/ActiveSessionCard";
+import {
+  EarlyArrivalsCard,
+  EarlyArrival,
+} from "@/components/dashboard/EarlyArrivalsCard";
 import {
   Select,
   SelectContent,
@@ -39,24 +44,24 @@ import {
   AttendanceRecord,
 } from "@/services/attendance.services";
 import { usersServices } from "@/services/users.services";
-import {
-  modulesService,
-  Module,
-  SubTopic,
-} from "@/services/modules.service";
+import { coursesService, Course } from "@/services/courses.services";
 
 const AdminDashboard = () => {
   const { user, token } = useAuth();
-  const [selectedModule, setSelectedModule] = useState<string>("all");
+  const [filterType, setFilterType] = useState<string>("all");
+  const [selectedCourse, setSelectedCourse] = useState<string>("all");
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [allModules, setAllModules] = useState<Module[]>([]);
+  const [allCourses, setAllCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [allAttendances, setAllAttendances] = useState<
     AttendanceRecord[] | null
   >(null);
+  const [earlyArrivals, setEarlyArrivals] = useState<
+    Omit<EarlyArrival, "department">[]
+  >([]);
   const [totalMembers, setTotalMembers] = useState(0);
 
-  // Fetch sessions, modules, and attendances from API
+  // Fetch sessions, courses, and attendances from API
   useEffect(() => {
     const fetchData = async () => {
       if (!token) {
@@ -67,12 +72,12 @@ const AdminDashboard = () => {
       try {
         const [
           sessionsResponse,
-          modulesResponse,
+          coursesResponse,
           allAttendancesResponse,
           usersResponse,
         ] = await Promise.all([
           getAllSessionsAdmin(token),
-          modulesService.getModules(),
+          coursesService.getAllCourses(),
           getAllAttendancesAdmin(token),
           usersServices.getAllUsers(),
         ]);
@@ -81,10 +86,10 @@ const AdminDashboard = () => {
         } else {
           setSessions([]);
         }
-        if (modulesResponse.success && modulesResponse.data?.data) {
-          setAllModules(modulesResponse.data.data);
+        if (coursesResponse.success && coursesResponse.data?.data) {
+          setAllCourses(coursesResponse.data.data);
         } else {
-          setAllModules([]);
+          setAllCourses([]);
         }
         let attendances: AttendanceRecord[] = [];
         if (allAttendancesResponse.success && allAttendancesResponse.data) {
@@ -93,71 +98,117 @@ const AdminDashboard = () => {
         } else {
           setAllAttendances([]);
         }
+        // Calculate total members based on user role
+        // System Admin sees all members, Admin sees only students and lecturers
         if (usersResponse.success && usersResponse.data?.users) {
           let filteredUsers;
           if (user?.role === "SYSTEM_ADMIN") {
+            // System admin sees all members
             filteredUsers = usersResponse.data.users;
           } else {
+            // Admin sees only students and lecturers
             filteredUsers = usersResponse.data.users.filter(
               (u) => u.role === "STUDENT" || u.role === "LECTURER",
             );
           }
           setTotalMembers(filteredUsers.length);
         }
+
+        // Early Arrivals: filter for today, before or within 5 mins after session start
+        let usersMap: Record<
+          string,
+          { name: string; profilePicture?: string }
+        > = {};
+        if (usersResponse.success && usersResponse.data?.users) {
+          usersMap = usersResponse.data.users.reduce(
+            (acc, u) => {
+              acc[u.id] = {
+                name: u.name,
+                profilePicture: u.profilePicture || u.imageUrl,
+              };
+              return acc;
+            },
+            {} as Record<string, { name: string; profilePicture?: string }>,
+          );
+        }
+        const now = new Date();
+        const todayStr = now.toISOString().slice(0, 10);
+        // Find attendances for today, with checkInTime before or within 5 mins after session start
+        const filtered = attendances
+          .filter((a) => {
+            if (!a.checkInTime || !a.session || !a.userId) return false;
+            const checkIn = new Date(a.checkInTime);
+            const sessionStart = a.session.startTime
+              ? new Date(a.session.startTime)
+              : null;
+            if (!sessionStart) return false;
+            // Only today
+            if (checkIn.toISOString().slice(0, 10) !== todayStr) return false;
+            // Early or within 5 mins after start
+            const diffMins =
+              (checkIn.getTime() - sessionStart.getTime()) / 60000;
+            return diffMins <= 5;
+          })
+          .sort((a, b) => {
+            // Earliest first
+            const aCheck = new Date(a.checkInTime!);
+            const bCheck = new Date(b.checkInTime!);
+            return aCheck.getTime() - bCheck.getTime();
+          })
+          .slice(0, 4)
+          .map((a) => {
+            const user = usersMap[a.userId] || { name: "Unknown" };
+            const sessionStart = a.session?.startTime
+              ? new Date(a.session.startTime)
+              : new Date();
+            const checkIn = a.checkInTime
+              ? new Date(a.checkInTime)
+              : new Date();
+            const minutesEarly = Math.max(
+              0,
+              Math.round((sessionStart.getTime() - checkIn.getTime()) / 60000),
+            );
+            return {
+              id: a.id,
+              memberId: a.userId,
+              memberName: user.name,
+              photoUrl: user.profilePicture,
+              checkInTime: checkIn,
+              scheduledTime: sessionStart,
+              minutesEarly,
+            };
+          });
+        setEarlyArrivals(filtered);
       } catch (error) {
         console.error("Failed to fetch data:", error);
         setSessions([]);
-        setAllModules([]);
+        setAllCourses([]);
         setAllAttendances([]);
+        setEarlyArrivals([]);
         setTotalMembers(0);
       } finally {
         setLoading(false);
       }
     };
     fetchData();
-  }, [token, user?.role]);
+  }, [token]);
 
-  // Build a flat list of all subtopics with module info
-  const allSubtopics = useMemo(() => {
-    const subtopics: (SubTopic & { moduleName: string; moduleCode: string; moduleLevel: number })[] = [];
-    allModules.forEach((mod) => {
-      (mod.subtopics || []).forEach((st) => {
-        subtopics.push({
-          ...st,
-          moduleName: mod.name,
-          moduleCode: mod.code,
-          moduleLevel: mod.level,
-        });
-      });
-    });
-    return subtopics;
-  }, [allModules]);
-
-  // Get subtopic IDs for selected module filter
-  const selectedSubtopicIds = useMemo(() => {
-    if (selectedModule === "all") {
-      return allSubtopics.map((st) => st.id);
-    }
-    const mod = allModules.find((m) => m.id === selectedModule);
-    return (mod?.subtopics || []).map((st) => st.id);
-  }, [selectedModule, allModules, allSubtopics]);
-
-  // Filter sessions based on module selection (via subtopicId)
+  // Filter sessions based on course selection
   const filteredSessions = useMemo(() => {
-    if (selectedModule === "all") {
-      return sessions;
+    if (selectedCourse === "all") {
+      return sessions.filter((s) => s.type === SessionType.CLASS);
     }
     return sessions.filter(
-      (s) => s.subtopicId && selectedSubtopicIds.includes(s.subtopicId),
+      (s) => s.courseId === selectedCourse && s.type === SessionType.CLASS,
     );
-  }, [selectedModule, sessions, selectedSubtopicIds]);
+  }, [selectedCourse, sessions]);
 
   // Calculate overall statistics
   const activeSessionsCount = sessions.filter(
     (s) =>
       s.status === SessionStatus.OPEN || s.status === SessionStatus.SCHEDULED,
   ).length;
-
+  // Only count PRESENT (fully completed) as attended
   const todayAttendance = filteredSessions.reduce(
     (acc, s) =>
       acc +
@@ -186,49 +237,80 @@ const AdminDashboard = () => {
     0,
   );
 
-  // Module details for the details tab
-  const moduleDetails = useMemo(() => {
-    const modulesToShow =
-      selectedModule === "all"
-        ? allModules
-        : allModules.filter((m) => m.id === selectedModule);
+  // Course details for selected course or all courses
+  const courseDetails = useMemo(() => {
+    if (selectedCourse === "all") {
+      return allCourses.map((course) => {
+        const courseSessions = sessions.filter(
+          (s) => s.courseId === course.id && s.type === SessionType.CLASS,
+        );
+        // Only count PRESENT (fully completed) as present
+        const totalPresent = courseSessions.reduce(
+          (acc, s) =>
+            acc +
+            (s.attendances?.filter((a) => a.status === AttendanceStatus.PRESENT)
+              .length || 0),
+          0,
+        );
+        const totalExpected = courseSessions.reduce(
+          (acc, s) => acc + (s.attendances?.length || 0),
+          0,
+        );
+        const attendanceRate =
+          totalExpected > 0
+            ? Math.round((totalPresent / totalExpected) * 100)
+            : 0;
 
-    return modulesToShow.map((mod) => {
-      const subtopicIds = (mod.subtopics || []).map((st) => st.id);
-      const moduleSessions = sessions.filter(
-        (s) => s.subtopicId && subtopicIds.includes(s.subtopicId),
-      );
-      const totalPresent = moduleSessions.reduce(
-        (acc, s) =>
-          acc +
-          (s.attendances?.filter((a) => a.status === AttendanceStatus.PRESENT)
-            .length || 0),
-        0,
-      );
-      const totalExp = moduleSessions.reduce(
-        (acc, s) => acc + (s.attendances?.length || 0),
-        0,
-      );
-      const rate =
-        totalExp > 0 ? Math.round((totalPresent / totalExp) * 100) : 0;
+        return {
+          ...course,
+          actualSessions: courseSessions.length,
+          totalPresent,
+          totalExpected,
+          attendanceRate,
+          totalStudents: course.enrollments?.length || 0,
+          totalSessions: courseSessions.length,
+        };
+      });
+    }
 
-      return {
-        id: mod.id,
-        name: mod.name,
-        code: mod.code,
-        level: mod.level,
-        subtopicCount: (mod.subtopics || []).length,
-        actualSessions: moduleSessions.length,
+    const course = allCourses.find((c) => c.id === selectedCourse);
+    if (!course) return [];
+
+    const courseSessions = sessions.filter(
+      (s) => s.courseId === selectedCourse && s.type === SessionType.CLASS,
+    );
+    // Only count PRESENT (fully completed) as present
+    const totalPresent = courseSessions.reduce(
+      (acc, s) =>
+        acc +
+        (s.attendances?.filter((a) => a.status === AttendanceStatus.PRESENT)
+          .length || 0),
+      0,
+    );
+    const totalExpected = courseSessions.reduce(
+      (acc, s) => acc + (s.attendances?.length || 0),
+      0,
+    );
+    const attendanceRate =
+      totalExpected > 0 ? Math.round((totalPresent / totalExpected) * 100) : 0;
+
+    return [
+      {
+        ...course,
+        actualSessions: courseSessions.length,
         totalPresent,
-        totalExpected: totalExp,
-        attendanceRate: rate,
-      };
-    });
-  }, [selectedModule, allModules, sessions]);
+        totalExpected,
+        attendanceRate,
+        totalStudents: course.enrollments?.length || 0,
+        totalSessions: courseSessions.length,
+      },
+    ];
+  }, [selectedCourse, allCourses, sessions]);
 
   const firstName = user?.name.split(" ")[0] || "User";
   const welcomeMessage = `Welcome back ${firstName}, here's the attendance overview`;
 
+  // Helper to map SessionType to AttendanceSession type
   const mapSessionType = (
     type: SessionType,
   ): "class" | "exam" | "event" | "shift" => {
@@ -254,6 +336,7 @@ const AdminDashboard = () => {
         s.status === SessionStatus.OPEN || s.status === SessionStatus.SCHEDULED,
     )
     .map((s) => {
+      // Ensure startTime and endTime are Date objects
       let startTime = s.startTime;
       let endTime = s.endTime || s.startTime;
       if (typeof startTime === "string" || typeof startTime === "number") {
@@ -266,7 +349,7 @@ const AdminDashboard = () => {
         id: s.id,
         name: s.name,
         courseId: s.courseId || "",
-        courseName: s.subtopic?.name || s.module?.name || s.course?.title || "Unknown",
+        courseName: s.course?.title || "Unknown Course",
         createdBy: s.createdBy?.name || "Unknown",
         type: mapSessionType(s.type),
         status:
@@ -282,6 +365,7 @@ const AdminDashboard = () => {
         location: s.location,
         startTime,
         endTime,
+        // Only count PRESENT (fully completed) as present
         presentCount:
           s.attendances?.filter((a) => a.status === AttendanceStatus.PRESENT)
             .length || 0,
@@ -304,16 +388,30 @@ const AdminDashboard = () => {
       {/* Filters */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
         <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-          <label className="text-sm font-medium">Filter by Module:</label>
-          <Select value={selectedModule} onValueChange={setSelectedModule}>
-            <SelectTrigger className="w-full sm:w-64">
-              <SelectValue placeholder="Select a module" />
+          <label className="text-sm font-medium">Filter Type:</label>
+          <Select value={filterType} onValueChange={setFilterType}>
+            <SelectTrigger className="w-full sm:w-48">
+              <SelectValue placeholder="Select filter type" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Modules</SelectItem>
-              {allModules.map((mod) => (
-                <SelectItem key={mod.id} value={mod.id}>
-                  {mod.name} ({mod.code}) - Level {mod.level}
+              <SelectItem value="all">All Courses</SelectItem>
+              <SelectItem value="department">By Department</SelectItem>
+              <SelectItem value="performance">By Performance</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+          <label className="text-sm font-medium">Select Course:</label>
+          <Select value={selectedCourse} onValueChange={setSelectedCourse}>
+            <SelectTrigger className="w-full sm:w-64">
+              <SelectValue placeholder="Select a course" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Courses</SelectItem>
+              {allCourses.map((course) => (
+                <SelectItem key={course.id} value={course.id}>
+                  {course.title} ({course.code})
                 </SelectItem>
               ))}
             </SelectContent>
@@ -340,9 +438,10 @@ const AdminDashboard = () => {
             variant="primary"
           />
           <StatCard
-            title="Total Sessions"
-            value={sessions.length}
-            icon={Calendar}
+            title="Today's Attendance"
+            value={todayAttendance.toLocaleString()}
+            icon={CheckCircle2}
+            variant="success"
           />
           <StatCard
             title="Attendance Rate"
@@ -373,7 +472,7 @@ const AdminDashboard = () => {
       <Tabs defaultValue="overview" className="w-full">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="details">Module Details</TabsTrigger>
+          <TabsTrigger value="details">Course Details</TabsTrigger>
           <TabsTrigger value="analysis">Analysis</TabsTrigger>
         </TabsList>
 
@@ -401,6 +500,7 @@ const AdminDashboard = () => {
                   </div>
                 </div>
               </div>
+              {/* Build weekly attendance from allAttendances */}
               {(() => {
                 if (!allAttendances || allAttendances.length === 0) {
                   return (
@@ -410,6 +510,7 @@ const AdminDashboard = () => {
                     </div>
                   );
                 }
+                // Build last 7 days keys
                 const now = new Date();
                 const last7Days = [];
                 for (let i = 6; i >= 0; i--) {
@@ -420,7 +521,9 @@ const AdminDashboard = () => {
                     date: d,
                   });
                 }
+                // Group attendances by day
                 const weeklyAttendanceData = last7Days.map(({ key, date }) => {
+                  // Filter attendances for this day
                   const dayAttendances = allAttendances.filter((a) => {
                     const checkIn = a.checkInTime
                       ? new Date(a.checkInTime)
@@ -432,15 +535,25 @@ const AdminDashboard = () => {
                       checkIn.getDate() === date.getDate()
                     );
                   });
+                  // Count present and late - only PRESENT (fully completed) counts
                   let present = 0;
                   let late = 0;
                   dayAttendances.forEach((a) => {
-                    if (a.status === "PRESENT") present++;
-                    else if (a.status === "LATE") late++;
+                    if (a.status === "PRESENT") {
+                      present++;
+                    } else if (a.status === "LATE") {
+                      late++;
+                    }
+                    // CHECKED_IN without checkout doesn't count as present
                   });
                   return { day: key, present, late };
                 });
-                if (weeklyAttendanceData.every((d) => d.present === 0 && d.late === 0)) {
+                // If all days are empty, show empty state
+                if (
+                  weeklyAttendanceData.every(
+                    (d) => d.present === 0 && d.late === 0,
+                  )
+                ) {
                   return (
                     <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
                       <BookX className="w-10 h-10 mb-2" />
@@ -455,26 +568,35 @@ const AdminDashboard = () => {
             <Card>
               <CardHeader className="p-4 sm:p-6">
                 <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
-                  <Layers className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <BookOpen className="w-4 h-4 sm:w-5 sm:h-5" />
                   Quick Stats
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0 space-y-2 sm:space-y-3">
                 <div className="p-3 rounded-lg bg-muted/50">
-                  <p className="text-xs text-muted-foreground">Total Modules</p>
-                  <p className="text-lg font-bold">{allModules.length}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Avg Students/Course
+                  </p>
+                  <p className="text-lg font-bold">
+                    {allCourses.length > 0
+                      ? Math.round(totalMembers / allCourses.length)
+                      : 0}
+                  </p>
                 </div>
                 <div className="p-3 rounded-lg bg-muted/50">
-                  <p className="text-xs text-muted-foreground">Total Subtopics</p>
-                  <p className="text-lg font-bold">{allSubtopics.length}</p>
+                  <p className="text-xs text-muted-foreground">Total Courses</p>
+                  <p className="text-lg font-bold">{allCourses.length}</p>
                 </div>
                 <div className="p-3 rounded-lg bg-muted/50">
-                  <p className="text-xs text-muted-foreground">Attendance Rate</p>
+                  <p className="text-xs text-muted-foreground">
+                    Attendance Rate
+                  </p>
                   <Badge
                     variant={attendanceRate > 85 ? "default" : "secondary"}
                     className="mt-1"
                   >
-                    {attendanceRate > 85 ? "Excellent" : "Normal"} ({attendanceRate}%)
+                    {attendanceRate > 85 ? "Perfect" : "Normal"} (
+                    {attendanceRate}%)
                   </Badge>
                 </div>
               </CardContent>
@@ -488,54 +610,64 @@ const AdminDashboard = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <BarChart3 className="w-5 h-5" />
-                {selectedModule === "all" ? "All Modules Details" : "Selected Module Details"}
+                {selectedCourse === "all"
+                  ? "All Courses Details"
+                  : "Selected Course Details"}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid gap-4">
-                {moduleDetails.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-8 text-center">
-                    <BookX className="w-10 h-10 text-muted-foreground mb-3" />
-                    <p className="text-sm font-medium text-muted-foreground">No modules found</p>
-                  </div>
-                ) : (
-                  moduleDetails.map((mod) => (
-                    <div
-                      key={mod.id}
-                      className="p-4 rounded-lg border border-border hover:bg-muted/50 transition-colors"
-                    >
-                      <div className="flex items-start justify-between mb-3">
-                        <div>
-                          <p className="font-medium">{mod.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {mod.code} &middot; Level {mod.level}
-                          </p>
-                        </div>
-                        <Badge variant={mod.attendanceRate >= 80 ? "default" : "secondary"}>
-                          {mod.attendanceRate}%
-                        </Badge>
+                {courseDetails.map((course) => (
+                  <div
+                    key={course.id}
+                    className="p-4 rounded-lg border border-border hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <p className="font-medium">{course.title}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {course.code}
+                        </p>
                       </div>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                        <div>
-                          <p className="text-xs text-muted-foreground">Subtopics</p>
-                          <p className="font-bold">{mod.subtopicCount}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground">Sessions</p>
-                          <p className="font-bold">{mod.actualSessions}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground">Attended</p>
-                          <p className="font-bold">{mod.totalPresent}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground">Expected</p>
-                          <p className="font-bold">{mod.totalExpected}</p>
-                        </div>
+                      <Badge
+                        variant={
+                          course.attendanceRate >= 80 ? "default" : "secondary"
+                        }
+                      >
+                        {course.attendanceRate}%
+                      </Badge>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                      <div>
+                        <p className="text-xs text-muted-foreground">
+                          Students
+                        </p>
+                        <p className="font-bold">{course.totalStudents}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">
+                          Sessions
+                        </p>
+                        <p className="font-bold">
+                          {course.actualSessions || course.totalSessions}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">
+                          Attended
+                        </p>
+                        <p className="font-bold">{course.totalPresent}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">
+                          Expected
+                        </p>
+                        <p className="font-bold">{course.totalExpected}</p>
                       </div>
                     </div>
-                  ))
-                )}
+                  </div>
+                ))}
               </div>
             </CardContent>
           </Card>
@@ -546,56 +678,65 @@ const AdminDashboard = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
             <Card>
               <CardHeader className="p-4 sm:p-6">
-                <CardTitle className="text-base sm:text-lg">Top Performing Modules</CardTitle>
+                <CardTitle className="text-base sm:text-lg">
+                  Top Performing Courses
+                </CardTitle>
               </CardHeader>
               <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
                 <div className="space-y-3">
-                  {[...moduleDetails]
+                  {[...courseDetails]
                     .sort((a, b) => b.attendanceRate - a.attendanceRate)
                     .slice(0, 5)
-                    .map((mod) => (
+                    .map((course) => (
                       <div
-                        key={mod.id}
+                        key={course.id}
                         className="flex items-center justify-between p-2 rounded-lg bg-muted/50"
                       >
-                        <span className="text-sm font-medium truncate">{mod.name}</span>
-                        <Badge variant="default">{mod.attendanceRate}%</Badge>
+                        <span className="text-sm font-medium truncate">
+                          {course.title}
+                        </span>
+                        <Badge variant="default">
+                          {course.attendanceRate}%
+                        </Badge>
                       </div>
                     ))}
-                  {moduleDetails.length === 0 && (
-                    <p className="text-sm text-muted-foreground text-center py-4">No module data available</p>
-                  )}
                 </div>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="p-4 sm:p-6">
-                <CardTitle className="text-base sm:text-lg">Modules Needing Attention</CardTitle>
+                <CardTitle className="text-base sm:text-lg">
+                  Courses Needing Attention
+                </CardTitle>
               </CardHeader>
               <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
                 <div className="space-y-3">
-                  {[...moduleDetails]
+                  {[...courseDetails]
                     .sort((a, b) => a.attendanceRate - b.attendanceRate)
                     .slice(0, 5)
-                    .map((mod) => (
+                    .map((course) => (
                       <div
-                        key={mod.id}
+                        key={course.id}
                         className="flex items-center justify-between p-2 rounded-lg bg-muted/50"
                       >
-                        <span className="text-sm font-medium truncate">{mod.name}</span>
-                        <Badge variant="secondary">{mod.attendanceRate}%</Badge>
+                        <span className="text-sm font-medium truncate">
+                          {course.title}
+                        </span>
+                        <Badge variant="secondary">
+                          {course.attendanceRate}%
+                        </Badge>
                       </div>
                     ))}
-                  {moduleDetails.length === 0 && (
-                    <p className="text-sm text-muted-foreground text-center py-4">No module data available</p>
-                  )}
                 </div>
               </CardContent>
             </Card>
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Early Arrivals Rewards Section */}
+      <EarlyArrivalsCard arrivals={earlyArrivals} />
 
       {/* Active Sessions */}
       <div>
@@ -605,7 +746,8 @@ const AdminDashboard = () => {
               Active & Upcoming Sessions
             </h2>
             <p className="text-xs sm:text-sm text-muted-foreground">
-              {activeSessionsList.length} sessions currently running or scheduled
+              {activeSessionsList.length} sessions currently running or
+              scheduled
             </p>
           </div>
         </div>
@@ -613,7 +755,9 @@ const AdminDashboard = () => {
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-12 text-center">
               <CalendarX2 className="w-12 h-12 text-muted-foreground/50 mb-4" />
-              <h3 className="text-lg font-medium text-muted-foreground mb-2">No Active Sessions</h3>
+              <h3 className="text-lg font-medium text-muted-foreground mb-2">
+                No Active Sessions
+              </h3>
               <p className="text-sm text-muted-foreground max-w-sm">
                 There are no active or upcoming sessions at the moment.
               </p>

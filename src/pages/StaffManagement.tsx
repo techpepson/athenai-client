@@ -1,24 +1,36 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
-  TrendingUp,
   Users,
   Clock,
   DollarSign,
   Loader2,
   GraduationCap,
   Search,
+  Calendar,
+  ChevronDown,
+  ChevronRight,
+  Receipt,
+  X,
+  FileText,
+  TrendingDown,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/contexts/AuthContext";
-import { PayrollStatsCard } from "@/components/staff/PayrollStatsCard";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import {
-  getLecturerEarnings,
-  LecturerEarning,
-} from "@/services/payroll.service";
-import { usersServices } from "@/services/users.services";
-import { IUserPublic } from "@/interface/user.interface";
-import { Role } from "@/enums/enums";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -27,118 +39,234 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { PayrollStatsCard } from "@/components/staff/PayrollStatsCard";
+import {
+  getLecturerEarnings,
+  getLecturerPayroll,
+  LecturerEarning,
+} from "@/services/payroll.service";
 
-// Combined lecturer data with earnings
-interface LecturerWithEarnings {
-  id: string;
-  name: string;
-  email: string;
-  staffNo: string | null;
-  hourlyRate: number;
-  creditHours: number;
-  totalHours: number;
-  earnings: number;
-  isActive: boolean;
+// ─── Helpers ────────────────────────────────────────────
+
+/** Build a list of month options from today going back `count` months */
+function buildMonthOptions(count = 12) {
+  const months: { value: string; label: string }[] = [];
+  const now = new Date();
+  for (let i = 0; i < count; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const label = d.toLocaleString("default", {
+      month: "long",
+      year: "numeric",
+    });
+    months.push({ value, label });
+  }
+  return months;
 }
+
+/** Format currency */
+const fmt = (n: number) => `$${n.toFixed(2)}`;
+
+// ─── Small helper component ─────────────────────────────
+function SummaryItem({
+  label,
+  value,
+  className,
+}: {
+  label: string;
+  value: string;
+  className?: string;
+}) {
+  return (
+    <div className="bg-muted/40 rounded-lg p-3">
+      <p className="text-xs text-muted-foreground mb-1">{label}</p>
+      <p className={`text-lg font-semibold ${className ?? "text-foreground"}`}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+// ─── Component ──────────────────────────────────────────
 
 const StaffManagement = () => {
   const { token } = useAuth();
-  const [lecturers, setLecturers] = useState<LecturerWithEarnings[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
   const { toast } = useToast();
 
-  useEffect(() => {
-    const loadLecturerData = async () => {
-      if (!token) {
-        setLoading(false);
-        return;
-      }
+  // Data
+  const [lecturers, setLecturers] = useState<LecturerEarning[]>([]);
+  const [loading, setLoading] = useState(true);
 
+  // Filters
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState<string>("all");
+
+  // Detail dialog
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailLecturer, setDetailLecturer] = useState<LecturerEarning | null>(
+    null,
+  );
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  // Inline hourly-rate editing
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingRate, setEditingRate] = useState("");
+
+  // Expanded rows
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
+  const monthOptions = useMemo(() => buildMonthOptions(12), []);
+
+  // ── Fetch earnings (re-runs whenever month or token changes) ──
+  useEffect(() => {
+    if (!token) {
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const fetchEarnings = async () => {
       setLoading(true);
       try {
-        // Fetch all users and filter for lecturers
-        const usersResponse = await usersServices.getAllUsers();
-
-        // Fetch earnings data
-        const earningsResponse = await getLecturerEarnings(token);
-
-        // Create a map of earnings by lecturer email for quick lookup
-        const earningsMap = new Map<string, LecturerEarning>();
-        if (earningsResponse.success && earningsResponse.data?.result) {
-          earningsResponse.data.result.forEach((earning) => {
-            earningsMap.set(earning.email, earning);
-          });
-        }
-
-        if (usersResponse.success && usersResponse.data?.users) {
-          // Filter for lecturers only
-          const lecturerUsers = usersResponse.data.users.filter(
-            (user: IUserPublic) => user.role === Role.LECTURER,
-          );
-
-          // Combine user data with earnings data
-          const combinedData: LecturerWithEarnings[] = lecturerUsers.map(
-            (user: IUserPublic) => {
-              const earning = earningsMap.get(user.email);
-              return {
-                id: user.id,
-                name: user.name,
-                email: user.email,
-                staffNo: user.lecturer?.staffNo || null,
-                hourlyRate:
-                  earning?.hourlyRate || user.lecturer?.hourlyRate || 0,
-                creditHours: user.lecturer?.creditHours || 0,
-                totalHours: earning?.totalHours || 0,
-                earnings: earning?.earnings || 0,
-                isActive: user.isActive,
-              };
-            },
-          );
-
-          setLecturers(combinedData);
+        const month = selectedMonth === "all" ? undefined : selectedMonth;
+        const res = await getLecturerEarnings(token, month);
+        if (cancelled) return;
+        if (res.success && res.data) {
+          const list = Array.isArray(res.data) ? res.data : [];
+          setLecturers(list);
         } else {
           setLecturers([]);
         }
-      } catch (error) {
-        console.error("Failed to load lecturer data:", error);
+      } catch (err) {
+        if (cancelled) return;
+        console.error("Failed to load lecturer data:", err);
         toast({
           title: "Error",
-          description: "Failed to load lecturer data",
+          description: "Failed to load lecturer earnings",
           variant: "destructive",
         });
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
-    loadLecturerData();
-  }, [token, toast]);
+    fetchEarnings();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, selectedMonth]);
 
-  // Filter lecturers based on search
-  const filteredLecturers = lecturers.filter((lecturer) => {
-    const matchesSearch =
-      lecturer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      lecturer.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (lecturer.staffNo &&
-        lecturer.staffNo.toLowerCase().includes(searchQuery.toLowerCase()));
+  // ── Search filter ───────────────────────────────────
+  const filteredLecturers = useMemo(() => {
+    if (!searchQuery.trim()) return lecturers;
+    const q = searchQuery.toLowerCase();
+    return lecturers.filter(
+      (l) =>
+        l.name.toLowerCase().includes(q) ||
+        l.email.toLowerCase().includes(q) ||
+        (l.staffNo && l.staffNo.toLowerCase().includes(q)),
+    );
+  }, [lecturers, searchQuery]);
 
-    return matchesSearch;
-  });
+  // ── Stats ───────────────────────────────────────────
+  const stats = useMemo(() => {
+    const totalHours = lecturers.reduce((s, l) => s + l.totalHours, 0);
+    const totalGross = lecturers.reduce(
+      (s, l) => s + (l.grossEarnings ?? l.earnings),
+      0,
+    );
+    const totalTax = lecturers.reduce((s, l) => s + (l.taxDeduction ?? 0), 0);
+    const totalNet = lecturers.reduce((s, l) => s + l.earnings, 0);
+    return {
+      count: lecturers.length,
+      totalHours,
+      totalGross,
+      totalTax,
+      totalNet,
+    };
+  }, [lecturers]);
 
-  // Calculate statistics
-  const stats = {
-    totalLecturers: lecturers.length,
-    activeLecturers: lecturers.filter((l) => l.isActive).length,
-    totalHours: lecturers.reduce((sum, l) => sum + l.totalHours, 0),
-    totalEarnings: lecturers.reduce((sum, l) => sum + l.earnings, 0),
-    avgHourlyRate:
-      lecturers.length > 0
-        ? lecturers.reduce((sum, l) => sum + l.hourlyRate, 0) / lecturers.length
-        : 0,
+  // ── Open detail dialog ──────────────────────────────
+  const openDetail = async (lecturer: LecturerEarning) => {
+    setDetailOpen(true);
+    setDetailLecturer(lecturer);
+
+    if (token) {
+      setDetailLoading(true);
+      try {
+        const month = selectedMonth === "all" ? undefined : selectedMonth;
+        const res = await getLecturerPayroll(token, lecturer.lecturerId, month);
+        if (res.success && res.data) {
+          setDetailLecturer(res.data);
+        }
+      } catch {
+        toast({
+          title: "Error",
+          description: "Failed to load lecturer details",
+          variant: "destructive",
+        });
+      } finally {
+        setDetailLoading(false);
+      }
+    }
   };
 
+  // ── Inline rate editing ─────────────────────────────
+  const handleRateClick = (id: string, rate: number) => {
+    setEditingId(id);
+    setEditingRate(rate.toFixed(2));
+  };
+
+  const handleRateSave = (id: string) => {
+    const newRate = parseFloat(editingRate);
+    if (isNaN(newRate) || newRate < 0) {
+      toast({
+        title: "Invalid Rate",
+        description: "Please enter a valid hourly rate",
+        variant: "destructive",
+      });
+      return;
+    }
+    setLecturers((prev) =>
+      prev.map((l) => {
+        if (l.lecturerId === id) {
+          const gross = l.totalHours * newRate;
+          const tax = gross * (l.taxRate ?? 0.1);
+          return {
+            ...l,
+            hourlyRate: newRate,
+            grossEarnings: Math.round(gross * 100) / 100,
+            taxDeduction: Math.round(tax * 100) / 100,
+            earnings: Math.round((gross - tax) * 100) / 100,
+          };
+        }
+        return l;
+      }),
+    );
+    setEditingId(null);
+    toast({ title: "Rate Updated", description: "Hourly rate recalculated" });
+  };
+
+  const handleRateKeyDown = (e: React.KeyboardEvent, id: string) => {
+    if (e.key === "Enter") handleRateSave(id);
+    if (e.key === "Escape") {
+      setEditingId(null);
+      setEditingRate("");
+    }
+  };
+
+  const toggleRow = (id: string) => {
+    setExpandedRows((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  // ── Loading state ───────────────────────────────────
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -150,107 +278,200 @@ const StaffManagement = () => {
     );
   }
 
+  // ── Selected month label ────────────────────────────
+  const monthLabel =
+    selectedMonth === "all"
+      ? "All Time"
+      : (monthOptions.find((m) => m.value === selectedMonth)?.label ??
+        selectedMonth);
+
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-foreground">Staff Management</h1>
         <p className="text-muted-foreground mt-1">
-          Track lecturer hours and earnings
+          Track lecturer hours, earnings &amp; tax deductions
         </p>
       </div>
 
-      {/* Search */}
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Search by name, email, or staff number..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-10"
-        />
+      {/* Filters row */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[200px] max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Search by name, email, or staff number..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+
+        <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+          <SelectTrigger className="w-52">
+            <Calendar className="w-4 h-4 mr-2 text-muted-foreground" />
+            <SelectValue placeholder="Select month" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Time</SelectItem>
+            {monthOptions.map((m) => (
+              <SelectItem key={m.value} value={m.value}>
+                {m.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <PayrollStatsCard label="Lecturers" value={stats.count} icon={Users} />
         <PayrollStatsCard
-          label="Total Lecturers"
-          value={stats.totalLecturers}
-          icon={Users}
-        />
-        <PayrollStatsCard
-          label="Total Teaching Hours"
+          label="Total Hours"
           value={`${stats.totalHours.toFixed(1)}h`}
           icon={Clock}
           variant="primary"
         />
         <PayrollStatsCard
-          label="Total Earnings"
-          value={`$${stats.totalEarnings.toFixed(2)}`}
+          label="Gross Earnings"
+          value={fmt(stats.totalGross)}
           icon={DollarSign}
           variant="success"
         />
         <PayrollStatsCard
-          label="Avg Hourly Rate"
-          value={`$${stats.avgHourlyRate.toFixed(2)}`}
-          icon={TrendingUp}
+          label="Tax Deductions"
+          value={fmt(stats.totalTax)}
+          icon={TrendingDown}
           variant="warning"
+        />
+        <PayrollStatsCard
+          label="Net Payable"
+          value={fmt(stats.totalNet)}
+          icon={Receipt}
+          variant="success"
         />
       </div>
 
       {/* Lecturers Table */}
       <div className="bg-card rounded-xl border border-border overflow-hidden">
-        <div className="p-6 border-b border-border">
+        <div className="p-4 sm:p-6 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-2">
             <GraduationCap className="w-5 h-5 text-primary" />
             <h2 className="text-lg font-semibold text-foreground">
-              Lecturer Earnings
+              Lecturer Payroll &mdash; {monthLabel}
             </h2>
           </div>
+          <Badge variant="secondary" className="text-xs">
+            {filteredLecturers.length} lecturer
+            {filteredLecturers.length !== 1 ? "s" : ""}
+          </Badge>
         </div>
 
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-8" />
                 <TableHead>Name</TableHead>
-                <TableHead>Email</TableHead>
                 <TableHead>Staff No</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Hourly Rate</TableHead>
-                <TableHead className="text-right">Credit Hours</TableHead>
-                <TableHead className="text-right">Total Hours Worked</TableHead>
-                <TableHead className="text-right">Total Earnings</TableHead>
+                <TableHead className="text-right">Rate/hr</TableHead>
+                <TableHead className="text-right">Hours</TableHead>
+                <TableHead className="text-right">Gross</TableHead>
+                <TableHead className="text-right">
+                  Tax{" "}
+                  <span className="text-muted-foreground font-normal">
+                    (10%)
+                  </span>
+                </TableHead>
+                <TableHead className="text-right">Net</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredLecturers.map((lecturer) => (
-                <TableRow key={lecturer.id}>
-                  <TableCell className="font-medium">{lecturer.name}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {lecturer.email}
-                  </TableCell>
-                  <TableCell>{lecturer.staffNo || "-"}</TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={lecturer.isActive ? "default" : "secondary"}
+              {filteredLecturers.map((lec) => {
+                const gross = lec.grossEarnings ?? lec.earnings;
+                const tax = lec.taxDeduction ?? 0;
+                const net = lec.earnings;
+                const isExpanded = expandedRows.has(lec.lecturerId);
+
+                return (
+                  <TableRow
+                    key={lec.lecturerId}
+                    className="group cursor-pointer"
+                    onClick={() => toggleRow(lec.lecturerId)}
+                  >
+                    <TableCell className="pr-0">
+                      {isExpanded ? (
+                        <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div>
+                        <div className="font-medium">{lec.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {lec.email}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>{lec.staffNo || "—"}</TableCell>
+                    <TableCell
+                      className="text-right"
+                      onClick={(e) => e.stopPropagation()}
                     >
-                      {lecturer.isActive ? "Active" : "Inactive"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    ${lecturer.hourlyRate.toFixed(2)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {lecturer.creditHours}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {lecturer.totalHours.toFixed(1)}h
-                  </TableCell>
-                  <TableCell className="text-right font-semibold text-green-600">
-                    ${lecturer.earnings.toFixed(2)}
-                  </TableCell>
-                </TableRow>
-              ))}
+                      {editingId === lec.lecturerId ? (
+                        <Input
+                          type="number"
+                          value={editingRate}
+                          onChange={(e) => setEditingRate(e.target.value)}
+                          onBlur={() => handleRateSave(lec.lecturerId)}
+                          onKeyDown={(e) =>
+                            handleRateKeyDown(e, lec.lecturerId)
+                          }
+                          className="w-24 ml-auto text-right"
+                          autoFocus
+                          step="0.01"
+                          min="0"
+                        />
+                      ) : (
+                        <button
+                          onClick={() =>
+                            handleRateClick(lec.lecturerId, lec.hourlyRate)
+                          }
+                          className="hover:bg-muted px-2 py-1 rounded transition-colors"
+                          title="Click to edit"
+                        >
+                          {fmt(lec.hourlyRate)}
+                        </button>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {lec.totalHours.toFixed(1)}h
+                    </TableCell>
+                    <TableCell className="text-right">{fmt(gross)}</TableCell>
+                    <TableCell className="text-right text-red-500">
+                      -{fmt(tax)}
+                    </TableCell>
+                    <TableCell className="text-right font-semibold text-green-600">
+                      {fmt(net)}
+                    </TableCell>
+                    <TableCell
+                      className="text-right"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => openDetail(lec)}
+                      >
+                        <FileText className="w-4 h-4 mr-1" />
+                        Details
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
@@ -264,11 +485,152 @@ const StaffManagement = () => {
             <p className="text-muted-foreground">
               {searchQuery
                 ? "No lecturers match your search criteria."
-                : "No lecturers have been added to the system yet."}
+                : "No lecturer earnings data available for this period."}
             </p>
           </div>
         )}
       </div>
+
+      {/* ─── Detail Dialog ───────────────────────────── */}
+      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Receipt className="w-5 h-5 text-primary" />
+              Payroll Details
+            </DialogTitle>
+          </DialogHeader>
+
+          {detailLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              <span className="ml-2 text-muted-foreground">
+                Loading details...
+              </span>
+            </div>
+          ) : detailLecturer ? (
+            <div className="space-y-6">
+              {/* Lecturer info */}
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <span className="text-lg font-semibold text-primary">
+                    {detailLecturer.name.charAt(0)}
+                  </span>
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-lg font-semibold">
+                    {detailLecturer.name}
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    {detailLecturer.email}
+                  </p>
+                  {detailLecturer.staffNo && (
+                    <Badge variant="outline" className="mt-1">
+                      Staff #{detailLecturer.staffNo}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Earnings breakdown */}
+              <div>
+                <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+                  Earnings Summary &mdash; {monthLabel}
+                </h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <SummaryItem
+                    label="Hourly Rate"
+                    value={fmt(detailLecturer.hourlyRate)}
+                  />
+                  <SummaryItem
+                    label="Total Hours"
+                    value={`${detailLecturer.totalHours.toFixed(1)}h`}
+                  />
+                  <SummaryItem
+                    label="Gross Earnings"
+                    value={fmt(
+                      detailLecturer.grossEarnings ?? detailLecturer.earnings,
+                    )}
+                    className="text-foreground"
+                  />
+                  <SummaryItem
+                    label={`Tax Deduction (${((detailLecturer.taxRate ?? 0.1) * 100).toFixed(0)}%)`}
+                    value={`-${fmt(detailLecturer.taxDeduction ?? 0)}`}
+                    className="text-red-500"
+                  />
+                </div>
+
+                <Separator className="my-4" />
+
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                    Net Payable
+                  </span>
+                  <span className="text-2xl font-bold text-green-600">
+                    {fmt(detailLecturer.earnings)}
+                  </span>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Session breakdown */}
+              <div>
+                <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+                  Session Breakdown
+                </h4>
+                {detailLecturer.sessions &&
+                detailLecturer.sessions.length > 0 ? (
+                  <div className="rounded-lg border border-border overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Session</TableHead>
+                          <TableHead className="text-right">Hours</TableHead>
+                          <TableHead className="text-right">Earnings</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {detailLecturer.sessions.map((s) => (
+                          <TableRow key={s.sessionId}>
+                            <TableCell className="font-medium">
+                              {s.sessionName}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {s.hours.toFixed(2)}h
+                            </TableCell>
+                            <TableCell className="text-right text-green-600">
+                              {fmt(s.hours * detailLecturer.hourlyRate)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground py-4 text-center">
+                    No session data available for this period.
+                  </p>
+                )}
+              </div>
+
+              {/* Footer actions */}
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => setDetailOpen(false)}>
+                  <X className="w-4 h-4 mr-1" />
+                  Close
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p className="py-8 text-center text-muted-foreground">
+              No data available.
+            </p>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

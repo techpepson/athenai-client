@@ -11,21 +11,50 @@ export interface AttendanceRecord {
   timestamp?: string;
   confidence?: number;
   source?: string;
+  remarks?: string;
+  latitude?: number;
+  longitude?: number;
+  distanceFromSession?: number;
+  withinGeofence?: boolean;
   user?: {
     id: string;
     email: string;
     name: string;
+    student?: {
+      studentId?: string;
+      matricNo?: string;
+      level?: number;
+    };
+    lecturer?: {
+      id: string;
+      staffNo?: string;
+    };
   };
   session?: {
     id: string;
     name: string;
     courseId?: string;
+    moduleId?: string;
+    subtopicId?: string;
     startTime?: string;
     endTime?: string;
+    status?: string;
+    mode?: string;
+    week?: number;
     course?: {
       id: string;
       code: string;
       title: string;
+    };
+    module?: {
+      id: string;
+      name: string;
+      code: string;
+      level?: number;
+    };
+    subtopic?: {
+      id: string;
+      name: string;
     };
     createdBy?: {
       id: string;
@@ -50,53 +79,143 @@ export interface MarkAttendanceResponse {
   score?: number;
 }
 
+// Manual attendance response type
+export interface ManualAttendanceResponse {
+  id: string;
+  sessionId: string;
+  userId: string;
+  status: string;
+  checkInTime?: string;
+  checkOutTime?: string;
+  remarks?: string;
+  source: string;
+}
+
+// Bulk manual attendance response type
+export interface BulkManualAttendanceResponse {
+  results: {
+    userId: string;
+    success: boolean;
+    attendance?: ManualAttendanceResponse;
+  }[];
+  errors: { userId: string; success: boolean; error: string }[];
+  totalProcessed: number;
+}
+
+// Geofence attendance response type
+export interface GeofenceAttendanceResponse {
+  success: boolean;
+  message: string;
+  data: {
+    attendance: ManualAttendanceResponse;
+    minutesLate?: number;
+    status: string;
+  };
+}
+
 class AttendanceService {
   /**
    * Mark attendance using facial recognition
-   * @param sessionId - The session ID
-   * @param faceImage - The captured face image as a File or Blob
-   * @param source - The source of attendance ('kiosk' or 'mobile')
-   * @returns ApiResponse with attendance record and recognition score
    */
   async markAttendance(
     sessionId: string,
     faceImage: File | Blob,
     source: "kiosk" | "mobile" = "kiosk",
+    latitude?: number,
+    longitude?: number,
   ): Promise<ApiResponse<MarkAttendanceResponse>> {
     const formData = new FormData();
     formData.append("face", faceImage, "face.jpg");
 
-    return api.upload<MarkAttendanceResponse>(
-      `/attendance/mark?sessionId=${encodeURIComponent(sessionId)}&source=${encodeURIComponent(source)}`,
-      formData,
+    let url = `/attendance/mark?sessionId=${encodeURIComponent(sessionId)}&source=${encodeURIComponent(source)}`;
+    if (latitude != null) url += `&latitude=${latitude}`;
+    if (longitude != null) url += `&longitude=${longitude}`;
+
+    return api.upload<MarkAttendanceResponse>(url, formData);
+  }
+
+  /**
+   * Mark manual attendance (REP/Admin action)
+   */
+  async markManualAttendance(
+    sessionId: string,
+    userId: string,
+    status: string,
+    remarks?: string,
+    token?: string,
+  ): Promise<ApiResponse<ManualAttendanceResponse>> {
+    return api.post<ManualAttendanceResponse>(
+      "/attendance/mark-manual",
+      { sessionId, userId, status, remarks },
+      token,
     );
   }
 
   /**
-   * Fetch all attendances as admin
-   * @returns ApiResponse with attendances array
+   * Mark bulk manual attendance (REP/Admin action)
    */
-  async getAllAttendancesAdmin(): Promise<ApiResponse<AttendanceRecord[]>> {
-    return api.get<AttendanceRecord[]>("/attendance/all-attendances");
+  async markBulkManualAttendance(
+    sessionId: string,
+    attendanceRecords: {
+      userId: string;
+      status: string;
+      remarks?: string;
+    }[],
+    token?: string,
+  ): Promise<ApiResponse<BulkManualAttendanceResponse>> {
+    return api.post<BulkManualAttendanceResponse>(
+      "/attendance/mark-bulk-manual",
+      { sessionId, attendanceRecords },
+      token,
+    );
+  }
+
+  /**
+   * Mark attendance with geofence verification (mobile/app-based, user authenticated via JWT)
+   */
+  async markAttendanceWithGeofence(
+    payload: {
+      sessionId: string;
+      latitude?: number;
+      longitude?: number;
+      confidence?: number;
+      source?: string;
+    },
+    token?: string,
+  ): Promise<ApiResponse<GeofenceAttendanceResponse>> {
+    return api.post<GeofenceAttendanceResponse>(
+      "/attendance/mark-geofence",
+      payload,
+      token,
+    );
+  }
+
+  /**
+   * Fetch all attendances (admin/rep/lecturer)
+   */
+  async getAllAttendancesAdmin(
+    token?: string,
+  ): Promise<ApiResponse<AttendanceRecord[]>> {
+    return api.get<AttendanceRecord[]>("/attendance/all-attendances", token);
   }
 
   /**
    * Fetch attendance for the current user
-   * @returns ApiResponse with user's attendance records
    */
-  async getUserAttendance(): Promise<ApiResponse<AttendanceRecord[]>> {
-    return api.get<AttendanceRecord[]>("/attendance/user-attendance");
+  async getUserAttendance(
+    token?: string,
+  ): Promise<ApiResponse<AttendanceRecord[]>> {
+    return api.get<AttendanceRecord[]>("/attendance/user-attendance", token);
   }
 
   /**
    * Delete an attendance record
-   * @param attendanceId - The attendance record ID to delete
-   * @returns ApiResponse with success message
    */
   async deleteAttendance(
     attendanceId: string,
+    token?: string,
   ): Promise<ApiResponse<{ message: string }>> {
-    return api.delete<{ message: string }>("/attendance/delete", undefined, {
+    return api.delete<{ message: string }>("/attendance/delete", token, {
       params: { attendanceId },
     });
   }
@@ -104,32 +223,86 @@ class AttendanceService {
 
 export const attendanceService = new AttendanceService();
 
-// Standalone function exports for backward compatibility
+// ── Standalone function exports ──
+
 /**
- * Mark attendance using facial recognition
- * @param sessionId - The session ID
- * @param faceImage - The captured face image as a File or Blob
- * @param source - The source of attendance ('kiosk' or 'mobile')
- * @returns ApiResponse with attendance record and recognition score
+ * Mark attendance using facial recognition (kiosk/mobile)
  */
 export async function markAttendance(
   sessionId: string,
   faceImage: File | Blob,
   source: "kiosk" | "mobile" = "kiosk",
+  latitude?: number,
+  longitude?: number,
 ): Promise<ApiResponse<MarkAttendanceResponse>> {
   const formData = new FormData();
   formData.append("face", faceImage, "face.jpg");
 
-  return api.upload<MarkAttendanceResponse>(
-    `/attendance/mark?sessionId=${encodeURIComponent(sessionId)}&source=${encodeURIComponent(source)}`,
-    formData,
+  let url = `/attendance/mark?sessionId=${encodeURIComponent(sessionId)}&source=${encodeURIComponent(source)}`;
+  if (latitude != null) url += `&latitude=${latitude}`;
+  if (longitude != null) url += `&longitude=${longitude}`;
+
+  return api.upload<MarkAttendanceResponse>(url, formData);
+}
+
+/**
+ * Mark manual attendance (REP/Admin action)
+ */
+export async function markManualAttendance(
+  sessionId: string,
+  userId: string,
+  status: string,
+  remarks?: string,
+  token?: string,
+): Promise<ApiResponse<ManualAttendanceResponse>> {
+  return api.post<ManualAttendanceResponse>(
+    "/attendance/mark-manual",
+    { sessionId, userId, status, remarks },
+    token,
   );
 }
 
 /**
- * Fetch all attendances as admin (requires admin token)
- * @param token JWT token for authentication
- * @returns ApiResponse<AttendanceRecord[]>
+ * Mark bulk manual attendance (REP/Admin action)
+ */
+export async function markBulkManualAttendance(
+  sessionId: string,
+  attendanceRecords: {
+    userId: string;
+    status: string;
+    remarks?: string;
+  }[],
+  token?: string,
+): Promise<ApiResponse<BulkManualAttendanceResponse>> {
+  return api.post<BulkManualAttendanceResponse>(
+    "/attendance/mark-bulk-manual",
+    { sessionId, attendanceRecords },
+    token,
+  );
+}
+
+/**
+ * Mark attendance with geofence verification
+ */
+export async function markAttendanceWithGeofence(
+  payload: {
+    sessionId: string;
+    latitude?: number;
+    longitude?: number;
+    confidence?: number;
+    source?: string;
+  },
+  token?: string,
+): Promise<ApiResponse<GeofenceAttendanceResponse>> {
+  return api.post<GeofenceAttendanceResponse>(
+    "/attendance/mark-geofence",
+    payload,
+    token,
+  );
+}
+
+/**
+ * Fetch all attendances (admin/rep/lecturer)
  */
 export async function getAllAttendancesAdmin(
   token: string,
@@ -139,8 +312,6 @@ export async function getAllAttendancesAdmin(
 
 /**
  * Fetch attendance for the current user
- * @param token JWT token for authentication
- * @returns ApiResponse<AttendanceRecord[]>
  */
 export async function getUserAttendance(
   token: string,
@@ -150,9 +321,6 @@ export async function getUserAttendance(
 
 /**
  * Delete an attendance record
- * @param attendanceId - The attendance record ID to delete
- * @param token JWT token for authentication
- * @returns ApiResponse with success message
  */
 export async function deleteAttendance(
   attendanceId: string,

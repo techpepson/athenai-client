@@ -47,7 +47,9 @@ import {
   Trash2,
   Plus,
   GraduationCap,
+  Layers,
 } from "lucide-react";
+import ModulesManagement from "@/components/modules/ModulesManagement";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { Role } from "@/enums/enums";
@@ -417,7 +419,7 @@ const SystemSetting = () => {
             <AlertDialogDescription>
               Are you sure you want to delete "{courseToDelete?.title}" (
               {courseToDelete?.code})? This will also remove all enrollments,
-              sessions, and course representative assignments associated with
+              sessions, and level representative assignments associated with
               this course. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -462,6 +464,10 @@ const SystemSetting = () => {
           <TabsTrigger value="courses" className="gap-2">
             <BookOpen className="w-4 h-4" />
             Courses
+          </TabsTrigger>
+          <TabsTrigger value="modules" className="gap-2">
+            <Layers className="w-4 h-4" />
+            Modules
           </TabsTrigger>
           {/* <TabsTrigger value="organization" className="gap-2">
             <Building className="w-4 h-4" />
@@ -726,6 +732,11 @@ const SystemSetting = () => {
               </div>
             )}
           </div>
+        </TabsContent>
+
+        {/* Modules Management */}
+        <TabsContent value="modules">
+          <ModulesManagement />
         </TabsContent>
 
         {/* Organization Settings */}

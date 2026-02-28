@@ -7,6 +7,8 @@ export interface Member {
   role: Role;
   department?: string;
   studentId?: string;
+  /** The Student record's cuid (needed for rep removal API) */
+  studentRecordId?: string;
   photoUrl?: string;
   parentContact?: {
     name: string;

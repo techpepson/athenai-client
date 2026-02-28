@@ -95,7 +95,7 @@ export const CreateSessionModal = ({
     }
   }, [open, isLecturer]);
 
-  // Fetch lecturers for course reps when modal opens
+  // Fetch lecturers for level reps when modal opens
   useEffect(() => {
     if (open && isRep) {
       setIsLoadingLecturers(true);

@@ -11,12 +11,13 @@ import {
   CalendarX2,
   Loader2,
   BarChart3,
-  Layers,
+  Award,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { AttendanceChart } from "@/components/dashboard/AttendanceChart";
 import { ActiveSessionCard } from "@/components/dashboard/ActiveSessionCard";
+import { EarlyArrivalsCard } from "@/components/dashboard/EarlyArrivalsCard";
 import {
   Select,
   SelectContent,
@@ -26,13 +27,14 @@ import {
 } from "@/components/ui/select";
 import { useAuth } from "@/contexts/AuthContext";
 import { Role } from "@/enums/enums";
+import { coursesService, Course } from "@/services/courses.services";
 import {
   Session,
   SessionStatus,
   SessionType,
   SessionMode,
   AttendanceStatus,
-  getCreatorSessions,
+  getAllSessionsAdmin,
   Attendance,
 } from "@/services/sessions.service";
 import { usersServices } from "@/services/users.services";
@@ -41,11 +43,6 @@ import {
   getUserAttendance,
   AttendanceRecord,
 } from "@/services/attendance.services";
-import {
-  modulesService,
-  Module,
-  SubTopic,
-} from "@/services/modules.service";
 
 // Interface for weekly attendance data
 interface WeeklyAttendanceData {
@@ -57,7 +54,8 @@ interface WeeklyAttendanceData {
 
 const StudentDashboard = () => {
   const { user, token } = useAuth();
-  const [selectedModule, setSelectedModule] = useState<string>("all");
+  const [selectedCourse, setSelectedCourse] = useState<string>("all");
+  const [studentCourses, setStudentCourses] = useState<Course[]>([]);
   const [allSessions, setAllSessions] = useState<Session[]>([]);
   const [userAttendanceRecords, setUserAttendanceRecords] = useState<
     AttendanceRecord[]
@@ -65,13 +63,12 @@ const StudentDashboard = () => {
   const [studentData, setStudentData] = useState<
     (IUser & { student?: IStudent | null }) | null
   >(null);
-  const [studentModules, setStudentModules] = useState<Module[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Check if user is a course rep based on role
   const isCourseRep = user?.role === Role.REP;
 
-  // Load student data, modules (by level), and sessions
+  // Load student data, courses, and sessions
   useEffect(() => {
     const loadDashboardData = async () => {
       if (!token) {
@@ -81,55 +78,29 @@ const StudentDashboard = () => {
 
       setLoading(true);
       try {
-        // Fetch student details to get their level
+        // Fetch student details using getUserById
         const userResponse = await usersServices.getUserById(token);
-        let studentLevel: number | undefined;
-
         if (userResponse.success && userResponse.data?.user) {
-          const userData = userResponse.data.user;
-          setStudentData(userData);
-          studentLevel = userData.student?.level;
+          setStudentData(userResponse.data.user);
         }
 
-        // Fetch modules for student's level
-        if (studentLevel) {
-          const modulesResponse = await modulesService.getModules(studentLevel);
-          if (modulesResponse.success && modulesResponse.data?.data) {
-            setStudentModules(modulesResponse.data.data);
-          } else {
-            setStudentModules([]);
-          }
+        // Fetch student's enrolled courses
+        const coursesResponse = await coursesService.getStudentCourses();
+        if (coursesResponse.success && coursesResponse.data?.data) {
+          setStudentCourses(coursesResponse.data.data);
         } else {
-          // If no level, fetch all modules as fallback
-          const modulesResponse = await modulesService.getModules();
-          if (modulesResponse.success && modulesResponse.data?.data) {
-            setStudentModules(modulesResponse.data.data);
-          } else {
-            setStudentModules([]);
-          }
+          setStudentCourses([]);
         }
 
-        // Fetch sessions based on role
-        if (isCourseRep) {
-          // Reps can see sessions they created (includes all students' attendance)
-          const sessionsResponse = await getCreatorSessions(token);
-          if (sessionsResponse.success && sessionsResponse.data) {
-            const data = sessionsResponse.data as Record<string, unknown>;
-            const list =
-              (data.sessions as Session[]) ||
-              (data.data as Session[]) ||
-              (Array.isArray(sessionsResponse.data)
-                ? (sessionsResponse.data as unknown as Session[])
-                : []);
-            setAllSessions(list);
-          } else {
-            setAllSessions([]);
-          }
+        // Fetch all sessions (admin endpoint gives all sessions with attendances)
+        const sessionsResponse = await getAllSessionsAdmin(token);
+        if (sessionsResponse.success && sessionsResponse.data?.data) {
+          setAllSessions(sessionsResponse.data.data);
         } else {
           setAllSessions([]);
         }
 
-        // Fetch user's own attendance records
+        // Fetch user's own attendance records directly
         const attendanceResponse = await getUserAttendance(token);
         if (attendanceResponse.success && attendanceResponse.data) {
           setUserAttendanceRecords(attendanceResponse.data);
@@ -138,9 +109,9 @@ const StudentDashboard = () => {
         }
       } catch (error) {
         console.error("Failed to load dashboard data:", error);
+        setStudentCourses([]);
         setAllSessions([]);
         setUserAttendanceRecords([]);
-        setStudentModules([]);
       } finally {
         setLoading(false);
       }
@@ -149,117 +120,112 @@ const StudentDashboard = () => {
     loadDashboardData();
   }, [token]);
 
-  // Build all subtopics from student's level modules
-  const allSubtopics = useMemo(() => {
-    const subtopics: (SubTopic & { moduleName: string; moduleCode: string; moduleId: string })[] = [];
-    studentModules.forEach((mod) => {
-      (mod.subtopics || []).forEach((st) => {
-        subtopics.push({
-          ...st,
-          moduleName: mod.name,
-          moduleCode: mod.code,
-          moduleId: mod.id,
-        });
-      });
-    });
-    return subtopics;
-  }, [studentModules]);
+  // Get student's enrolled course IDs
+  const enrolledCourseIds = useMemo(() => {
+    return studentCourses.map((course) => course.id);
+  }, [studentCourses]);
 
-  // Get all subtopic IDs for the student's level
-  const levelSubtopicIds = useMemo(() => {
-    return allSubtopics.map((st) => st.id);
-  }, [allSubtopics]);
-
-  // Filter sessions that belong to subtopics at the student's level
+  // Filter sessions that belong to courses the student is enrolled in
   const studentSessions = useMemo(() => {
-    return allSessions.filter(
+    const filtered = allSessions.filter(
       (session) =>
-        session.subtopicId && levelSubtopicIds.includes(session.subtopicId),
+        session.courseId && enrolledCourseIds.includes(session.courseId),
     );
-  }, [allSessions, levelSubtopicIds]);
+    return filtered;
+  }, [allSessions, enrolledCourseIds]);
 
-  // Get selected module subtopic IDs
-  const selectedSubtopicIds = useMemo(() => {
-    if (selectedModule === "all") return levelSubtopicIds;
-    const mod = studentModules.find((m) => m.id === selectedModule);
-    return (mod?.subtopics || []).map((st) => st.id);
-  }, [selectedModule, studentModules, levelSubtopicIds]);
+  // Get all attendance records for this student across all sessions
+  const studentAttendanceRecords = useMemo(() => {
+    if (!studentData?.id) return [];
 
-  // Filter sessions based on module selection
+    const records: (Attendance & { session: Session })[] = [];
+    studentSessions.forEach((session) => {
+      const studentAttendance = session.attendances?.find(
+        (a) => a.userId === studentData.id,
+      );
+      if (studentAttendance) {
+        records.push({ ...studentAttendance, session });
+      }
+    });
+    return records;
+  }, [studentSessions, studentData?.id]);
+
+  // Filter sessions based on course selection
   const filteredSessions = useMemo(() => {
     const baseSessions =
-      selectedModule === "all"
+      selectedCourse === "all"
         ? studentSessions
-        : studentSessions.filter(
-            (s) => s.subtopicId && selectedSubtopicIds.includes(s.subtopicId),
-          );
-    return baseSessions;
-  }, [selectedModule, studentSessions, selectedSubtopicIds]);
+        : studentSessions.filter((s) => s.courseId === selectedCourse);
 
-  // Calculate attendance statistics from userAttendanceRecords
-  // Single source of truth for all roles (student/rep)
-  // Use session scalar fields (subtopicId, moduleId) since the getUserAttendance
-  // API does NOT include the subtopic/module relation objects.
+    const result = baseSessions.filter((s) => s.type === SessionType.CLASS);
+    return result;
+  }, [selectedCourse, studentSessions]);
+
+  // Calculate attendance statistics
   const attendanceStats = useMemo(() => {
-    // Filter attendance records whose session matches the user's level subtopics
-    const levelRecords = userAttendanceRecords.filter((r) => {
-      // Match by subtopicId (scalar field on session)
-      const recSubtopicId = r.session?.subtopicId;
-      if (recSubtopicId && levelSubtopicIds.includes(recSubtopicId)) return true;
-      // Fallback: match by moduleId → look up module level in local data
-      const recModuleId = r.session?.moduleId;
-      if (recModuleId && studentData?.student?.level) {
-        const mod = studentModules.find((m) => m.id === recModuleId);
-        if (mod && mod.level === studentData.student.level) return true;
-      }
-      return false;
-    });
-
-    // Further filter by selected module if one is chosen
-    const records =
-      selectedModule === "all"
-        ? levelRecords
-        : levelRecords.filter((r) => {
-            const recSubtopicId = r.session?.subtopicId;
-            if (recSubtopicId) return selectedSubtopicIds.includes(recSubtopicId);
-            return r.session?.moduleId === selectedModule;
-          });
+    if (!studentData?.id) {
+      return {
+        attended: 0,
+        late: 0,
+        absent: 0,
+        total: 0,
+        totalSessions: 0,
+        rate: 0,
+      };
+    }
 
     let attended = 0;
     let late = 0;
     let absent = 0;
 
-    records.forEach((r) => {
-      const status = r.status as string;
-      if (status === "PRESENT" || status === AttendanceStatus.PRESENT) attended++;
-      else if (status === "LATE" || status === AttendanceStatus.LATE) late++;
-      else absent++;
+    // Count only CLOSED sessions for attendance calculations
+    const closedSessions = filteredSessions.filter(
+      (s) => s.status === SessionStatus.CLOSED,
+    );
+
+    closedSessions.forEach((session) => {
+      const attendance = session.attendances?.find(
+        (a) => a.userId === studentData.id,
+      );
+
+      if (attendance) {
+        // Only PRESENT (checked in + checked out) counts as fully attended
+        if (attendance.status === AttendanceStatus.PRESENT) {
+          attended++;
+        } else if (attendance.status === AttendanceStatus.CHECKED_IN) {
+          // CHECKED_IN without checkout is treated as incomplete/absent for closed sessions
+          absent++;
+        } else if (attendance.status === AttendanceStatus.LATE) {
+          late++;
+        } else if (attendance.status === AttendanceStatus.ABSENT) {
+          absent++;
+        }
+      } else {
+        // No attendance record means absent
+        absent++;
+      }
     });
 
     const total = attended + late + absent;
     const rate = total > 0 ? Math.round(((attended + late) / total) * 100) : 0;
 
+    // totalSessions = all sessions (open + closed) for the student's courses
     return {
       attended,
       late,
       absent,
       total,
-      totalSessions: total,
+      totalSessions: filteredSessions.length,
       rate,
     };
-  }, [
-    userAttendanceRecords,
-    levelSubtopicIds,
-    selectedSubtopicIds,
-    selectedModule,
-    studentData?.student?.level,    studentModules,  ]);
+  }, [filteredSessions, studentData?.id]);
 
-  // Calculate weekly attendance data for chart
+  // Calculate weekly attendance data for chart using directly fetched attendance records
   const weeklyAttendance = useMemo((): WeeklyAttendanceData[] => {
     const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
     const now = new Date();
     const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() - now.getDay() + 1);
+    startOfWeek.setDate(now.getDate() - now.getDay() + 1); // Monday
     startOfWeek.setHours(0, 0, 0, 0);
 
     return days.map((day, index) => {
@@ -272,13 +238,17 @@ const StudentDashboard = () => {
       let late = 0;
       let absent = 0;
 
+      // Use directly fetched user attendance records
       userAttendanceRecords.forEach((record) => {
+        // Get the session start time from the record's session data
         const sessionStartTime =
           record.session?.startTime || record.checkInTime;
         if (!sessionStartTime) return;
 
         const sessionDate = new Date(sessionStartTime);
         if (sessionDate >= dayDate && sessionDate < nextDay) {
+          // Only PRESENT (checked in AND checked out) counts as attended
+          // CHECKED_IN without checkout is incomplete and shown as absent
           if (
             record.status === AttendanceStatus.PRESENT ||
             record.status === "PRESENT"
@@ -295,6 +265,7 @@ const StudentDashboard = () => {
             record.status === AttendanceStatus.CHECKED_IN ||
             record.status === "CHECKED_IN"
           ) {
+            // CHECKED_IN without checkout counts as absent/incomplete
             absent++;
           }
         }
@@ -304,13 +275,11 @@ const StudentDashboard = () => {
     });
   }, [userAttendanceRecords]);
 
-  // Subtopic stats breakdown — uses userAttendanceRecords for all roles
-  // For each subtopic at the user's level, count attendance records whose
-  // session maps to that subtopic, and count records where user is present.
-  const subtopicStats = useMemo(() => {
+  // Group sessions by course for breakdown with attendance stats
+  const courseStats = useMemo(() => {
     const stats: {
-      [subtopicId: string]: {
-        subtopic: SubTopic & { moduleName: string; moduleCode: string };
+      [courseId: string]: {
+        course: Course;
         totalSessions: number;
         attended: number;
         late: number;
@@ -319,31 +288,47 @@ const StudentDashboard = () => {
       };
     } = {};
 
-    allSubtopics.forEach((st) => {
+    studentCourses.forEach((course) => {
+      const courseSessions = studentSessions.filter(
+        (s) =>
+          s.courseId === course.id &&
+          s.type === SessionType.CLASS &&
+          s.status === SessionStatus.CLOSED,
+      );
+
       let attended = 0;
       let late = 0;
       let absent = 0;
-      let sessionCount = 0;
 
-      userAttendanceRecords.forEach((r) => {
-        // Match attendance record to this subtopic using scalar subtopicId
-        const recSubtopicId = r.session?.subtopicId;
-        if (recSubtopicId !== st.id) return;
+      courseSessions.forEach((session) => {
+        const attendance = session.attendances?.find(
+          (a) => a.userId === studentData?.id,
+        );
 
-        sessionCount++;
-        const status = r.status as string;
-        if (status === "PRESENT" || status === AttendanceStatus.PRESENT) attended++;
-        else if (status === "LATE" || status === AttendanceStatus.LATE) late++;
-        else absent++;
+        if (attendance) {
+          // Only PRESENT (checked in + checked out) counts as attended
+          if (attendance.status === AttendanceStatus.PRESENT) {
+            attended++;
+          } else if (attendance.status === AttendanceStatus.CHECKED_IN) {
+            // CHECKED_IN without checkout is incomplete
+            absent++;
+          } else if (attendance.status === AttendanceStatus.LATE) {
+            late++;
+          } else {
+            absent++;
+          }
+        } else {
+          absent++;
+        }
       });
 
       const total = attended + late + absent;
       const rate =
         total > 0 ? Math.round(((attended + late) / total) * 100) : 0;
 
-      stats[st.id] = {
-        subtopic: st,
-        totalSessions: sessionCount,
+      stats[course.id] = {
+        course,
+        totalSessions: courseSessions.length,
         attended,
         late,
         absent,
@@ -352,22 +337,29 @@ const StudentDashboard = () => {
     });
 
     return stats;
-  }, [allSubtopics, userAttendanceRecords]);
+  }, [studentCourses, studentSessions, studentData?.id]);
 
-  // Get active and upcoming sessions for student's level subtopics
+  // Get active and upcoming sessions for enrolled courses
   const upcomingAndActiveSessions = useMemo(() => {
     const now = new Date();
 
     return studentSessions
       .filter((session) => {
-        if (session.status === SessionStatus.OPEN) return true;
+        // Check if session is OPEN (active) or SCHEDULED
+        if (session.status === SessionStatus.OPEN) {
+          return true;
+        }
+
         if (session.status === SessionStatus.SCHEDULED) {
+          // For scheduled sessions, check if start time is in the future
           const startTime = new Date(session.startTime);
           return startTime > now;
         }
+
         return false;
       })
       .sort((a, b) => {
+        // Sort by start time (earliest first)
         return (
           new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
         );
@@ -378,7 +370,38 @@ const StudentDashboard = () => {
     user?.name?.split(" ")[0] || studentData?.name?.split(" ")[0] || "User";
   const welcomeMessage = `Welcome back ${firstName}!, here's your attendance overview`;
 
-  // Map sessions to AttendanceSession format for ActiveSessionCard
+  // Early arrivals - calculate from attendance records
+  const earlyArrivals = useMemo(() => {
+    return studentAttendanceRecords
+      .filter((record) => {
+        if (!record.checkInTime) return false;
+        const checkIn = new Date(record.checkInTime);
+        const sessionStart = new Date(record.session.startTime);
+        return checkIn < sessionStart;
+      })
+      .map((record) => {
+        const checkIn = new Date(record.checkInTime!);
+        const sessionStart = new Date(record.session.startTime);
+        const minutesEarly = Math.round(
+          (sessionStart.getTime() - checkIn.getTime()) / 60000,
+        );
+
+        return {
+          id: record.id,
+          memberId: studentData?.id || "",
+          memberName: studentData?.name || "Unknown",
+          photoUrl: studentData?.profilePicture || undefined,
+          department: record.session.course?.title || "Unknown",
+          checkInTime: checkIn,
+          scheduledTime: sessionStart,
+          minutesEarly,
+        };
+      })
+      .sort((a, b) => b.minutesEarly - a.minutesEarly)
+      .slice(0, 5);
+  }, [studentAttendanceRecords, studentData]);
+
+  // Map sessions to AttendanceSession format for ActiveSessionCard compatibility
   const mappedActiveSessions = upcomingAndActiveSessions.map((session) => {
     const now = new Date();
     const startTime = new Date(session.startTime);
@@ -393,7 +416,7 @@ const StudentDashboard = () => {
         session.mode === SessionMode.CHECK_IN
           ? ("checkin" as const)
           : ("checkout" as const),
-      department: session.subtopic?.name || session.module?.name || session.course?.title,
+      department: session.course?.title,
       startTime: new Date(session.startTime),
       endTime: new Date(session.endTime),
       status: isScheduled
@@ -403,12 +426,13 @@ const StudentDashboard = () => {
           : ("completed" as const),
       location: session.location,
       expectedCount: session.attendances?.length || 0,
+      // Only count PRESENT (fully completed) as present
       presentCount:
         session.attendances?.filter(
           (a) => a.status === AttendanceStatus.PRESENT,
         ).length || 0,
       courseId: session.courseId,
-      courseName: session.subtopic?.name || session.module?.name || session.course?.title,
+      courseName: session.course?.title,
       createdBy: session.createdBy?.id,
     };
   });
@@ -443,25 +467,20 @@ const StudentDashboard = () => {
         <p className="text-sm sm:text-base text-muted-foreground mt-1">
           {welcomeMessage}
         </p>
-        {studentData?.student?.level && (
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Level {studentData.student.level}
-          </p>
-        )}
       </div>
 
-      {/* Module Filter */}
+      {/* Course Filter */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-        <label className="text-sm font-medium">Filter by Module:</label>
-        <Select value={selectedModule} onValueChange={setSelectedModule}>
+        <label className="text-sm font-medium">Filter by Course:</label>
+        <Select value={selectedCourse} onValueChange={setSelectedCourse}>
           <SelectTrigger className="w-full sm:w-64">
-            <SelectValue placeholder="Select a module" />
+            <SelectValue placeholder="Select a course" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Modules</SelectItem>
-            {studentModules.map((mod) => (
-              <SelectItem key={mod.id} value={mod.id}>
-                {mod.name} ({mod.code})
+            <SelectItem value="all">All Courses</SelectItem>
+            {studentCourses.map((course) => (
+              <SelectItem key={course.id} value={course.id}>
+                {course.title} ({course.code})
               </SelectItem>
             ))}
           </SelectContent>
@@ -504,9 +523,9 @@ const StudentDashboard = () => {
           variant="warning"
         />
         <StatCard
-          title="Available Subtopics"
-          value={allSubtopics.length}
-          icon={Layers}
+          title="Enrolled Courses"
+          value={studentCourses.length}
+          icon={BookOpen}
         />
       </div>
 
@@ -536,6 +555,7 @@ const StudentDashboard = () => {
               </div>
             )}
           </div>
+          {/* Show chart if there are any attendance records, not just closed sessions */}
           {userAttendanceRecords.length > 0 ||
           weeklyAttendance.some(
             (d) => d.present > 0 || d.late > 0 || d.absent > 0,
@@ -555,39 +575,39 @@ const StudentDashboard = () => {
           )}
         </div>
 
-        {/* Subtopic Summary (replaces Course Summary) */}
+        {/* Course Breakdown */}
         <div className="bg-card rounded-lg sm:rounded-xl border border-border p-4 sm:p-6">
           <div className="flex items-center justify-between mb-3 sm:mb-4">
             <h2 className="text-base sm:text-lg font-semibold text-foreground">
-              Subtopic Summary
+              Course Summary
             </h2>
-            <Layers className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
+            <BookOpen className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
           </div>
           <div className="space-y-2 sm:space-y-3 max-h-[280px] sm:max-h-[360px] overflow-y-auto scrollbar-hide">
-            {allSubtopics.length === 0 ? (
+            {studentCourses.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-8 text-center">
                 <BookX className="w-10 h-10 text-muted-foreground mb-3" />
                 <p className="text-sm font-medium text-muted-foreground">
-                  No subtopics available
+                  No courses enrolled
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  No modules or subtopics found for your level
+                  You haven't enrolled in any courses yet
                 </p>
               </div>
             ) : (
-              allSubtopics.map((st) => {
-                const stats = subtopicStats[st.id];
+              studentCourses.map((course) => {
+                const stats = courseStats[course.id];
                 return (
                   <div
-                    key={st.id}
+                    key={course.id}
                     className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
                   >
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">
-                        {st.name}
+                        {course.title}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {st.moduleName} ({st.moduleCode})
+                        {course.code}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -617,6 +637,35 @@ const StudentDashboard = () => {
         </div>
       </div>
 
+      {/* Early Arrivals Rewards Section */}
+      {earlyArrivals.length > 0 ? (
+        <EarlyArrivalsCard arrivals={earlyArrivals} />
+      ) : (
+        <div className="bg-card rounded-lg sm:rounded-xl border border-border p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-base sm:text-lg font-semibold text-foreground">
+                Early Arrivals
+              </h2>
+              <p className="text-xs sm:text-sm text-muted-foreground">
+                Students who arrived early to sessions
+              </p>
+            </div>
+            <Award className="w-5 h-5 text-muted-foreground" />
+          </div>
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <Award className="w-12 h-12 text-muted-foreground/50 mb-4" />
+            <h3 className="text-base font-medium text-foreground mb-2">
+              No early arrivals yet
+            </h3>
+            <p className="text-sm text-muted-foreground max-w-sm">
+              Early arrivals will be displayed here. Arrive early to sessions to
+              get recognized!
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Active Sessions */}
       <div>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3 sm:mb-4">
@@ -643,7 +692,7 @@ const StudentDashboard = () => {
             </h3>
             <p className="text-sm text-muted-foreground max-w-md mx-auto mb-4">
               There are no sessions currently running or scheduled for your
-              level. Sessions created by your lecturers or course
+              enrolled courses. Sessions created by your lecturers or course
               representatives will appear here.
             </p>
             <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">

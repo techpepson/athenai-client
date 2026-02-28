@@ -9,13 +9,17 @@ import {
   CalendarX2,
   Calendar,
   BarChart3,
+  Award,
   Loader2,
   BookX,
-  Layers,
 } from "lucide-react";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { AttendanceChart } from "@/components/dashboard/AttendanceChart";
 import { ActiveSessionCard } from "@/components/dashboard/ActiveSessionCard";
+import {
+  EarlyArrivalsCard,
+  EarlyArrival,
+} from "@/components/dashboard/EarlyArrivalsCard";
 import {
   Select,
   SelectContent,
@@ -31,27 +35,39 @@ import {
   SessionType,
   SessionMode,
   AttendanceStatus,
-  getLecturerSessions,
+  getCreatorSessions,
 } from "@/services/sessions.service";
-import { usersServices } from "@/services/users.services";
-import { IUser, ILecturer } from "@/interface/user.interface";
-import {
-  modulesService,
-  Module,
-  SubTopic,
-} from "@/services/modules.service";
+import { coursesService, Course } from "@/services/courses.services";
+
+export interface Lecturer {
+  id: string;
+  userId: string;
+  staffNo?: string;
+  hourlyRate: number;
+  creditHours: number;
+}
+
+export interface CourseEnrollment {
+  id: string;
+  studentId: string;
+  courseId: string;
+  enrolledAt?: string;
+}
+
+export interface CourseWithEnrollments extends Course {
+  enrollments?: CourseEnrollment[];
+}
 
 const LecturerDashboard = () => {
   const { user, token } = useAuth();
-  const [selectedModule, setSelectedModule] = useState<string>("all");
+  const [selectedCourse, setSelectedCourse] = useState<string>("all");
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [lecturerModules, setLecturerModules] = useState<Module[]>([]);
-  const [lecturerData, setLecturerData] = useState<
-    (IUser & { lecturer?: ILecturer | null }) | null
-  >(null);
+  const [taughtCourses, setTaughtCourses] = useState<CourseWithEnrollments[]>(
+    [],
+  );
   const [loading, setLoading] = useState(true);
 
-  // Fetch sessions and determine lecturer's subtopics
+  // Fetch sessions and courses from API
   useEffect(() => {
     const fetchData = async () => {
       if (!token) {
@@ -61,53 +77,34 @@ const LecturerDashboard = () => {
 
       setLoading(true);
       try {
-        // Fetch lecturer details to get their lecturer ID
-        const userResponse = await usersServices.getUserById(token);
-        let lecturerId: string | undefined;
+        // Fetch sessions and courses in parallel
+        const [sessionsResponse, coursesResponse] = await Promise.all([
+          getCreatorSessions(token),
+          coursesService.getLecturerCourses(),
+        ]);
 
-        if (userResponse.success && userResponse.data?.user) {
-          const userData = userResponse.data.user;
-          setLecturerData(userData);
-          lecturerId = userData.id; // Use user ID — subtopic.lecturerId stores User ID
-        }
-
-        // Fetch all modules (we'll filter subtopics by lecturerId)
-        const modulesResponse = await modulesService.getModules();
-        if (modulesResponse.success && modulesResponse.data?.data) {
-          // Only keep modules that have subtopics assigned to this lecturer
-          const allMods = modulesResponse.data.data;
-          if (lecturerId) {
-            const relevantModules = allMods.filter((mod) =>
-              (mod.subtopics || []).some(
-                (st) => st.lecturerId === lecturerId || st.lecturer?.id === lecturerId,
-              ),
-            );
-            setLecturerModules(relevantModules);
-          } else {
-            setLecturerModules([]);
-          }
-        } else {
-          setLecturerModules([]);
-        }
-
-        // Fetch sessions for this lecturer's assigned subtopics
-        const sessionsResponse = await getLecturerSessions(token);
-        if (sessionsResponse.success && sessionsResponse.data) {
-          const data = sessionsResponse.data as Record<string, unknown>;
-          const list =
-            (data.data as Session[]) ||
-            (data.sessions as Session[]) ||
-            (Array.isArray(sessionsResponse.data)
-              ? (sessionsResponse.data as unknown as Session[])
-              : []);
-          setSessions(list);
+        if (sessionsResponse.success && sessionsResponse.data?.sessions) {
+          setSessions(sessionsResponse.data.sessions);
         } else {
           setSessions([]);
+        }
+
+        if (coursesResponse.success && coursesResponse.data?.data) {
+          setTaughtCourses(
+            coursesResponse.data.data as CourseWithEnrollments[],
+          );
+        } else if (
+          coursesResponse.success &&
+          Array.isArray(coursesResponse.data)
+        ) {
+          setTaughtCourses(coursesResponse.data as CourseWithEnrollments[]);
+        } else {
+          setTaughtCourses([]);
         }
       } catch (error) {
         console.error("Failed to fetch data:", error);
         setSessions([]);
-        setLecturerModules([]);
+        setTaughtCourses([]);
       } finally {
         setLoading(false);
       }
@@ -116,63 +113,42 @@ const LecturerDashboard = () => {
     fetchData();
   }, [token]);
 
-  // Get the lecturer's assigned subtopics (filtered from their modules)
-  const lecturerSubtopics = useMemo(() => {
-    const lecturerId = lecturerData?.id; // User ID — subtopic.lecturerId stores User ID
-    if (!lecturerId) return [];
-
-    const subtopics: (SubTopic & { moduleName: string; moduleCode: string; moduleLevel: number })[] = [];
-    lecturerModules.forEach((mod) => {
-      (mod.subtopics || []).forEach((st) => {
-        if (st.lecturerId === lecturerId || st.lecturer?.id === lecturerId) {
-          subtopics.push({
-            ...st,
-            moduleName: mod.name,
-            moduleCode: mod.code,
-            moduleLevel: mod.level,
-          });
-        }
-      });
-    });
-    return subtopics;
-  }, [lecturerModules, lecturerData?.id]);
-
-  // Get subtopic IDs assigned to this lecturer
-  const lecturerSubtopicIds = useMemo(() => {
-    return lecturerSubtopics.map((st) => st.id);
-  }, [lecturerSubtopics]);
-
-  // Filter sessions that match the lecturer's subtopics
-  const lecturerSessions = useMemo(() => {
-    return sessions.filter(
-      (s) => s.subtopicId && lecturerSubtopicIds.includes(s.subtopicId),
-    );
-  }, [sessions, lecturerSubtopicIds]);
-
-  // Get selected module subtopic IDs
-  const selectedSubtopicIds = useMemo(() => {
-    if (selectedModule === "all") return lecturerSubtopicIds;
-    const mod = lecturerModules.find((m) => m.id === selectedModule);
-    const lecturerId = lecturerData?.id;
-    return (mod?.subtopics || [])
-      .filter((st) => st.lecturerId === lecturerId || st.lecturer?.id === lecturerId)
-      .map((st) => st.id);
-  }, [selectedModule, lecturerModules, lecturerSubtopicIds, lecturerData?.id]);
-
-  // Filter sessions based on module selection
+  // Filter sessions based on course selection
   const filteredSessions = useMemo(() => {
-    if (selectedModule === "all") {
-      return lecturerSessions;
+    if (selectedCourse === "all") {
+      return sessions.filter(
+        (s) =>
+          taughtCourses.some((c) => c.id === s.courseId) &&
+          s.type === SessionType.CLASS,
+      );
     }
-    return lecturerSessions.filter(
-      (s) => s.subtopicId && selectedSubtopicIds.includes(s.subtopicId),
+    return sessions.filter(
+      (s) => s.courseId === selectedCourse && s.type === SessionType.CLASS,
     );
-  }, [selectedModule, lecturerSessions, selectedSubtopicIds]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCourse, sessions]);
 
-  // Calculate real statistics
+  // Calculate real statistics from data
   const totalSessions = filteredSessions.length;
 
-  // Calculate attendance statistics
+  // Get actual total students enrolled across selected courses
+  const totalStudentsEnrolled = useMemo(() => {
+    if (selectedCourse === "all") {
+      // Sum unique students across all taught courses
+      const uniqueStudentIds = new Set<string>();
+      taughtCourses.forEach((course) => {
+        course.enrollments?.forEach((enrollment) => {
+          uniqueStudentIds.add(enrollment.studentId);
+        });
+      });
+      return uniqueStudentIds.size;
+    }
+    // Get students for selected course
+    const course = taughtCourses.find((c) => c.id === selectedCourse);
+    return course?.enrollments?.length || 0;
+  }, [selectedCourse, taughtCourses]);
+
+  // Calculate actual attendance statistics from sessions
   const attendanceStats = useMemo(() => {
     let totalPresent = 0;
     let totalLate = 0;
@@ -186,6 +162,7 @@ const LecturerDashboard = () => {
             totalPresent++;
             break;
           case AttendanceStatus.CHECKED_IN:
+            // CHECKED_IN is separate - not counted as present until checkout
             totalCheckedIn++;
             break;
           case AttendanceStatus.LATE:
@@ -199,6 +176,7 @@ const LecturerDashboard = () => {
     });
 
     return {
+      // Only PRESENT counts as fully present (not CHECKED_IN)
       present: totalPresent,
       checkedIn: totalCheckedIn,
       late: totalLate,
@@ -206,6 +184,10 @@ const LecturerDashboard = () => {
       total: totalPresent + totalCheckedIn + totalLate + totalAbsent,
     };
   }, [filteredSessions]);
+
+  // Calculate average attendance per session
+  const averageAttendance =
+    totalSessions > 0 ? Math.round(attendanceStats.present / totalSessions) : 0;
 
   // Calculate attendance rate
   const attendanceRate = useMemo(() => {
@@ -217,33 +199,40 @@ const LecturerDashboard = () => {
     );
   }, [attendanceStats]);
 
-  // Subtopic statistics breakdown
-  const subtopicStats = useMemo(() => {
+  const lateArrivals = attendanceStats.late;
+  const absentees = attendanceStats.absent;
+
+  // Course statistics for breakdown - using real data
+  const courseStats = useMemo(() => {
     const stats: {
-      [subtopicId: string]: {
-        subtopic: SubTopic & { moduleName: string; moduleCode: string };
+      [courseId: string]: {
+        course: CourseWithEnrollments;
         sessions: number;
+        totalEnrolled: number;
+        avgAttendance: number;
         presentCount: number;
         lateCount: number;
         absentCount: number;
-        avgAttendance: number;
       };
     } = {};
 
-    lecturerSubtopics.forEach((st) => {
-      const stSessions = lecturerSessions.filter(
-        (s) => s.subtopicId === st.id,
+    taughtCourses.forEach((course) => {
+      const courseSessions = sessions.filter(
+        (s) => s.courseId === course.id && s.type === SessionType.CLASS,
       );
 
+      // Calculate real attendance for this course
       let totalPresent = 0;
       let totalLate = 0;
       let totalAbsent = 0;
 
-      stSessions.forEach((session) => {
+      courseSessions.forEach((session) => {
         session.attendances?.forEach((attendance) => {
+          // Only PRESENT (fully completed) counts as present
           if (attendance.status === AttendanceStatus.PRESENT) {
             totalPresent++;
           } else if (attendance.status === AttendanceStatus.CHECKED_IN) {
+            // CHECKED_IN without checkout doesn't count as fully present
             totalAbsent++;
           } else if (attendance.status === AttendanceStatus.LATE) {
             totalLate++;
@@ -253,31 +242,69 @@ const LecturerDashboard = () => {
         });
       });
 
-      stats[st.id] = {
-        subtopic: st,
-        sessions: stSessions.length,
+      stats[course.id] = {
+        course,
+        sessions: courseSessions.length,
+        totalEnrolled: course.enrollments?.length || 0,
+        avgAttendance:
+          courseSessions.length > 0
+            ? Math.round(totalPresent / courseSessions.length)
+            : 0,
         presentCount: totalPresent,
         lateCount: totalLate,
         absentCount: totalAbsent,
-        avgAttendance:
-          stSessions.length > 0
-            ? Math.round(totalPresent / stSessions.length)
-            : 0,
       };
     });
 
     return stats;
-  }, [lecturerSubtopics, lecturerSessions]);
+  }, [sessions, taughtCourses]);
 
   const firstName = user?.name.split(" ")[0] || "User";
   const welcomeMessage = `Welcome back ${firstName}, here's the attendance overview`;
 
-  const activeSessions = lecturerSessions.filter(
+  const activeSessions = sessions.filter(
     (s) =>
       s.status === SessionStatus.OPEN || s.status === SessionStatus.SCHEDULED,
   );
 
-  // Compute weekly attendance chart data from lecturer's sessions
+  // Early arrivals - computed from sessions with checkInTime before session start
+  const earlyArrivals = useMemo((): Omit<EarlyArrival, "department">[] => {
+    const arrivals: Omit<EarlyArrival, "department">[] = [];
+    const today = new Date();
+    const todayStr = today.toISOString().slice(0, 10);
+
+    sessions.forEach((session) => {
+      if (!session.attendances || !session.startTime) return;
+      const sessionStart = new Date(session.startTime);
+
+      session.attendances.forEach((att) => {
+        // Check if attendance has checkInTime (may be in source data)
+        const checkInStr = (att as Record<string, unknown>).checkInTime as string | undefined;
+        if (!checkInStr) return;
+        const checkIn = new Date(checkInStr);
+        if (checkIn.toISOString().slice(0, 10) !== todayStr) return;
+        // Early means checked in before session start or within 5 mins after
+        const diffMins = (checkIn.getTime() - sessionStart.getTime()) / 60000;
+        if (diffMins > 5) return;
+        const minutesEarly = Math.max(0, Math.round(-diffMins));
+
+        arrivals.push({
+          id: att.id,
+          memberId: att.userId,
+          memberName: (att as Record<string, unknown> & { user?: { name?: string } }).user?.name || "Student",
+          checkInTime: checkIn,
+          scheduledTime: sessionStart,
+          minutesEarly,
+        });
+      });
+    });
+
+    return arrivals
+      .sort((a, b) => b.minutesEarly - a.minutesEarly)
+      .slice(0, 5);
+  }, [sessions]);
+
+  // Compute weekly attendance chart data from own sessions
   const weeklyChartData = useMemo(() => {
     const today = new Date();
     const days: { day: string; present: number; late: number }[] = [];
@@ -289,7 +316,7 @@ const LecturerDashboard = () => {
       const dayKey = d.toISOString().split("T")[0];
       let present = 0;
       let late = 0;
-      lecturerSessions.forEach((s) => {
+      sessions.forEach((s) => {
         const sessionDay = new Date(s.startTime).toISOString().split("T")[0];
         if (sessionDay !== dayKey) return;
         s.attendances?.forEach((a) => {
@@ -300,9 +327,9 @@ const LecturerDashboard = () => {
       days.push({ day: dayNames[d.getDay()], present, late });
     }
     return days;
-  }, [lecturerSessions]);
+  }, [sessions]);
 
-  // Map sessions to ActiveSessionCard format
+  // Map sessions to AttendanceSession format for ActiveSessionCard compatibility
   const mappedActiveSessions = activeSessions.map((session) => ({
     id: session.id,
     name: session.name,
@@ -311,7 +338,7 @@ const LecturerDashboard = () => {
       session.mode === SessionMode.CHECK_IN
         ? ("checkin" as const)
         : ("checkout" as const),
-    department: session.subtopic?.name || session.module?.name || session.course?.title,
+    department: session.course?.title,
     startTime: new Date(session.startTime),
     endTime: new Date(session.endTime),
     status:
@@ -322,11 +349,12 @@ const LecturerDashboard = () => {
           : ("completed" as const),
     location: session.location,
     expectedCount: session.attendances?.length || 0,
+    // Only count PRESENT (fully completed) as present
     presentCount:
       session.attendances?.filter((a) => a.status === AttendanceStatus.PRESENT)
         .length || 0,
     courseId: session.courseId,
-    courseName: session.subtopic?.name || session.module?.name || session.course?.title,
+    courseName: session.course?.title,
     createdBy: session.createdBy?.id,
   }));
 
@@ -354,28 +382,28 @@ const LecturerDashboard = () => {
         </p>
       </div>
 
-      {/* Module Filter */}
+      {/* Course Filter */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-        <label className="text-sm font-medium">Filter by Module:</label>
+        <label className="text-sm font-medium">Filter by Course:</label>
         <Select
-          value={selectedModule}
-          onValueChange={setSelectedModule}
-          disabled={lecturerModules.length === 0}
+          value={selectedCourse}
+          onValueChange={setSelectedCourse}
+          disabled={taughtCourses.length === 0}
         >
           <SelectTrigger className="w-full sm:w-64">
             <SelectValue
               placeholder={
-                lecturerModules.length === 0
-                  ? "No modules available"
-                  : "Select a module"
+                taughtCourses.length === 0
+                  ? "No courses available"
+                  : "Select a course"
               }
             />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Modules</SelectItem>
-            {lecturerModules.map((mod) => (
-              <SelectItem key={mod.id} value={mod.id}>
-                {mod.name} ({mod.code}) - Level {mod.level}
+            <SelectItem value="all">All Courses</SelectItem>
+            {taughtCourses.map((course) => (
+              <SelectItem key={course.id} value={course.id}>
+                {course.title} ({course.code})
               </SelectItem>
             ))}
           </SelectContent>
@@ -385,12 +413,12 @@ const LecturerDashboard = () => {
       {/* Stats Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2 sm:gap-3 md:gap-4">
         <StatCard
-          title="Assigned Subtopics"
-          value={lecturerSubtopics.length}
-          icon={Layers}
+          title="Total Students"
+          value={totalStudentsEnrolled}
+          icon={Users}
           trend={
-            lecturerSubtopics.length > 0
-              ? { value: lecturerSubtopics.length, isPositive: true }
+            totalStudentsEnrolled > 0
+              ? { value: totalStudentsEnrolled, isPositive: true }
               : undefined
           }
         />
@@ -401,7 +429,7 @@ const LecturerDashboard = () => {
           variant="primary"
         />
         <StatCard
-          title="Present"
+          title="Present Today"
           value={attendanceStats.present}
           icon={CheckCircle2}
           variant="success"
@@ -418,13 +446,13 @@ const LecturerDashboard = () => {
         />
         <StatCard
           title="Late Arrivals"
-          value={attendanceStats.late}
+          value={lateArrivals}
           icon={Clock}
           variant="warning"
         />
         <StatCard
           title="Absentees"
-          value={attendanceStats.absent}
+          value={absentees}
           icon={UserX}
           variant="destructive"
         />
@@ -472,36 +500,36 @@ const LecturerDashboard = () => {
           )}
         </div>
 
-        {/* Subtopic Summary (replaces Courses Overview) */}
+        {/* Courses Taught Summary */}
         <div className="bg-card rounded-lg sm:rounded-xl border border-border p-4 sm:p-6">
           <div className="flex items-center justify-between mb-3 sm:mb-4">
             <h2 className="text-base sm:text-lg font-semibold text-foreground">
-              Subtopic Overview
+              Courses Overview
             </h2>
-            <Layers className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
+            <BookOpen className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
           </div>
           <div className="space-y-3 sm:space-y-4 max-h-[280px] sm:max-h-[360px] overflow-y-auto scrollbar-hide">
-            {lecturerSubtopics.length === 0 ? (
+            {taughtCourses.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-8 text-center">
                 <BookX className="w-10 h-10 text-muted-foreground/50 mb-3" />
                 <p className="text-sm font-medium text-muted-foreground">
-                  No subtopics assigned
+                  No courses assigned
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  You haven't been assigned to any subtopics yet
+                  You haven't been assigned to any courses yet
                 </p>
               </div>
             ) : (
-              lecturerSubtopics.map((st) => {
-                const stats = subtopicStats[st.id];
+              taughtCourses.map((course) => {
+                const stats = courseStats[course.id];
                 return (
                   <div
-                    key={st.id}
+                    key={course.id}
                     className="p-3 rounded-lg border border-border"
                   >
-                    <p className="text-sm font-medium">{st.name}</p>
+                    <p className="text-sm font-medium">{course.title}</p>
                     <p className="text-xs text-muted-foreground mb-2">
-                      {st.moduleName} ({st.moduleCode}) &middot; Level {st.moduleLevel}
+                      {course.code}
                     </p>
                     <div className="space-y-1 text-xs">
                       <div className="flex justify-between">
@@ -509,13 +537,13 @@ const LecturerDashboard = () => {
                         <Badge variant="outline">{stats?.sessions || 0}</Badge>
                       </div>
                       <div className="flex justify-between">
-                        <span>Present:</span>
+                        <span>Enrolled:</span>
                         <Badge variant="outline">
-                          {stats?.presentCount || 0}
+                          {stats?.totalEnrolled || 0}
                         </Badge>
                       </div>
                       <div className="flex justify-between">
-                        <span>Avg per Session:</span>
+                        <span>Avg Attendance:</span>
                         <Badge
                           variant={
                             (stats?.avgAttendance || 0) > 30
@@ -534,6 +562,35 @@ const LecturerDashboard = () => {
           </div>
         </div>
       </div>
+
+      {/* Early Arrivals Rewards Section */}
+      {earlyArrivals.length > 0 ? (
+        <EarlyArrivalsCard arrivals={earlyArrivals} />
+      ) : (
+        <div className="bg-card rounded-lg sm:rounded-xl border border-border p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-base sm:text-lg font-semibold text-foreground">
+                Early Arrivals
+              </h2>
+              <p className="text-xs sm:text-sm text-muted-foreground">
+                Students who arrived early to sessions
+              </p>
+            </div>
+            <Award className="w-5 h-5 text-muted-foreground" />
+          </div>
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <Award className="w-12 h-12 text-muted-foreground/50 mb-4" />
+            <h3 className="text-base font-medium text-foreground mb-2">
+              No early arrivals yet
+            </h3>
+            <p className="text-sm text-muted-foreground max-w-sm">
+              Early arrivals will be displayed here once students start
+              attending your sessions
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Active Sessions */}
       <div>

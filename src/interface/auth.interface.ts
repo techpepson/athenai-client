@@ -39,8 +39,34 @@ export interface LoginPayload {
   password: string;
 }
 
-// Reset password payload
+// Reset password payload (old endpoint)
 export interface ResetPasswordPayload {
   oldPassword: string;
   newPassword: string;
+}
+
+// Forgot password (public, no auth required)
+export interface ForgotPasswordResponse {
+  message: string;
+}
+
+// Reset password with token (public, no auth required)
+export interface ResetPasswordWithTokenPayload {
+  email: string;
+  token: string;
+  newPassword: string;
+}
+
+export interface ResetPasswordWithTokenResponse {
+  message: string;
+}
+
+// Change password (logged-in, auth required)
+export interface ChangePasswordPayload {
+  oldPassword?: string;
+  newPassword: string;
+}
+
+export interface ChangePasswordResponse {
+  message: string;
 }
