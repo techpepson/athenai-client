@@ -35,11 +35,7 @@ import {
 } from "@/services/sessions.service";
 import { usersServices } from "@/services/users.services";
 import { IUser, ILecturer } from "@/interface/user.interface";
-import {
-  modulesService,
-  Module,
-  SubTopic,
-} from "@/services/modules.service";
+import { modulesService, Module, SubTopic } from "@/services/modules.service";
 
 const LecturerDashboard = () => {
   const { user, token } = useAuth();
@@ -79,7 +75,9 @@ const LecturerDashboard = () => {
           if (lecturerId) {
             const relevantModules = allMods.filter((mod) =>
               (mod.subtopics || []).some(
-                (st) => st.lecturerId === lecturerId || st.lecturer?.id === lecturerId,
+                (st) =>
+                  st.lecturerId === lecturerId ||
+                  st.lecturer?.id === lecturerId,
               ),
             );
             setLecturerModules(relevantModules);
@@ -121,7 +119,11 @@ const LecturerDashboard = () => {
     const lecturerId = lecturerData?.id; // User ID — subtopic.lecturerId stores User ID
     if (!lecturerId) return [];
 
-    const subtopics: (SubTopic & { moduleName: string; moduleCode: string; moduleLevel: number })[] = [];
+    const subtopics: (SubTopic & {
+      moduleName: string;
+      moduleCode: string;
+      moduleLevel: number;
+    })[] = [];
     lecturerModules.forEach((mod) => {
       (mod.subtopics || []).forEach((st) => {
         if (st.lecturerId === lecturerId || st.lecturer?.id === lecturerId) {
@@ -155,7 +157,9 @@ const LecturerDashboard = () => {
     const mod = lecturerModules.find((m) => m.id === selectedModule);
     const lecturerId = lecturerData?.id;
     return (mod?.subtopics || [])
-      .filter((st) => st.lecturerId === lecturerId || st.lecturer?.id === lecturerId)
+      .filter(
+        (st) => st.lecturerId === lecturerId || st.lecturer?.id === lecturerId,
+      )
       .map((st) => st.id);
   }, [selectedModule, lecturerModules, lecturerSubtopicIds, lecturerData?.id]);
 
@@ -231,9 +235,7 @@ const LecturerDashboard = () => {
     } = {};
 
     lecturerSubtopics.forEach((st) => {
-      const stSessions = lecturerSessions.filter(
-        (s) => s.subtopicId === st.id,
-      );
+      const stSessions = lecturerSessions.filter((s) => s.subtopicId === st.id);
 
       let totalPresent = 0;
       let totalLate = 0;
@@ -311,7 +313,8 @@ const LecturerDashboard = () => {
       session.mode === SessionMode.CHECK_IN
         ? ("checkin" as const)
         : ("checkout" as const),
-    department: session.subtopic?.name || session.module?.name || session.course?.title,
+    department:
+      session.subtopic?.name || session.module?.name || session.course?.title,
     startTime: new Date(session.startTime),
     endTime: new Date(session.endTime),
     status:
@@ -326,7 +329,8 @@ const LecturerDashboard = () => {
       session.attendances?.filter((a) => a.status === AttendanceStatus.PRESENT)
         .length || 0,
     courseId: session.courseId,
-    courseName: session.subtopic?.name || session.module?.name || session.course?.title,
+    courseName:
+      session.subtopic?.name || session.module?.name || session.course?.title,
     createdBy: session.createdBy?.id,
   }));
 
@@ -501,7 +505,8 @@ const LecturerDashboard = () => {
                   >
                     <p className="text-sm font-medium">{st.name}</p>
                     <p className="text-xs text-muted-foreground mb-2">
-                      {st.moduleName} ({st.moduleCode}) &middot; Level {st.moduleLevel}
+                      {st.moduleName} ({st.moduleCode}) &middot; Level{" "}
+                      {st.moduleLevel}
                     </p>
                     <div className="space-y-1 text-xs">
                       <div className="flex justify-between">

@@ -1,6 +1,13 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Eye, EyeOff, Fingerprint, Loader2, ArrowLeft, CheckCircle2 } from "lucide-react";
+import {
+  Eye,
+  EyeOff,
+  Fingerprint,
+  Loader2,
+  ArrowLeft,
+  CheckCircle2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -431,12 +438,11 @@ const Auth = () => {
                     }
 
                     setIsLoading(true);
-                    const response =
-                      await authServices.resetPasswordWithToken({
-                        email: resetEmail,
-                        token: resetToken,
-                        newPassword,
-                      });
+                    const response = await authServices.resetPasswordWithToken({
+                      email: resetEmail,
+                      token: resetToken,
+                      newPassword,
+                    });
                     setIsLoading(false);
 
                     if (response.success) {

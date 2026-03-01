@@ -618,10 +618,12 @@ const Sessions = () => {
 
             sessionsData = (sessionsData as Session[]).filter((s) => {
               // Match by module level
-              if (s.moduleId && levelModuleIds.includes(s.moduleId)) return true;
+              if (s.moduleId && levelModuleIds.includes(s.moduleId))
+                return true;
               if (s.module?.level === studentLevel) return true;
               // Match by subtopic belonging to a level module
-              if (s.subtopicId && levelSubtopicIds.includes(s.subtopicId)) return true;
+              if (s.subtopicId && levelSubtopicIds.includes(s.subtopicId))
+                return true;
               return false;
             });
           }
@@ -657,7 +659,16 @@ const Sessions = () => {
         setIsRefreshing(false);
       }
     },
-    [token, isAdmin, isLecturer, isRep, isStudent, studentLevel, allUsers, allModules],
+    [
+      token,
+      isAdmin,
+      isLecturer,
+      isRep,
+      isStudent,
+      studentLevel,
+      allUsers,
+      allModules,
+    ],
   );
 
   // Fetch sessions on mount and when dependencies change

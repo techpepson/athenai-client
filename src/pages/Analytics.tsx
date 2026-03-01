@@ -43,11 +43,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  modulesService,
-  Module,
-  SubTopic,
-} from "@/services/modules.service";
+import { modulesService, Module, SubTopic } from "@/services/modules.service";
 import {
   Session,
   SessionStatus,
@@ -175,14 +171,13 @@ const Analytics = () => {
             const sid = r.sessionId;
             if (!sid) return;
             if (!sessionMap.has(sid)) {
-              const s = r.session || ({} as NonNullable<AttServiceRecord["session"]>);
+              const s =
+                r.session || ({} as NonNullable<AttServiceRecord["session"]>);
               sessionMap.set(sid, {
                 id: sid,
                 name: s.name || "",
                 token: "",
-                startTime: s.startTime
-                  ? new Date(s.startTime)
-                  : new Date(),
+                startTime: s.startTime ? new Date(s.startTime) : new Date(),
                 endTime: s.endTime ? new Date(s.endTime) : new Date(),
                 mode: "CHECK_IN" as Session["mode"],
                 type: "CLASS" as Session["type"],
@@ -211,12 +206,8 @@ const Analytics = () => {
               userId: r.userId,
               sessionId: sid,
               status: r.status as Attendance["status"],
-              timestamp: r.timestamp
-                ? new Date(r.timestamp)
-                : new Date(),
-              checkInTime: r.checkInTime
-                ? new Date(r.checkInTime)
-                : undefined,
+              timestamp: r.timestamp ? new Date(r.timestamp) : new Date(),
+              checkInTime: r.checkInTime ? new Date(r.checkInTime) : undefined,
               checkOutTime: r.checkOutTime
                 ? new Date(r.checkOutTime)
                 : undefined,
@@ -486,8 +477,7 @@ const Analytics = () => {
         dayIndex = 6 - diffDays;
       } else {
         const diffDays = Math.floor(
-          (sessionDate.getTime() - startDate.getTime()) /
-            (1000 * 60 * 60 * 24),
+          (sessionDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
         );
         const interval = timePeriod === "month" ? 7 : 14;
         dayIndex = Math.floor(diffDays / interval);
@@ -548,12 +538,7 @@ const Analytics = () => {
         value: item.count,
         color: CHART_COLORS[index % CHART_COLORS.length],
       }));
-  }, [
-    relevantSubtopics,
-    allModules,
-    filteredSessions,
-    isStaff,
-  ]);
+  }, [relevantSubtopics, allModules, filteredSessions, isStaff]);
 
   // Hourly check-in distribution
   const hourlyDistributionData = useMemo(() => {
@@ -639,9 +624,7 @@ const Analytics = () => {
           label: "Absences",
           value: stats.absentCount.toString(),
           change:
-            stats.absentCount === 0
-              ? "Perfect attendance!"
-              : "Sessions missed",
+            stats.absentCount === 0 ? "Perfect attendance!" : "Sessions missed",
           isPositive: stats.absentCount === 0,
           icon: TrendingDown,
         },
@@ -844,7 +827,11 @@ const Analytics = () => {
                         border: "1px solid hsl(217, 33%, 17%)",
                         borderRadius: "8px",
                       }}
-                      formatter={(value: number, _name: string, props: { payload?: { fullName?: string } }) => [
+                      formatter={(
+                        value: number,
+                        _name: string,
+                        props: { payload?: { fullName?: string } },
+                      ) => [
                         `${value} session${value !== 1 ? "s" : ""}`,
                         props.payload?.fullName || "Subtopic",
                       ]}
@@ -897,27 +884,33 @@ const Analytics = () => {
               <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                 <span className="text-sm text-muted-foreground">Present</span>
                 <span className="text-sm font-bold text-success">
-                  {filteredRecords.filter(
-                    (r) => r.status === AttendanceStatus.PRESENT,
-                  ).length}
+                  {
+                    filteredRecords.filter(
+                      (r) => r.status === AttendanceStatus.PRESENT,
+                    ).length
+                  }
                 </span>
               </div>
               <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                 <span className="text-sm text-muted-foreground">Late</span>
                 <span className="text-sm font-bold text-warning">
-                  {filteredRecords.filter(
-                    (r) => r.status === AttendanceStatus.LATE,
-                  ).length}
+                  {
+                    filteredRecords.filter(
+                      (r) => r.status === AttendanceStatus.LATE,
+                    ).length
+                  }
                 </span>
               </div>
               <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                 <span className="text-sm text-muted-foreground">Absent</span>
                 <span className="text-sm font-bold text-destructive">
-                  {filteredRecords.filter(
-                    (r) =>
-                      r.status === AttendanceStatus.ABSENT ||
-                      r.status === AttendanceStatus.CHECKED_IN,
-                  ).length}
+                  {
+                    filteredRecords.filter(
+                      (r) =>
+                        r.status === AttendanceStatus.ABSENT ||
+                        r.status === AttendanceStatus.CHECKED_IN,
+                    ).length
+                  }
                 </span>
               </div>
               <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
