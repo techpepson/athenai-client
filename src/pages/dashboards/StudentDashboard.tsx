@@ -41,11 +41,7 @@ import {
   getUserAttendance,
   AttendanceRecord,
 } from "@/services/attendance.services";
-import {
-  modulesService,
-  Module,
-  SubTopic,
-} from "@/services/modules.service";
+import { modulesService, Module, SubTopic } from "@/services/modules.service";
 
 // Interface for weekly attendance data
 interface WeeklyAttendanceData {
@@ -151,7 +147,11 @@ const StudentDashboard = () => {
 
   // Build all subtopics from student's level modules
   const allSubtopics = useMemo(() => {
-    const subtopics: (SubTopic & { moduleName: string; moduleCode: string; moduleId: string })[] = [];
+    const subtopics: (SubTopic & {
+      moduleName: string;
+      moduleCode: string;
+      moduleId: string;
+    })[] = [];
     studentModules.forEach((mod) => {
       (mod.subtopics || []).forEach((st) => {
         subtopics.push({
@@ -205,7 +205,8 @@ const StudentDashboard = () => {
     const levelRecords = userAttendanceRecords.filter((r) => {
       // Match by subtopicId (scalar field on session)
       const recSubtopicId = r.session?.subtopicId;
-      if (recSubtopicId && levelSubtopicIds.includes(recSubtopicId)) return true;
+      if (recSubtopicId && levelSubtopicIds.includes(recSubtopicId))
+        return true;
       // Fallback: match by moduleId → look up module level in local data
       const recModuleId = r.session?.moduleId;
       if (recModuleId && studentData?.student?.level) {
@@ -221,7 +222,8 @@ const StudentDashboard = () => {
         ? levelRecords
         : levelRecords.filter((r) => {
             const recSubtopicId = r.session?.subtopicId;
-            if (recSubtopicId) return selectedSubtopicIds.includes(recSubtopicId);
+            if (recSubtopicId)
+              return selectedSubtopicIds.includes(recSubtopicId);
             return r.session?.moduleId === selectedModule;
           });
 
@@ -231,7 +233,8 @@ const StudentDashboard = () => {
 
     records.forEach((r) => {
       const status = r.status as string;
-      if (status === "PRESENT" || status === AttendanceStatus.PRESENT) attended++;
+      if (status === "PRESENT" || status === AttendanceStatus.PRESENT)
+        attended++;
       else if (status === "LATE" || status === AttendanceStatus.LATE) late++;
       else absent++;
     });
@@ -252,7 +255,9 @@ const StudentDashboard = () => {
     levelSubtopicIds,
     selectedSubtopicIds,
     selectedModule,
-    studentData?.student?.level,    studentModules,  ]);
+    studentData?.student?.level,
+    studentModules,
+  ]);
 
   // Calculate weekly attendance data for chart
   const weeklyAttendance = useMemo((): WeeklyAttendanceData[] => {
@@ -332,7 +337,8 @@ const StudentDashboard = () => {
 
         sessionCount++;
         const status = r.status as string;
-        if (status === "PRESENT" || status === AttendanceStatus.PRESENT) attended++;
+        if (status === "PRESENT" || status === AttendanceStatus.PRESENT)
+          attended++;
         else if (status === "LATE" || status === AttendanceStatus.LATE) late++;
         else absent++;
       });
@@ -393,7 +399,8 @@ const StudentDashboard = () => {
         session.mode === SessionMode.CHECK_IN
           ? ("checkin" as const)
           : ("checkout" as const),
-      department: session.subtopic?.name || session.module?.name || session.course?.title,
+      department:
+        session.subtopic?.name || session.module?.name || session.course?.title,
       startTime: new Date(session.startTime),
       endTime: new Date(session.endTime),
       status: isScheduled
@@ -408,7 +415,8 @@ const StudentDashboard = () => {
           (a) => a.status === AttendanceStatus.PRESENT,
         ).length || 0,
       courseId: session.courseId,
-      courseName: session.subtopic?.name || session.module?.name || session.course?.title,
+      courseName:
+        session.subtopic?.name || session.module?.name || session.course?.title,
       createdBy: session.createdBy?.id,
     };
   });
@@ -583,9 +591,7 @@ const StudentDashboard = () => {
                     className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
                   >
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">
-                        {st.name}
-                      </p>
+                      <p className="text-sm font-medium truncate">{st.name}</p>
                       <p className="text-xs text-muted-foreground">
                         {st.moduleName} ({st.moduleCode})
                       </p>

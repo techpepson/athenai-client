@@ -161,9 +161,7 @@ class AuthServices {
       return {
         data: null,
         error:
-          error instanceof Error
-            ? error.message
-            : "Failed to send reset token",
+          error instanceof Error ? error.message : "Failed to send reset token",
         status: 0,
         success: false,
       };
@@ -187,10 +185,7 @@ class AuthServices {
     } catch (error) {
       return {
         data: null,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Password reset failed",
+        error: error instanceof Error ? error.message : "Password reset failed",
         status: 0,
         success: false,
       };
@@ -216,9 +211,7 @@ class AuthServices {
       return {
         data: null,
         error:
-          error instanceof Error
-            ? error.message
-            : "Password change failed",
+          error instanceof Error ? error.message : "Password change failed",
         status: 0,
         success: false,
       };
