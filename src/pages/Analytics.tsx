@@ -805,8 +805,8 @@ const Analytics = () => {
               Sessions by Subtopic
             </h2>
             {subtopicDistributionData.length > 0 ? (
-              <div className="h-[300px] flex items-center">
-                <ResponsiveContainer width="60%" height="100%">
+              <div className="h-[300px] flex flex-col sm:flex-row items-center">
+                <ResponsiveContainer width="100%" height={200}>
                   <PieChart>
                     <Pie
                       data={subtopicDistributionData}

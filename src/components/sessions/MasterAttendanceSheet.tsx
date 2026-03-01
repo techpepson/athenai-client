@@ -446,8 +446,8 @@ const MasterAttendanceSheet = () => {
   return (
     <div className="space-y-6">
       {/* Header with Date Filter */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
           <Users className="w-5 h-5 text-primary" />
           <h2 className="text-lg font-semibold">Student Attendance Sheet</h2>
           <Badge variant="secondary" className="ml-2">
@@ -535,11 +535,11 @@ const MasterAttendanceSheet = () => {
         return (
           <div
             key={session.id}
-            className="border rounded-lg overflow-hidden bg-card"
+            className="border rounded-lg overflow-x-auto bg-card"
           >
             {/* Session Header — click to expand/collapse */}
             <div
-              className="bg-muted/50 p-4 border-b flex items-center justify-between cursor-pointer select-none hover:bg-muted/70 transition-colors"
+              className="bg-muted/50 p-3 sm:p-4 border-b flex flex-col sm:flex-row sm:items-center sm:justify-between cursor-pointer select-none hover:bg-muted/70 transition-colors gap-2"
               onClick={() => toggleCollapse(session.id)}
             >
               <div>

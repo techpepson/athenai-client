@@ -404,15 +404,7 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
             />
           )}
 
-          {isCourseRep && canRunSessions && (
-            <NavItem
-              to={`${rolePrefix}/sessions`}
-              icon={<Camera className="w-5 h-5" />}
-              label="Kiosk Mode"
-              collapsed={false}
-              onClick={onClose}
-            />
-          )}
+          {/* Kiosk Mode removed from mobile sidebar — use Sessions tab instead */}
 
           {/* Analytics removed — dashboard shows analytics data */}
 

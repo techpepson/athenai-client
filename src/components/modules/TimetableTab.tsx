@@ -984,8 +984,8 @@ const TimetableTab = () => {
               {editingSlot ? "Edit Time Slot" : "Add Time Slot"}
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-4 py-2 sm:py-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Activity Type</Label>
                 <Select
@@ -1058,7 +1058,7 @@ const TimetableTab = () => {
               </Select>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Start Time</Label>
                 <Select value={slotStartTime} onValueChange={setSlotStartTime}>

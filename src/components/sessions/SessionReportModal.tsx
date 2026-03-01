@@ -427,7 +427,7 @@ export const SessionReportModal = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-card border-border">
         <DialogHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <div>
               <DialogTitle className="text-xl font-bold text-foreground">
                 Session Report: {session.name}
@@ -654,7 +654,7 @@ const AttendanceTable = ({
   }
 
   return (
-    <div className="border border-border rounded-lg overflow-hidden">
+    <div className="border border-border rounded-lg overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow className="bg-muted/50">
@@ -747,7 +747,7 @@ const AbsentTable = ({ members }: AbsentTableProps) => {
   }
 
   return (
-    <div className="border border-border rounded-lg overflow-hidden">
+    <div className="border border-border rounded-lg overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow className="bg-muted/50">

@@ -187,7 +187,7 @@ export const ViewAttendanceModal = ({
         </DialogHeader>
 
         {/* Stats Summary */}
-        <div className="grid grid-cols-5 gap-2 py-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 py-4">
           <div className="bg-muted/50 rounded-lg p-3 text-center">
             <p className="text-2xl font-bold text-foreground">{stats.total}</p>
             <p className="text-xs text-muted-foreground">Total</p>
