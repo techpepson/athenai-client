@@ -404,7 +404,7 @@ const StudentAttendanceTab = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-2">
           <Users className="w-5 h-5 text-primary" />
           <h2 className="text-lg font-semibold">Student Attendance Record</h2>
@@ -463,27 +463,27 @@ const StudentAttendanceTab = () => {
             <div
               key={sheet.id}
               className={cn(
-                "border rounded-lg overflow-hidden",
+                "border rounded-lg overflow-x-auto",
                 sheet.sessionStarted
                   ? "border-success/50 bg-success/5"
                   : "border-border",
               )}
             >
               {/* Sheet Header */}
-              <div className="bg-muted/50 p-4 border-b border-border">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
+              <div className="bg-muted/50 p-3 sm:p-4 border-b border-border">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-4">
                     <div className="flex items-center gap-2">
                       <GraduationCap className="w-5 h-5 text-primary" />
-                      <span className="font-semibold">
+                      <span className="font-semibold text-sm sm:text-base">
                         {sheet.moduleName} ({sheet.moduleCode})
                       </span>
                     </div>
-                    <Badge variant="outline">
+                    <Badge variant="outline" className="text-xs">
                       <Calendar className="w-3 h-3 mr-1" />
                       {formatDate(sheet.date)}
                     </Badge>
-                    <Badge variant="outline">
+                    <Badge variant="outline" className="text-xs">
                       <Clock className="w-3 h-3 mr-1" />
                       {formatTime(sheet.startTime)} -{" "}
                       {formatTime(sheet.endTime)}

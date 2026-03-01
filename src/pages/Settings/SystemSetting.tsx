@@ -338,7 +338,7 @@ const SystemSetting = () => {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="courseCode">Course Code *</Label>
                 <Input
@@ -506,7 +506,7 @@ const SystemSetting = () => {
               </Button>
             </div>
 
-            <div className="flex items-start gap-6">
+            <div className="flex flex-col sm:flex-row items-start gap-6">
               {/* Profile Photo */}
               <div className="flex flex-col items-center gap-3">
                 <div className="relative">
@@ -541,7 +541,7 @@ const SystemSetting = () => {
               </div>
 
               {/* Profile Fields */}
-              <div className="flex-1 grid grid-cols-2 gap-4">
+              <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Full Name</Label>
                   <Input
@@ -585,7 +585,7 @@ const SystemSetting = () => {
               <h4 className="text-sm font-medium text-foreground mb-4">
                 Account Information
               </h4>
-              <div className="grid grid-cols-3 gap-4 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
                 <div>
                   <p className="text-muted-foreground">Account Status</p>
                   <p className="font-medium text-green-600">Active</p>
@@ -752,7 +752,7 @@ const SystemSetting = () => {
               </Button>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Organization Name</Label>
                 <Input defaultValue="Tech University" />
@@ -809,7 +809,7 @@ const SystemSetting = () => {
               Attendance Rules
             </h3>
 
-            <div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label>Late Threshold (minutes)</Label>
                 <Input type="number" defaultValue="15" />

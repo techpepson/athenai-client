@@ -1017,7 +1017,7 @@ const Sessions = () => {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Page Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-foreground">
             Attendance Sessions
@@ -1051,31 +1051,46 @@ const Sessions = () => {
 
       {/* Main Tabs: Sessions vs Activities */}
       <Tabs value={mainTab} onValueChange={setMainTab} className="w-full">
-        <TabsList className="bg-card border border-border">
-          <TabsTrigger value="sessions" className="gap-2">
-            <LayoutList className="w-4 h-4" />
+        <TabsList className="bg-card border border-border w-full sm:w-auto">
+          <TabsTrigger
+            value="sessions"
+            className="gap-1.5 text-xs sm:text-sm sm:gap-2"
+          >
+            <LayoutList className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             Sessions
           </TabsTrigger>
-          <TabsTrigger value="activities" className="gap-2">
-            <CalendarDays className="w-4 h-4" />
+          <TabsTrigger
+            value="activities"
+            className="gap-1.5 text-xs sm:text-sm sm:gap-2"
+          >
+            <CalendarDays className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             Activities
           </TabsTrigger>
           {canViewLecturerAttendance && (
-            <TabsTrigger value="lecturer-attendance" className="gap-2">
-              <FileText className="w-4 h-4" />
-              Lecturer Attendance
+            <TabsTrigger
+              value="lecturer-attendance"
+              className="gap-1.5 text-xs sm:text-sm sm:gap-2"
+            >
+              <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">Lecturer</span> Att.
             </TabsTrigger>
           )}
           {canViewMyAttendanceSheet && (
-            <TabsTrigger value="my-attendance" className="gap-2">
-              <FileText className="w-4 h-4" />
-              My Attendance Sheet
+            <TabsTrigger
+              value="my-attendance"
+              className="gap-1.5 text-xs sm:text-sm sm:gap-2"
+            >
+              <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">My</span> Attendance
             </TabsTrigger>
           )}
           {canViewMasterAttendanceSheet && (
-            <TabsTrigger value="student-attendance" className="gap-2">
-              <Users className="w-4 h-4" />
-              Student Attendance Sheet
+            <TabsTrigger
+              value="student-attendance"
+              className="gap-1.5 text-xs sm:text-sm sm:gap-2"
+            >
+              <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">Student</span> Att.
             </TabsTrigger>
           )}
         </TabsList>
@@ -1399,7 +1414,7 @@ const Sessions = () => {
                 onValueChange={setActiveTab}
                 className="w-full"
               >
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <TabsList className="bg-card border border-border">
                     <TabsTrigger value="all">
                       All Sessions ({sessions.length})

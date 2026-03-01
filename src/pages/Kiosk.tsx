@@ -632,7 +632,7 @@ const Kiosk = () => {
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div
                   className={cn(
-                    "w-64 h-64 border-2 rounded-2xl transition-all duration-300",
+                    "w-48 h-48 sm:w-64 sm:h-64 border-2 rounded-2xl transition-all duration-300",
                     scanState === "success" && "border-success scale-110",
                     scanState === "failed" && "border-destructive",
                     scanState === "processing" && "border-warning",

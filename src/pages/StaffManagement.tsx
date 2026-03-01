@@ -539,7 +539,7 @@ const StaffManagement = () => {
                 <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
                   Earnings Summary &mdash; {monthLabel}
                 </h4>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <SummaryItem
                     label="Hourly Rate"
                     value={fmt(detailLecturer.hourlyRate)}

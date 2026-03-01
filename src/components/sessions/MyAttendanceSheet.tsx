@@ -215,7 +215,7 @@ const MyAttendanceSheet = () => {
           <Filter className="w-4 h-4 text-muted-foreground" />
           <span className="text-sm text-muted-foreground">Module:</span>
           <Select value={selectedModule} onValueChange={setSelectedModule}>
-            <SelectTrigger className="w-[260px]">
+            <SelectTrigger className="w-full sm:w-[260px]">
               <SelectValue placeholder="All Modules" />
             </SelectTrigger>
             <SelectContent>
@@ -231,7 +231,7 @@ const MyAttendanceSheet = () => {
       </div>
 
       {/* Attendance Table */}
-      <div className="border rounded-lg overflow-hidden">
+      <div className="border rounded-lg overflow-x-auto">
         <Table className="table-fixed w-full">
           <TableHeader>
             <TableRow className="bg-muted/50">
