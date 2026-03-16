@@ -6,6 +6,8 @@ export interface SessionDetail {
   sessionId: string;
   sessionName: string;
   hours: number;
+  regularHours?: number;
+  overtimeHours?: number;
   date?: string; // present in period-based responses
 }
 
@@ -16,6 +18,11 @@ export interface LecturerEarning {
   staffNo: string | null;
   hourlyRate: number;
   totalHours: number;
+  regularHours?: number;
+  overtimeHours?: number;
+  overtimeRate?: number;
+  regularEarnings?: number;
+  overtimeEarnings?: number;
   grossEarnings: number;
   taxDeduction: number;
   taxRate: number;

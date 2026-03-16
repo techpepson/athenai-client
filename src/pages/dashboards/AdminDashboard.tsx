@@ -39,11 +39,7 @@ import {
   AttendanceRecord,
 } from "@/services/attendance.services";
 import { usersServices } from "@/services/users.services";
-import {
-  modulesService,
-  Module,
-  SubTopic,
-} from "@/services/modules.service";
+import { modulesService, Module, SubTopic } from "@/services/modules.service";
 
 const AdminDashboard = () => {
   const { user, token } = useAuth();
@@ -119,7 +115,11 @@ const AdminDashboard = () => {
 
   // Build a flat list of all subtopics with module info
   const allSubtopics = useMemo(() => {
-    const subtopics: (SubTopic & { moduleName: string; moduleCode: string; moduleLevel: number })[] = [];
+    const subtopics: (SubTopic & {
+      moduleName: string;
+      moduleCode: string;
+      moduleLevel: number;
+    })[] = [];
     allModules.forEach((mod) => {
       (mod.subtopics || []).forEach((st) => {
         subtopics.push({
@@ -266,7 +266,8 @@ const AdminDashboard = () => {
         id: s.id,
         name: s.name,
         courseId: s.courseId || "",
-        courseName: s.subtopic?.name || s.module?.name || s.course?.title || "Unknown",
+        courseName:
+          s.subtopic?.name || s.module?.name || s.course?.title || "Unknown",
         createdBy: s.createdBy?.name || "Unknown",
         type: mapSessionType(s.type),
         status:
@@ -329,7 +330,11 @@ const AdminDashboard = () => {
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2 sm:gap-3 md:gap-4">
           <StatCard
-            title={user?.role === "SYSTEM_ADMIN" ? "All Members" : "Students & Lecturers"}
+            title={
+              user?.role === "SYSTEM_ADMIN"
+                ? "All Members"
+                : "Students & Lecturers"
+            }
             value={totalMembers.toLocaleString()}
             icon={Users}
           />
@@ -440,7 +445,11 @@ const AdminDashboard = () => {
                   });
                   return { day: key, present, late };
                 });
-                if (weeklyAttendanceData.every((d) => d.present === 0 && d.late === 0)) {
+                if (
+                  weeklyAttendanceData.every(
+                    (d) => d.present === 0 && d.late === 0,
+                  )
+                ) {
                   return (
                     <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
                       <BookX className="w-10 h-10 mb-2" />
@@ -465,16 +474,21 @@ const AdminDashboard = () => {
                   <p className="text-lg font-bold">{allModules.length}</p>
                 </div>
                 <div className="p-3 rounded-lg bg-muted/50">
-                  <p className="text-xs text-muted-foreground">Total Subtopics</p>
+                  <p className="text-xs text-muted-foreground">
+                    Total Subtopics
+                  </p>
                   <p className="text-lg font-bold">{allSubtopics.length}</p>
                 </div>
                 <div className="p-3 rounded-lg bg-muted/50">
-                  <p className="text-xs text-muted-foreground">Attendance Rate</p>
+                  <p className="text-xs text-muted-foreground">
+                    Attendance Rate
+                  </p>
                   <Badge
                     variant={attendanceRate > 85 ? "default" : "secondary"}
                     className="mt-1"
                   >
-                    {attendanceRate > 85 ? "Excellent" : "Normal"} ({attendanceRate}%)
+                    {attendanceRate > 85 ? "Excellent" : "Normal"} (
+                    {attendanceRate}%)
                   </Badge>
                 </div>
               </CardContent>
@@ -488,7 +502,9 @@ const AdminDashboard = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <BarChart3 className="w-5 h-5" />
-                {selectedModule === "all" ? "All Modules Details" : "Selected Module Details"}
+                {selectedModule === "all"
+                  ? "All Modules Details"
+                  : "Selected Module Details"}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -496,7 +512,9 @@ const AdminDashboard = () => {
                 {moduleDetails.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-8 text-center">
                     <BookX className="w-10 h-10 text-muted-foreground mb-3" />
-                    <p className="text-sm font-medium text-muted-foreground">No modules found</p>
+                    <p className="text-sm font-medium text-muted-foreground">
+                      No modules found
+                    </p>
                   </div>
                 ) : (
                   moduleDetails.map((mod) => (
@@ -511,25 +529,37 @@ const AdminDashboard = () => {
                             {mod.code} &middot; Level {mod.level}
                           </p>
                         </div>
-                        <Badge variant={mod.attendanceRate >= 80 ? "default" : "secondary"}>
+                        <Badge
+                          variant={
+                            mod.attendanceRate >= 80 ? "default" : "secondary"
+                          }
+                        >
                           {mod.attendanceRate}%
                         </Badge>
                       </div>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                         <div>
-                          <p className="text-xs text-muted-foreground">Subtopics</p>
+                          <p className="text-xs text-muted-foreground">
+                            Subtopics
+                          </p>
                           <p className="font-bold">{mod.subtopicCount}</p>
                         </div>
                         <div>
-                          <p className="text-xs text-muted-foreground">Sessions</p>
+                          <p className="text-xs text-muted-foreground">
+                            Sessions
+                          </p>
                           <p className="font-bold">{mod.actualSessions}</p>
                         </div>
                         <div>
-                          <p className="text-xs text-muted-foreground">Attended</p>
+                          <p className="text-xs text-muted-foreground">
+                            Attended
+                          </p>
                           <p className="font-bold">{mod.totalPresent}</p>
                         </div>
                         <div>
-                          <p className="text-xs text-muted-foreground">Expected</p>
+                          <p className="text-xs text-muted-foreground">
+                            Expected
+                          </p>
                           <p className="font-bold">{mod.totalExpected}</p>
                         </div>
                       </div>
@@ -546,7 +576,9 @@ const AdminDashboard = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
             <Card>
               <CardHeader className="p-4 sm:p-6">
-                <CardTitle className="text-base sm:text-lg">Top Performing Modules</CardTitle>
+                <CardTitle className="text-base sm:text-lg">
+                  Top Performing Modules
+                </CardTitle>
               </CardHeader>
               <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
                 <div className="space-y-3">
@@ -558,12 +590,16 @@ const AdminDashboard = () => {
                         key={mod.id}
                         className="flex items-center justify-between p-2 rounded-lg bg-muted/50"
                       >
-                        <span className="text-sm font-medium truncate">{mod.name}</span>
+                        <span className="text-sm font-medium truncate">
+                          {mod.name}
+                        </span>
                         <Badge variant="default">{mod.attendanceRate}%</Badge>
                       </div>
                     ))}
                   {moduleDetails.length === 0 && (
-                    <p className="text-sm text-muted-foreground text-center py-4">No module data available</p>
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No module data available
+                    </p>
                   )}
                 </div>
               </CardContent>
@@ -571,7 +607,9 @@ const AdminDashboard = () => {
 
             <Card>
               <CardHeader className="p-4 sm:p-6">
-                <CardTitle className="text-base sm:text-lg">Modules Needing Attention</CardTitle>
+                <CardTitle className="text-base sm:text-lg">
+                  Modules Needing Attention
+                </CardTitle>
               </CardHeader>
               <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
                 <div className="space-y-3">
@@ -583,12 +621,16 @@ const AdminDashboard = () => {
                         key={mod.id}
                         className="flex items-center justify-between p-2 rounded-lg bg-muted/50"
                       >
-                        <span className="text-sm font-medium truncate">{mod.name}</span>
+                        <span className="text-sm font-medium truncate">
+                          {mod.name}
+                        </span>
                         <Badge variant="secondary">{mod.attendanceRate}%</Badge>
                       </div>
                     ))}
                   {moduleDetails.length === 0 && (
-                    <p className="text-sm text-muted-foreground text-center py-4">No module data available</p>
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No module data available
+                    </p>
                   )}
                 </div>
               </CardContent>
@@ -605,7 +647,8 @@ const AdminDashboard = () => {
               Active & Upcoming Sessions
             </h2>
             <p className="text-xs sm:text-sm text-muted-foreground">
-              {activeSessionsList.length} sessions currently running or scheduled
+              {activeSessionsList.length} sessions currently running or
+              scheduled
             </p>
           </div>
         </div>
@@ -613,7 +656,9 @@ const AdminDashboard = () => {
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-12 text-center">
               <CalendarX2 className="w-12 h-12 text-muted-foreground/50 mb-4" />
-              <h3 className="text-lg font-medium text-muted-foreground mb-2">No Active Sessions</h3>
+              <h3 className="text-lg font-medium text-muted-foreground mb-2">
+                No Active Sessions
+              </h3>
               <p className="text-sm text-muted-foreground max-w-sm">
                 There are no active or upcoming sessions at the moment.
               </p>

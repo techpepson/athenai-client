@@ -9,6 +9,7 @@ import {
   Calendar,
   TrendingDown,
   Receipt,
+  Clock,
 } from "lucide-react";
 import {
   Select,
@@ -48,7 +49,7 @@ function buildMonthOptions(count = 12) {
   return months;
 }
 
-const fmt = (n: number) => `$${n.toFixed(2)}`;
+const fmt = (n: number) => `₵${n.toFixed(2)}`;
 
 // ─── Component ──────────────────────────────────────────
 
@@ -134,6 +135,15 @@ const Payroll = () => {
   const net = lecturerData?.earnings ?? 0;
   const taxPct = ((lecturerData?.taxRate ?? 0.1) * 100).toFixed(0);
   const sessionCount = lecturerData?.sessions?.length ?? 0;
+  const workedHours = lecturerData?.totalHours ?? 0;
+  const overtimeHours = lecturerData?.overtimeHours ?? 0;
+  const regularHours =
+    lecturerData?.regularHours ?? Math.max(0, workedHours - overtimeHours);
+  const overtimeRate = lecturerData?.overtimeRate ?? lecturerData?.hourlyRate ?? 0;
+  const regularEarnings =
+    lecturerData?.regularEarnings ?? regularHours * (lecturerData?.hourlyRate ?? 0);
+  const overtimeEarnings =
+    lecturerData?.overtimeEarnings ?? overtimeHours * overtimeRate;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -182,7 +192,7 @@ const Payroll = () => {
       )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-7 gap-3">
         <PayrollStatsCard
           label="Sessions Attended"
           value={sessionCount}
@@ -190,10 +200,22 @@ const Payroll = () => {
           variant="primary"
         />
         <PayrollStatsCard
-          label="Hourly Rate"
-          value={fmt(lecturerData?.hourlyRate ?? 0)}
-          icon={DollarSign}
+          label="Worked Hours"
+          value={`${workedHours.toFixed(2)}h`}
+          icon={Clock}
           variant="warning"
+        />
+        <PayrollStatsCard
+          label="Overtime Hours"
+          value={`${overtimeHours.toFixed(2)}h`}
+          icon={Clock}
+          variant="warning"
+        />
+        <PayrollStatsCard
+          label="Overtime Earnings"
+          value={fmt(overtimeEarnings)}
+          icon={TrendingUp}
+          variant="success"
         />
         <PayrollStatsCard
           label="Gross Earnings"
@@ -242,13 +264,37 @@ const Payroll = () => {
                   <div className="flex justify-between items-center">
                     <span className="text-foreground">Total Hours Worked</span>
                     <span className="font-semibold text-foreground">
-                      {lecturerData.totalHours.toFixed(1)}h
+                      {workedHours.toFixed(2)}h
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-foreground">Regular Hours</span>
+                    <span className="font-semibold text-foreground">
+                      {regularHours.toFixed(2)}h
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-foreground">Overtime Hours</span>
+                    <span className="font-semibold text-foreground">
+                      {overtimeHours.toFixed(2)}h
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-foreground">&times; Hourly Rate</span>
                     <span className="font-semibold text-foreground">
                       {fmt(lecturerData.hourlyRate)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-foreground">Regular Earnings</span>
+                    <span className="font-semibold text-foreground">
+                      {fmt(regularEarnings)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-foreground">Overtime Earnings</span>
+                    <span className="font-semibold text-foreground">
+                      {fmt(overtimeEarnings)}
                     </span>
                   </div>
                   <Separator />
@@ -290,7 +336,7 @@ const Payroll = () => {
                     <div className="flex justify-between text-sm mb-1">
                       <span className="text-muted-foreground">
                         {sessionCount} Session{sessionCount !== 1 ? "s" : ""}{" "}
-                        &middot; {lecturerData.totalHours.toFixed(1)}h Worked
+                        &middot; {workedHours.toFixed(2)}h Worked
                       </span>
                     </div>
                     <div className="w-full bg-muted rounded-full h-2.5 mt-2">
@@ -340,14 +386,19 @@ const Payroll = () => {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Session</TableHead>
-                        <TableHead className="text-right">Hours</TableHead>
-                        <TableHead className="text-right">Gross</TableHead>
-                        <TableHead className="text-right">Tax</TableHead>
+                        <TableHead className="text-right">Worked</TableHead>
+                        <TableHead className="text-right">Regular</TableHead>
+                        <TableHead className="text-right">Overtime</TableHead>
+                        <TableHead className="text-right">OT Earnings</TableHead>
                         <TableHead className="text-right">Net</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {lecturerData.sessions.map((s) => {
+                        const sRegularHours = s.regularHours ?? s.hours;
+                        const sOvertimeHours =
+                          s.overtimeHours ?? Math.max(0, s.hours - sRegularHours);
+                        const sOvertimeEarnings = sOvertimeHours * overtimeRate;
                         const sGross = s.hours * lecturerData.hourlyRate;
                         const sTax = sGross * (lecturerData.taxRate ?? 0.1);
                         const sNet = sGross - sTax;
@@ -360,10 +411,13 @@ const Payroll = () => {
                               {s.hours.toFixed(2)}h
                             </TableCell>
                             <TableCell className="text-right">
-                              {fmt(sGross)}
+                              {sRegularHours.toFixed(2)}h
                             </TableCell>
-                            <TableCell className="text-right text-red-500">
-                              -{fmt(sTax)}
+                            <TableCell className="text-right">
+                              {sOvertimeHours.toFixed(2)}h
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {fmt(sOvertimeEarnings)}
                             </TableCell>
                             <TableCell className="text-right font-semibold text-green-600">
                               {fmt(sNet)}

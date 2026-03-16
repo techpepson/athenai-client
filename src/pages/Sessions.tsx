@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Loader2,
@@ -300,6 +300,8 @@ const Sessions = () => {
   }, []);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [clockTick, setClockTick] = useState(Date.now());
+  const remindedSessionKeysRef = useRef<Set<string>>(new Set());
   const [togglingSessionId, setTogglingSessionId] = useState<string | null>(
     null,
   );
@@ -366,15 +368,73 @@ const Sessions = () => {
   } | null>(null);
 
   // Day name mapping for display
-  const dayNames = [
-    "Sunday",
-    "Monday",
-    "Tuesday",
-    "Wednesday",
-    "Thursday",
-    "Friday",
-    "Saturday",
-  ];
+  const dayNames = useMemo(
+    () => [
+      "Sunday",
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+    ],
+    [],
+  );
+
+  const playReminderSound = useCallback(() => {
+    try {
+      const AudioCtx =
+        window.AudioContext ||
+        (
+          window as Window & {
+            webkitAudioContext?: typeof AudioContext;
+          }
+        ).webkitAudioContext;
+      if (!AudioCtx) return;
+
+      const audioContext = new AudioCtx();
+
+      const playBeep = (startAt: number, duration: number, frequency: number) => {
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+
+        oscillator.type = "sine";
+        oscillator.frequency.setValueAtTime(frequency, startAt);
+
+        gainNode.gain.setValueAtTime(0.0001, startAt);
+        gainNode.gain.exponentialRampToValueAtTime(0.08, startAt + 0.02);
+        gainNode.gain.exponentialRampToValueAtTime(
+          0.0001,
+          startAt + duration,
+        );
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        oscillator.start(startAt);
+        oscillator.stop(startAt + duration);
+      };
+
+      const now = audioContext.currentTime;
+      playBeep(now, 0.18, 880);
+      playBeep(now + 0.23, 0.24, 1175);
+
+      setTimeout(() => {
+        void audioContext.close().catch(() => {});
+      }, 700);
+    } catch {
+      // Ignore sound failures (e.g. autoplay restrictions).
+    }
+  }, []);
+
+  // Recompute lecture status (scheduled/active/completed) in near real time.
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setClockTick(Date.now());
+    }, 15000);
+
+    return () => window.clearInterval(timer);
+  }, []);
 
   // Build weekly lecture cards from timetable activities
   // Reps: show ALL subtopic sessions for today (startable)
@@ -382,7 +442,7 @@ const Sessions = () => {
   const weeklyLectureSessions = useMemo((): AttendanceSession[] => {
     if (allTimetables.length === 0) return [];
 
-    const now = new Date();
+    const now = new Date(clockTick);
     // Get Monday of the current week
     const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon, ...
     const monday = new Date(now);
@@ -534,7 +594,7 @@ const Sessions = () => {
     lectureCards.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
 
     return lectureCards;
-  }, [allModules, allTimetables, allUsers, isRep, selectedWeek]);
+  }, [allModules, allTimetables, allUsers, isRep, selectedWeek, clockTick]);
 
   // Group lectures by day for display
   const lecturesByDay = useMemo(() => {
@@ -566,7 +626,7 @@ const Sessions = () => {
     });
 
     return sortedGrouped;
-  }, [weeklyLectureSessions]);
+  }, [weeklyLectureSessions, dayNames]);
 
   // Fetch sessions from API
   const fetchSessions = useCallback(
@@ -682,157 +742,199 @@ const Sessions = () => {
     return session.status === activeTab;
   });
 
-  const handleStartSession = async (session: AttendanceSession) => {
-    if (!token) {
-      toast.error("You must be logged in to start a session");
-      return;
-    }
-
-    // Extract slot ID from the session ID (e.g., "timetable-slotId" -> "slotId")
-    const slotId = session.id.replace("timetable-", "");
-
-    // Find the timetable slot to get subtopicId, lecturerId, moduleId
-    let timetableSlot: TimetableSlot | undefined;
-    let moduleForSlot: Module | undefined;
-    for (const tt of allTimetables) {
-      const slot = tt.slots.find((s) => s.id === slotId);
-      if (slot) {
-        timetableSlot = slot;
-        moduleForSlot = allModules.find((m) => m.id === tt.moduleId);
-        break;
+  const handleStartSession = useCallback(
+    async (session: AttendanceSession) => {
+      if (!token) {
+        toast.error("You must be logged in to start a session");
+        return;
       }
-    }
 
-    if (!timetableSlot || !moduleForSlot) {
-      toast.error("Could not find timetable slot data");
-      return;
-    }
+      // Extract slot ID from the session ID (e.g., "timetable-slotId" -> "slotId")
+      const slotId = session.id.replace("timetable-", "");
 
-    // Resolve lecturer ID — slot may have lecturerId directly, or via subtopic
-    // Note: subtopic.lecturerId and slot.lecturerId are User IDs,
-    // but the backend Session.lecturerId expects the Lecturer record ID.
-    const subtopic = moduleForSlot.subtopics.find(
-      (s) => s.id === timetableSlot!.subtopicId,
-    );
-    const lecturerUserId = timetableSlot.lecturerId || subtopic?.lecturerId;
-
-    if (!lecturerUserId) {
-      toast.error(
-        "No lecturer assigned to this slot. Please assign a lecturer first.",
-      );
-      return;
-    }
-
-    // Resolve the Lecturer record ID from the User ID
-    const lecturerUser = allUsers.find((u) => u.id === lecturerUserId);
-    const lecturerId = lecturerUser?.lecturer?.id;
-
-    if (!lecturerId) {
-      toast.error(
-        "Could not find lecturer record. The assigned user may not have a lecturer profile.",
-      );
-      return;
-    }
-
-    // Get geolocation
-    setIsCreatingSession(true);
-    setStartingSession(session);
-
-    let latitude: number | undefined;
-    let longitude: number | undefined;
-
-    try {
-      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0,
-        });
-      });
-      latitude = pos.coords.latitude;
-      longitude = pos.coords.longitude;
-    } catch {
-      // Geolocation failed — proceed without it (backend will allow if lat/long not required)
-      toast.warning(
-        "Could not get your location. Session will be created without geofencing.",
-      );
-    }
-
-    try {
-      const response = await createSession(
-        {
-          name:
-            subtopic?.name ||
-            `${moduleForSlot.name} - ${timetableSlot.activityType || "Lecture"}`,
-          type: SessionType.CLASS,
-          mode: SessionMode.CHECK_IN,
-          moduleId: moduleForSlot.id,
-          lecturerId,
-          subtopicId: timetableSlot.subtopicId || undefined,
-          timetableSlotId: timetableSlot.id,
-          location: timetableSlot.venue || undefined,
-          startTime: session.startTime.toISOString(),
-          endTime: session.endTime.toISOString(),
-          latitude,
-          longitude,
-          geofenceRadius: 100,
-          week: selectedWeek,
-        },
-        token,
-      );
-
-      if (response.success && response.data?.data) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const created = response.data.data as any;
-
-        // Store created session info for SMS modal
-        setCreatedSessionData({
-          attendanceLink: created.attendanceLink,
-          smsSentToLecturer: created.smsSentToLecturer,
-          studentsSmsCount: created.studentsSmsCount,
-          sessionId: created.id,
-        });
-
-        // Save to localStorage to mark as active
-        const storedActiveSessions = localStorage.getItem(
-          "active_lecture_sessions",
-        );
-        const activeSessions = storedActiveSessions
-          ? JSON.parse(storedActiveSessions)
-          : [];
-
-        if (!activeSessions.includes(slotId)) {
-          activeSessions.push(slotId);
-          localStorage.setItem(
-            "active_lecture_sessions",
-            JSON.stringify(activeSessions),
-          );
+      // Find the timetable slot to get subtopicId, lecturerId, moduleId
+      let timetableSlot: TimetableSlot | undefined;
+      let moduleForSlot: Module | undefined;
+      for (const tt of allTimetables) {
+        const slot = tt.slots.find((s) => s.id === slotId);
+        if (slot) {
+          timetableSlot = slot;
+          moduleForSlot = allModules.find((m) => m.id === tt.moduleId);
+          break;
         }
-
-        // Dispatch event to notify other components
-        window.dispatchEvent(new Event("session-started"));
-
-        // Show SMS modal with result info
-        setSmsModalOpen(true);
-
-        toast.success("Session created successfully!");
-
-        // Refresh sessions list to show the new server session
-        fetchSessions();
-      } else {
-        toast.error(response.error || "Failed to create session");
-        setStartingSession(null);
       }
-    } catch (error: unknown) {
-      console.error("Error creating session:", error);
-      const errMsg =
-        error instanceof Error ? error.message : "Failed to create session";
-      toast.error(errMsg);
-      setStartingSession(null);
-    } finally {
-      setIsCreatingSession(false);
+
+      if (!timetableSlot || !moduleForSlot) {
+        toast.error("Could not find timetable slot data");
+        return;
+      }
+
+      // Resolve lecturer ID — slot may have lecturerId directly, or via subtopic
+      // Note: subtopic.lecturerId and slot.lecturerId are User IDs,
+      // but the backend Session.lecturerId expects the Lecturer record ID.
+      const subtopic = moduleForSlot.subtopics.find(
+        (s) => s.id === timetableSlot!.subtopicId,
+      );
+      const lecturerUserId = timetableSlot.lecturerId || subtopic?.lecturerId;
+
+      if (!lecturerUserId) {
+        toast.error(
+          "No lecturer assigned to this slot. Please assign a lecturer first.",
+        );
+        return;
+      }
+
+      // Resolve the Lecturer record ID from the User ID
+      const lecturerUser = allUsers.find((u) => u.id === lecturerUserId);
+      const lecturerId = lecturerUser?.lecturer?.id;
+
+      if (!lecturerId) {
+        toast.error(
+          "Could not find lecturer record. The assigned user may not have a lecturer profile.",
+        );
+        return;
+      }
+
+      // Get geolocation
+      setIsCreatingSession(true);
+      setStartingSession(session);
+
+      let latitude: number | undefined;
+      let longitude: number | undefined;
+
+      try {
+        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0,
+          });
+        });
+        latitude = pos.coords.latitude;
+        longitude = pos.coords.longitude;
+      } catch {
+        // Geolocation failed — proceed without it (backend will allow if lat/long not required)
+        toast.warning(
+          "Could not get your location. Session will be created without geofencing.",
+        );
+      }
+
+      try {
+        const response = await createSession(
+          {
+            name:
+              subtopic?.name ||
+              `${moduleForSlot.name} - ${timetableSlot.activityType || "Lecture"}`,
+            type: SessionType.CLASS,
+            mode: SessionMode.CHECK_IN,
+            moduleId: moduleForSlot.id,
+            lecturerId,
+            subtopicId: timetableSlot.subtopicId || undefined,
+            timetableSlotId: timetableSlot.id,
+            location: timetableSlot.venue || undefined,
+            startTime: session.startTime.toISOString(),
+            endTime: session.endTime.toISOString(),
+            latitude,
+            longitude,
+            geofenceRadius: 10,
+            week: selectedWeek,
+          },
+          token,
+        );
+
+        if (response.success && response.data?.data) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const created = response.data.data as any;
+
+          // Store created session info for SMS modal
+          setCreatedSessionData({
+            attendanceLink: created.attendanceLink,
+            smsSentToLecturer: created.smsSentToLecturer,
+            studentsSmsCount: created.studentsSmsCount,
+            sessionId: created.id,
+          });
+
+          // Save to localStorage to mark as active
+          const storedActiveSessions = localStorage.getItem(
+            "active_lecture_sessions",
+          );
+          const activeSessions = storedActiveSessions
+            ? JSON.parse(storedActiveSessions)
+            : [];
+
+          if (!activeSessions.includes(slotId)) {
+            activeSessions.push(slotId);
+            localStorage.setItem(
+              "active_lecture_sessions",
+              JSON.stringify(activeSessions),
+            );
+          }
+
+          // Dispatch event to notify other components
+          window.dispatchEvent(new Event("session-started"));
+
+          // Show SMS modal with result info
+          setSmsModalOpen(true);
+
+          toast.success("Session created successfully!");
+
+          // Refresh sessions list to show the new server session
+          fetchSessions();
+        } else {
+          toast.error(response.error || "Failed to create session");
+          setStartingSession(null);
+        }
+      } catch (error: unknown) {
+        console.error("Error creating session:", error);
+        const errMsg =
+          error instanceof Error ? error.message : "Failed to create session";
+        toast.error(errMsg);
+        setStartingSession(null);
+      } finally {
+        setIsCreatingSession(false);
+      }
+    },
+    [token, allTimetables, allModules, allUsers, selectedWeek, fetchSessions],
+  );
+
+  // Rep reminder: alert when a slot time is due so they can start attendance.
+  useEffect(() => {
+    if (!isRep || mainTab !== "sessions" || weeklyLectureSessions.length === 0) {
+      return;
     }
-  };
+
+    const storedActiveSessions = localStorage.getItem("active_lecture_sessions");
+    let activeSlotIds: string[] = [];
+    try {
+      activeSlotIds = storedActiveSessions ? JSON.parse(storedActiveSessions) : [];
+    } catch {
+      activeSlotIds = [];
+    }
+
+    weeklyLectureSessions.forEach((session) => {
+      if (session.status !== "active") return;
+
+      const slotId = session.id.replace("timetable-", "");
+      if (activeSlotIds.includes(slotId)) return;
+
+      const reminderKey = `${session.id}-${session.startTime.getTime()}`;
+      if (remindedSessionKeysRef.current.has(reminderKey)) return;
+
+      remindedSessionKeysRef.current.add(reminderKey);
+      playReminderSound();
+
+      toast.warning("Session time is up", {
+        description: `${session.name} is due now. Start the session to begin attendance.`,
+        duration: 10000,
+        action: {
+          label: "Start now",
+          onClick: () => {
+            void handleStartSession(session);
+          },
+        },
+      });
+    });
+  }, [isRep, mainTab, weeklyLectureSessions, playReminderSound, handleStartSession]);
 
   // Handle sending SMS link
   const handleSendSms = () => {

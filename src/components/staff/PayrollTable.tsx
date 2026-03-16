@@ -191,7 +191,7 @@ const SessionRow = ({
     </td>
     <td className="px-6 py-4 whitespace-nowrap">
       <div className="text-sm font-semibold text-emerald-600">
-        ${session.earnings.toFixed(2)}
+        ₵{session.earnings.toFixed(2)}
       </div>
     </td>
     <td className="px-6 py-4 whitespace-nowrap">
@@ -310,7 +310,7 @@ const StaffRowWithExpansion = ({
         </td>
         <td className="px-6 py-4 min-w-[120px]">
           <div className="text-sm font-semibold text-emerald-600">
-            ${totalEarnings.toFixed(2)}
+            ₵{totalEarnings.toFixed(2)}
           </div>
         </td>
         <td className="px-6 py-4 min-w-[100px]">
@@ -361,7 +361,7 @@ const StaffRowWithExpansion = ({
               </td>
               <td className="px-6 py-3">
                 <div className="text-sm font-medium text-emerald-600">
-                  ${session.earnings.toFixed(2)}
+                  ₵{session.earnings.toFixed(2)}
                 </div>
               </td>
               <td className="px-6 py-3">
