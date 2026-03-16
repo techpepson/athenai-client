@@ -20,7 +20,7 @@ import {
   markAttendance,
   MarkAttendanceResponse,
 } from "@/services/attendance.services";
-import { getSessionById } from "@/services/sessions.service";
+import { getSessionById, Session } from "@/services/sessions.service";
 import { toast } from "sonner";
 
 type ScanState = "idle" | "scanning" | "processing" | "success" | "failed";
@@ -149,12 +149,17 @@ const Kiosk = () => {
         const response = await getSessionById(sessionId);
 
         if (response.success && response.data) {
-          // The API returns { success: true, data: session }, so we need to access .data.data
-          const responseData = response.data as {
-            success: boolean;
-            data: typeof response.data;
-          };
-          const session = responseData.data || response.data;
+          const rawSessionData = response.data as unknown;
+          const session =
+            rawSessionData &&
+            typeof rawSessionData === "object" &&
+            "data" in rawSessionData
+              ? (rawSessionData as { data: Session }).data
+              : (rawSessionData as Session);
+          const kioskGeofenceRadius =
+            session.geofenceRadius == null
+              ? 10
+              : Math.min(session.geofenceRadius, 10);
 
           // Map API response to SessionInfo
           const mappedSession: SessionInfo = {
@@ -174,7 +179,7 @@ const Kiosk = () => {
             endTime: session.endTime,
             latitude: session.latitude ?? undefined,
             longitude: session.longitude ?? undefined,
-            geofenceRadius: session.geofenceRadius ?? undefined,
+            geofenceRadius: kioskGeofenceRadius,
             expectedCount:
               session.course?._count?.enrollments ||
               session.course?.enrollments?.length ||

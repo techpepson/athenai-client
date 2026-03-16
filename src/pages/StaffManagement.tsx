@@ -67,7 +67,7 @@ function buildMonthOptions(count = 12) {
 }
 
 /** Format currency */
-const fmt = (n: number) => `$${n.toFixed(2)}`;
+const fmt = (n: number) => `₵${n.toFixed(2)}`;
 
 // ─── Small helper component ─────────────────────────────
 function SummaryItem({
@@ -174,8 +174,21 @@ const StaffManagement = () => {
   // ── Stats ───────────────────────────────────────────
   const stats = useMemo(() => {
     const totalHours = lecturers.reduce((s, l) => s + l.totalHours, 0);
+    const totalRegularHours = lecturers.reduce(
+      (s, l) =>
+        s + (l.regularHours ?? Math.max(0, l.totalHours - (l.overtimeHours ?? 0))),
+      0,
+    );
+    const totalOvertimeHours = lecturers.reduce(
+      (s, l) => s + (l.overtimeHours ?? 0),
+      0,
+    );
     const totalGross = lecturers.reduce(
       (s, l) => s + (l.grossEarnings ?? l.earnings),
+      0,
+    );
+    const totalOvertimeEarnings = lecturers.reduce(
+      (s, l) => s + (l.overtimeEarnings ?? 0),
       0,
     );
     const totalTax = lecturers.reduce((s, l) => s + (l.taxDeduction ?? 0), 0);
@@ -183,7 +196,10 @@ const StaffManagement = () => {
     return {
       count: lecturers.length,
       totalHours,
+      totalRegularHours,
+      totalOvertimeHours,
       totalGross,
+      totalOvertimeEarnings,
       totalTax,
       totalNet,
     };
@@ -233,11 +249,22 @@ const StaffManagement = () => {
     setLecturers((prev) =>
       prev.map((l) => {
         if (l.lecturerId === id) {
-          const gross = l.totalHours * newRate;
+          const regularHours =
+            l.regularHours ?? Math.max(0, l.totalHours - (l.overtimeHours ?? 0));
+          const overtimeHours = l.overtimeHours ?? 0;
+          const overtimeRate = l.overtimeRate ?? newRate;
+          const regularEarnings = regularHours * newRate;
+          const overtimeEarnings = overtimeHours * overtimeRate;
+          const gross = regularEarnings + overtimeEarnings;
           const tax = gross * (l.taxRate ?? 0.1);
           return {
             ...l,
             hourlyRate: newRate,
+            regularHours,
+            overtimeHours,
+            overtimeRate,
+            regularEarnings: Math.round(regularEarnings * 100) / 100,
+            overtimeEarnings: Math.round(overtimeEarnings * 100) / 100,
             grossEarnings: Math.round(gross * 100) / 100,
             taxDeduction: Math.round(tax * 100) / 100,
             earnings: Math.round((gross - tax) * 100) / 100,
@@ -261,7 +288,11 @@ const StaffManagement = () => {
   const toggleRow = (id: string) => {
     setExpandedRows((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
       return next;
     });
   };
@@ -324,13 +355,31 @@ const StaffManagement = () => {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-7 gap-3">
         <PayrollStatsCard label="Lecturers" value={stats.count} icon={Users} />
         <PayrollStatsCard
-          label="Total Hours"
+          label="Worked Hours"
           value={`${stats.totalHours.toFixed(1)}h`}
           icon={Clock}
           variant="primary"
+        />
+        <PayrollStatsCard
+          label="Regular Hours"
+          value={`${stats.totalRegularHours.toFixed(1)}h`}
+          icon={Clock}
+          variant="primary"
+        />
+        <PayrollStatsCard
+          label="Overtime Hours"
+          value={`${stats.totalOvertimeHours.toFixed(1)}h`}
+          icon={Clock}
+          variant="warning"
+        />
+        <PayrollStatsCard
+          label="Overtime Earnings"
+          value={fmt(stats.totalOvertimeEarnings)}
+          icon={DollarSign}
+          variant="warning"
         />
         <PayrollStatsCard
           label="Gross Earnings"
@@ -375,7 +424,9 @@ const StaffManagement = () => {
                 <TableHead>Name</TableHead>
                 <TableHead>Staff No</TableHead>
                 <TableHead className="text-right">Rate/hr</TableHead>
-                <TableHead className="text-right">Hours</TableHead>
+                <TableHead className="text-right">Worked</TableHead>
+                <TableHead className="text-right">Overtime</TableHead>
+                <TableHead className="text-right">OT Earnings</TableHead>
                 <TableHead className="text-right">Gross</TableHead>
                 <TableHead className="text-right">
                   Tax{" "}
@@ -389,6 +440,10 @@ const StaffManagement = () => {
             </TableHeader>
             <TableBody>
               {filteredLecturers.map((lec) => {
+                const overtimeHours = lec.overtimeHours ?? 0;
+                const overtimeEarnings =
+                  lec.overtimeEarnings ??
+                  overtimeHours * (lec.overtimeRate ?? lec.hourlyRate);
                 const gross = lec.grossEarnings ?? lec.earnings;
                 const tax = lec.taxDeduction ?? 0;
                 const net = lec.earnings;
@@ -448,6 +503,12 @@ const StaffManagement = () => {
                     </TableCell>
                     <TableCell className="text-right">
                       {lec.totalHours.toFixed(1)}h
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {overtimeHours.toFixed(1)}h
+                    </TableCell>
+                    <TableCell className="text-right text-amber-600">
+                      {fmt(overtimeEarnings)}
                     </TableCell>
                     <TableCell className="text-right">{fmt(gross)}</TableCell>
                     <TableCell className="text-right text-red-500">
@@ -545,8 +606,26 @@ const StaffManagement = () => {
                     value={fmt(detailLecturer.hourlyRate)}
                   />
                   <SummaryItem
-                    label="Total Hours"
+                    label="Worked Hours"
                     value={`${detailLecturer.totalHours.toFixed(1)}h`}
+                  />
+                  <SummaryItem
+                    label="Regular Hours"
+                    value={`${(detailLecturer.regularHours ?? Math.max(0, detailLecturer.totalHours - (detailLecturer.overtimeHours ?? 0))).toFixed(1)}h`}
+                  />
+                  <SummaryItem
+                    label="Overtime Hours"
+                    value={`${(detailLecturer.overtimeHours ?? 0).toFixed(1)}h`}
+                    className="text-amber-600"
+                  />
+                  <SummaryItem
+                    label="Overtime Earnings"
+                    value={fmt(
+                      detailLecturer.overtimeEarnings ??
+                        (detailLecturer.overtimeHours ?? 0) *
+                          (detailLecturer.overtimeRate ?? detailLecturer.hourlyRate),
+                    )}
+                    className="text-amber-600"
                   />
                   <SummaryItem
                     label="Gross Earnings"
@@ -588,24 +667,44 @@ const StaffManagement = () => {
                       <TableHeader>
                         <TableRow>
                           <TableHead>Session</TableHead>
-                          <TableHead className="text-right">Hours</TableHead>
+                          <TableHead className="text-right">Worked</TableHead>
+                          <TableHead className="text-right">Regular</TableHead>
+                          <TableHead className="text-right">Overtime</TableHead>
+                          <TableHead className="text-right">OT Earnings</TableHead>
                           <TableHead className="text-right">Earnings</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {detailLecturer.sessions.map((s) => (
-                          <TableRow key={s.sessionId}>
-                            <TableCell className="font-medium">
-                              {s.sessionName}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {s.hours.toFixed(2)}h
-                            </TableCell>
-                            <TableCell className="text-right text-green-600">
-                              {fmt(s.hours * detailLecturer.hourlyRate)}
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                        {detailLecturer.sessions.map((s) => {
+                          const sRegularHours = s.regularHours ?? s.hours;
+                          const sOvertimeHours =
+                            s.overtimeHours ?? Math.max(0, s.hours - sRegularHours);
+                          const sOvertimeEarnings =
+                            sOvertimeHours *
+                            (detailLecturer.overtimeRate ?? detailLecturer.hourlyRate);
+                          return (
+                            <TableRow key={s.sessionId}>
+                              <TableCell className="font-medium">
+                                {s.sessionName}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {s.hours.toFixed(2)}h
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {sRegularHours.toFixed(2)}h
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {sOvertimeHours.toFixed(2)}h
+                              </TableCell>
+                              <TableCell className="text-right text-amber-600">
+                                {fmt(sOvertimeEarnings)}
+                              </TableCell>
+                              <TableCell className="text-right text-green-600">
+                                {fmt(s.hours * detailLecturer.hourlyRate)}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   </div>
