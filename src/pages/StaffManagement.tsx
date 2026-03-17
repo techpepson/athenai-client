@@ -176,7 +176,8 @@ const StaffManagement = () => {
     const totalHours = lecturers.reduce((s, l) => s + l.totalHours, 0);
     const totalRegularHours = lecturers.reduce(
       (s, l) =>
-        s + (l.regularHours ?? Math.max(0, l.totalHours - (l.overtimeHours ?? 0))),
+        s +
+        (l.regularHours ?? Math.max(0, l.totalHours - (l.overtimeHours ?? 0))),
       0,
     );
     const totalOvertimeHours = lecturers.reduce(
@@ -250,7 +251,8 @@ const StaffManagement = () => {
       prev.map((l) => {
         if (l.lecturerId === id) {
           const regularHours =
-            l.regularHours ?? Math.max(0, l.totalHours - (l.overtimeHours ?? 0));
+            l.regularHours ??
+            Math.max(0, l.totalHours - (l.overtimeHours ?? 0));
           const overtimeHours = l.overtimeHours ?? 0;
           const overtimeRate = l.overtimeRate ?? newRate;
           const regularEarnings = regularHours * newRate;
@@ -623,7 +625,8 @@ const StaffManagement = () => {
                     value={fmt(
                       detailLecturer.overtimeEarnings ??
                         (detailLecturer.overtimeHours ?? 0) *
-                          (detailLecturer.overtimeRate ?? detailLecturer.hourlyRate),
+                          (detailLecturer.overtimeRate ??
+                            detailLecturer.hourlyRate),
                     )}
                     className="text-amber-600"
                   />
@@ -670,7 +673,9 @@ const StaffManagement = () => {
                           <TableHead className="text-right">Worked</TableHead>
                           <TableHead className="text-right">Regular</TableHead>
                           <TableHead className="text-right">Overtime</TableHead>
-                          <TableHead className="text-right">OT Earnings</TableHead>
+                          <TableHead className="text-right">
+                            OT Earnings
+                          </TableHead>
                           <TableHead className="text-right">Earnings</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -678,10 +683,12 @@ const StaffManagement = () => {
                         {detailLecturer.sessions.map((s) => {
                           const sRegularHours = s.regularHours ?? s.hours;
                           const sOvertimeHours =
-                            s.overtimeHours ?? Math.max(0, s.hours - sRegularHours);
+                            s.overtimeHours ??
+                            Math.max(0, s.hours - sRegularHours);
                           const sOvertimeEarnings =
                             sOvertimeHours *
-                            (detailLecturer.overtimeRate ?? detailLecturer.hourlyRate);
+                            (detailLecturer.overtimeRate ??
+                              detailLecturer.hourlyRate);
                           return (
                             <TableRow key={s.sessionId}>
                               <TableCell className="font-medium">

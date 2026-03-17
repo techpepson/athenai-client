@@ -139,9 +139,11 @@ const Payroll = () => {
   const overtimeHours = lecturerData?.overtimeHours ?? 0;
   const regularHours =
     lecturerData?.regularHours ?? Math.max(0, workedHours - overtimeHours);
-  const overtimeRate = lecturerData?.overtimeRate ?? lecturerData?.hourlyRate ?? 0;
+  const overtimeRate =
+    lecturerData?.overtimeRate ?? lecturerData?.hourlyRate ?? 0;
   const regularEarnings =
-    lecturerData?.regularEarnings ?? regularHours * (lecturerData?.hourlyRate ?? 0);
+    lecturerData?.regularEarnings ??
+    regularHours * (lecturerData?.hourlyRate ?? 0);
   const overtimeEarnings =
     lecturerData?.overtimeEarnings ?? overtimeHours * overtimeRate;
 
@@ -389,7 +391,9 @@ const Payroll = () => {
                         <TableHead className="text-right">Worked</TableHead>
                         <TableHead className="text-right">Regular</TableHead>
                         <TableHead className="text-right">Overtime</TableHead>
-                        <TableHead className="text-right">OT Earnings</TableHead>
+                        <TableHead className="text-right">
+                          OT Earnings
+                        </TableHead>
                         <TableHead className="text-right">Net</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -397,7 +401,8 @@ const Payroll = () => {
                       {lecturerData.sessions.map((s) => {
                         const sRegularHours = s.regularHours ?? s.hours;
                         const sOvertimeHours =
-                          s.overtimeHours ?? Math.max(0, s.hours - sRegularHours);
+                          s.overtimeHours ??
+                          Math.max(0, s.hours - sRegularHours);
                         const sOvertimeEarnings = sOvertimeHours * overtimeRate;
                         const sGross = s.hours * lecturerData.hourlyRate;
                         const sTax = sGross * (lecturerData.taxRate ?? 0.1);
