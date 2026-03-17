@@ -394,7 +394,11 @@ const Sessions = () => {
 
       const audioContext = new AudioCtx();
 
-      const playBeep = (startAt: number, duration: number, frequency: number) => {
+      const playBeep = (
+        startAt: number,
+        duration: number,
+        frequency: number,
+      ) => {
         const oscillator = audioContext.createOscillator();
         const gainNode = audioContext.createGain();
 
@@ -403,10 +407,7 @@ const Sessions = () => {
 
         gainNode.gain.setValueAtTime(0.0001, startAt);
         gainNode.gain.exponentialRampToValueAtTime(0.08, startAt + 0.02);
-        gainNode.gain.exponentialRampToValueAtTime(
-          0.0001,
-          startAt + duration,
-        );
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
 
         oscillator.connect(gainNode);
         gainNode.connect(audioContext.destination);
@@ -803,13 +804,15 @@ const Sessions = () => {
       let longitude: number | undefined;
 
       try {
-        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, {
-            enableHighAccuracy: true,
-            timeout: 10000,
-            maximumAge: 0,
-          });
-        });
+        const pos = await new Promise<GeolocationPosition>(
+          (resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: true,
+              timeout: 10000,
+              maximumAge: 0,
+            });
+          },
+        );
         latitude = pos.coords.latitude;
         longitude = pos.coords.longitude;
       } catch {
@@ -899,14 +902,22 @@ const Sessions = () => {
 
   // Rep reminder: alert when a slot time is due so they can start attendance.
   useEffect(() => {
-    if (!isRep || mainTab !== "sessions" || weeklyLectureSessions.length === 0) {
+    if (
+      !isRep ||
+      mainTab !== "sessions" ||
+      weeklyLectureSessions.length === 0
+    ) {
       return;
     }
 
-    const storedActiveSessions = localStorage.getItem("active_lecture_sessions");
+    const storedActiveSessions = localStorage.getItem(
+      "active_lecture_sessions",
+    );
     let activeSlotIds: string[] = [];
     try {
-      activeSlotIds = storedActiveSessions ? JSON.parse(storedActiveSessions) : [];
+      activeSlotIds = storedActiveSessions
+        ? JSON.parse(storedActiveSessions)
+        : [];
     } catch {
       activeSlotIds = [];
     }
@@ -934,7 +945,13 @@ const Sessions = () => {
         },
       });
     });
-  }, [isRep, mainTab, weeklyLectureSessions, playReminderSound, handleStartSession]);
+  }, [
+    isRep,
+    mainTab,
+    weeklyLectureSessions,
+    playReminderSound,
+    handleStartSession,
+  ]);
 
   // Handle sending SMS link
   const handleSendSms = () => {

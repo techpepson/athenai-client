@@ -99,9 +99,6 @@ export const SessionCard = ({
     isSessionCheckedOut(session.id),
   );
 
-  // Dev mode flag — in dev, allow starting even ended sessions
-  const isDev = import.meta.env.DEV;
-
   // Check if past end time
   const now = new Date();
   const endTimeMs = new Date(session.endTime).getTime();
@@ -301,12 +298,7 @@ export const SessionCard = ({
       {/* Actions */}
       <div className="flex gap-2 flex-wrap">
         {/* Timetable session - REP can start session */}
-        {/* Dev mode: show Start for any status; Prod: only scheduled */}
-        {(isDev
-          ? session.id.startsWith("timetable-") && isRep
-          : session.status === "scheduled" &&
-            session.id.startsWith("timetable-") &&
-            isRep) && (
+        {session.id.startsWith("timetable-") && isRep && (
           <Button
             className="flex-1"
             variant="gradient"
