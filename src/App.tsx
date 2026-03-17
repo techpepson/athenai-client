@@ -24,7 +24,7 @@ import AdminManagement from "./pages/AdminManagement";
 import CourseRepManagement from "./pages/CourseRepManagement";
 import Payroll from "./pages/Payroll";
 import NotFound from "./pages/NotFound";
-import { Analytics } from "@vercel/analytics/next";
+import { Analytics } from "@vercel/analytics/react";
 
 // Modules data now comes from backend API — no localStorage seed needed
 

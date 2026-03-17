@@ -297,8 +297,8 @@ export const SessionCard = ({
 
       {/* Actions */}
       <div className="flex gap-2 flex-wrap">
-        {/* Timetable session - REP can start session */}
-        {session.id.startsWith("timetable-") && isRep && (
+        {/* Timetable session - REP can start session (only if not past end time) */}
+        {session.id.startsWith("timetable-") && isRep && !isPastEndTime && (
           <Button
             className="flex-1"
             variant="gradient"
