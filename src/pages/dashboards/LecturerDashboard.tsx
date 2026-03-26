@@ -23,8 +23,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   Session,
   SessionStatus,
@@ -36,6 +45,12 @@ import {
 import { usersServices } from "@/services/users.services";
 import { IUser, ILecturer } from "@/interface/user.interface";
 import { modulesService, Module, SubTopic } from "@/services/modules.service";
+import {
+  AttendanceRecord,
+  getUserAttendance,
+  markManualAttendance,
+} from "@/services/attendance.services";
+import { toast } from "sonner";
 
 const LecturerDashboard = () => {
   const { user, token } = useAuth();
@@ -44,6 +59,12 @@ const LecturerDashboard = () => {
   const [lecturerModules, setLecturerModules] = useState<Module[]>([]);
   const [lecturerData, setLecturerData] = useState<
     (IUser & { lecturer?: ILecturer | null }) | null
+  >(null);
+  const [userAttendanceRecords, setUserAttendanceRecords] = useState<
+    AttendanceRecord[]
+  >([]);
+  const [verifyingAttendanceId, setVerifyingAttendanceId] = useState<
+    string | null
   >(null);
   const [loading, setLoading] = useState(true);
 
@@ -102,10 +123,18 @@ const LecturerDashboard = () => {
         } else {
           setSessions([]);
         }
+
+        const attendanceResponse = await getUserAttendance(token);
+        if (attendanceResponse.success && attendanceResponse.data) {
+          setUserAttendanceRecords(attendanceResponse.data);
+        } else {
+          setUserAttendanceRecords([]);
+        }
       } catch (error) {
         console.error("Failed to fetch data:", error);
         setSessions([]);
         setLecturerModules([]);
+        setUserAttendanceRecords([]);
       } finally {
         setLoading(false);
       }
@@ -220,6 +249,80 @@ const LecturerDashboard = () => {
         100,
     );
   }, [attendanceStats]);
+
+  // Lecturer's own attendance records (like student self attendance sheet)
+  const lecturerAttendanceRecords = useMemo(() => {
+    const records = userAttendanceRecords.filter((record) => {
+      const subtopicId = record.session?.subtopicId;
+      if (!subtopicId || !lecturerSubtopicIds.includes(subtopicId)) {
+        return false;
+      }
+      if (selectedModule === "all") {
+        return true;
+      }
+      return selectedSubtopicIds.includes(subtopicId);
+    });
+
+    return records.sort((a, b) => {
+      const ta = new Date(
+        a.session?.startTime || a.checkInTime || a.timestamp || 0,
+      ).getTime();
+      const tb = new Date(
+        b.session?.startTime || b.checkInTime || b.timestamp || 0,
+      ).getTime();
+      return tb - ta;
+    });
+  }, [
+    userAttendanceRecords,
+    lecturerSubtopicIds,
+    selectedModule,
+    selectedSubtopicIds,
+  ]);
+
+  const isPendingManualVerification = (record: AttendanceRecord) => {
+    const remarks = (record.remarks || "").toUpperCase();
+    const source = (record.source || "").toLowerCase();
+    return (
+      record.status === AttendanceStatus.CHECKED_IN &&
+      (remarks.includes("PENDING_VERIFICATION") || source === "manual")
+    );
+  };
+
+  const handleVerifyManualAttendance = async (
+    record: AttendanceRecord,
+    status: "PRESENT" | "ABSENT",
+  ) => {
+    if (!token || !user?.id) return;
+    setVerifyingAttendanceId(record.id);
+    try {
+      const res = await markManualAttendance(
+        record.sessionId,
+        user.id,
+        status,
+        "LECTURER_VERIFIED",
+        token,
+      );
+
+      if (res.success) {
+        setUserAttendanceRecords((prev) =>
+          prev.map((r) =>
+            r.id === record.id
+              ? { ...r, status, remarks: "LECTURER_VERIFIED" }
+              : r,
+          ),
+        );
+        toast.success(`Attendance verified as ${status}`);
+      } else {
+        toast.error(
+          res.error || "Verification failed. Ask admin to enable this action.",
+        );
+      }
+    } catch {
+      toast.error("Verification failed. Ask admin to enable this action.");
+    } finally {
+      setVerifyingAttendanceId(null);
+    }
+  };
 
   // Subtopic statistics breakdown
   const subtopicStats = useMemo(() => {
@@ -538,6 +641,125 @@ const LecturerDashboard = () => {
             )}
           </div>
         </div>
+      </div>
+
+      {/* My Attendance Records */}
+      <div className="bg-card rounded-lg sm:rounded-xl border border-border p-4 sm:p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-base sm:text-lg font-semibold text-foreground">
+              My Attendance Records
+            </h2>
+            <p className="text-xs sm:text-sm text-muted-foreground">
+              Your attendance history, including manual attendance verification
+            </p>
+          </div>
+          <Badge variant="secondary">
+            {lecturerAttendanceRecords.length} record
+            {lecturerAttendanceRecords.length !== 1 ? "s" : ""}
+          </Badge>
+        </div>
+
+        {lecturerAttendanceRecords.length === 0 ? (
+          <div className="text-sm text-muted-foreground py-6 text-center border border-dashed rounded-lg">
+            No attendance records found for your assigned sessions.
+          </div>
+        ) : (
+          <div className="overflow-x-auto border rounded-lg">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Module</TableHead>
+                  <TableHead>Subtopic</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {lecturerAttendanceRecords.slice(0, 20).map((record) => {
+                  const recordDate =
+                    record.session?.startTime ||
+                    record.checkInTime ||
+                    record.timestamp ||
+                    "";
+                  const pending = isPendingManualVerification(record);
+                  const isVerifying = verifyingAttendanceId === record.id;
+
+                  return (
+                    <TableRow key={record.id}>
+                      <TableCell>
+                        {recordDate
+                          ? new Date(recordDate).toLocaleString("en-GB", {
+                              day: "2-digit",
+                              month: "short",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })
+                          : "-"}
+                      </TableCell>
+                      <TableCell>
+                        {record.session?.module?.code ||
+                          record.session?.module?.name ||
+                          "-"}
+                      </TableCell>
+                      <TableCell>{record.session?.subtopic?.name || "-"}</TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={
+                            record.status === "PRESENT"
+                              ? "bg-green-50 text-green-700 border-green-200"
+                              : record.status === "ABSENT"
+                                ? "bg-red-50 text-red-700 border-red-200"
+                                : record.status === "CHECKED_IN"
+                                  ? "bg-yellow-50 text-yellow-700 border-yellow-200"
+                                  : ""
+                          }
+                        >
+                          {pending ? "Pending Verification" : record.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {pending ? (
+                          <div className="inline-flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={isVerifying}
+                              onClick={() =>
+                                handleVerifyManualAttendance(record, "PRESENT")
+                              }
+                            >
+                              {isVerifying ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                "Verify Present"
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={isVerifying}
+                              onClick={() =>
+                                handleVerifyManualAttendance(record, "ABSENT")
+                              }
+                            >
+                              Mark Absent
+                            </Button>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
       </div>
 
       {/* Active Sessions */}

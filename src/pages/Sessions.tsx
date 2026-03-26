@@ -317,16 +317,17 @@ const Sessions = () => {
   // Check if user is admin (can see all sessions)
   const isAdmin = user?.role === Role.ADMIN || user?.role === Role.SYSTEM_ADMIN;
 
-  // Check if user can view lecturer attendance (REP, ADMIN, SYSTEM_ADMIN only — lecturers cannot mark their own attendance)
-  const canViewLecturerAttendance = isAdmin || user?.role === Role.REP;
+  // Check if user can view lecturer attendance (REP/LECTURER/ADMIN/SYSTEM_ADMIN)
+  const canViewLecturerAttendance =
+    isAdmin || user?.role === Role.REP || user?.role === Role.LECTURER;
 
   // Check if user is a student (for My Attendance Sheet)
   const isStudent = user?.role === Role.STUDENT;
   const isRep = user?.role === Role.REP;
   const isLecturer = user?.role === Role.LECTURER;
 
-  // Check if user can view My Attendance Sheet (students only; reps use the Student Attendance Sheet)
-  const canViewMyAttendanceSheet = isStudent;
+  // Check if user can view My Attendance Sheet (students and reps personal view)
+  const canViewMyAttendanceSheet = isStudent || isRep;
 
   // Check if user can view/edit Master Attendance Sheet (reps and lecturers)
   const canViewMasterAttendanceSheet = isRep || isLecturer || isAdmin;
@@ -1085,6 +1086,16 @@ const Sessions = () => {
     fetchSessions(true);
   };
 
+  const handleMainTabChange = (value: string) => {
+    setMainTab(value);
+    fetchSessions();
+  };
+
+  const handleSessionsStatusTabChange = (value: string) => {
+    setActiveTab(value);
+    fetchSessions();
+  };
+
   const handleGenerateQrCode = async (session: AttendanceSession) => {
     if (!token) {
       toast.error("You must be logged in to generate QR code");
@@ -1169,7 +1180,11 @@ const Sessions = () => {
       </div>
 
       {/* Main Tabs: Sessions vs Activities */}
-      <Tabs value={mainTab} onValueChange={setMainTab} className="w-full">
+      <Tabs
+        value={mainTab}
+        onValueChange={handleMainTabChange}
+        className="w-full"
+      >
         <TabsList className="bg-card border border-border w-full sm:w-auto">
           <TabsTrigger
             value="sessions"
@@ -1530,7 +1545,7 @@ const Sessions = () => {
 
               <Tabs
                 value={activeTab}
-                onValueChange={setActiveTab}
+                onValueChange={handleSessionsStatusTabChange}
                 className="w-full"
               >
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">

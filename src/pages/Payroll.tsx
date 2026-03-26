@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   TrendingUp,
   DollarSign,
@@ -10,7 +10,9 @@ import {
   TrendingDown,
   Receipt,
   Clock,
+  Printer,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -26,10 +28,26 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/contexts/AuthContext";
 import { PayrollStatsCard } from "@/components/staff/PayrollStatsCard";
-import { getMyPayroll, LecturerEarning } from "@/services/payroll.service";
+import {
+  getMyPayroll,
+  LecturerEarning,
+  SessionDetail,
+} from "@/services/payroll.service";
+import {
+  getUserAttendance,
+  AttendanceRecord,
+} from "@/services/attendance.services";
 import { Role } from "@/enums/enums";
 
 // ─── Helpers ────────────────────────────────────────────
@@ -51,6 +69,62 @@ function buildMonthOptions(count = 12) {
 
 const fmt = (n: number) => `₵${n.toFixed(2)}`;
 
+const formatDateOnly = (value?: string) => {
+  if (!value) return "\u2014";
+  const date = new Date(value);
+  return date.toLocaleDateString(undefined, {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+
+const formatDateTime = (value?: string) => {
+  if (!value) return "\u2014";
+  const date = new Date(value);
+  return date.toLocaleString(undefined, {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+const computeSessionBreakdown = (
+  session: SessionDetail,
+  lecturer: LecturerEarning | null,
+) => {
+  const hours = session.hours ?? 0;
+  const regular = Math.min(session.regularHours ?? hours, hours);
+  const overtime = session.overtimeHours ?? Math.max(0, hours - regular);
+  const hourlyRate = session.hourlyRate ?? lecturer?.hourlyRate ?? 0;
+  const overtimeRate =
+    session.overtimeRate ?? lecturer?.overtimeRate ?? hourlyRate;
+  const regularEarnings = session.regularEarnings ?? regular * hourlyRate;
+  const overtimeEarnings = session.overtimeEarnings ?? overtime * overtimeRate;
+  const gross = session.grossEarnings ?? regularEarnings + overtimeEarnings;
+  const taxRate = session.taxRate ?? lecturer?.taxRate ?? 0.1;
+  const taxAmount = session.taxAmount ?? gross * taxRate;
+  const net = session.netEarnings ?? gross - taxAmount;
+
+  return {
+    hours,
+    regular,
+    overtime,
+    hourlyRate,
+    overtimeRate,
+    regularEarnings,
+    overtimeEarnings,
+    gross,
+    taxAmount,
+    net,
+    taxRate,
+  };
+};
+
 // ─── Component ──────────────────────────────────────────
 
 const Payroll = () => {
@@ -60,6 +134,12 @@ const Payroll = () => {
   );
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState<string>("all");
+  const [attendanceRecords, setAttendanceRecords] = useState<
+    AttendanceRecord[]
+  >([]);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
+    null,
+  );
 
   const isLecturer = user?.role === Role.LECTURER;
   const monthOptions = useMemo(() => buildMonthOptions(12), []);
@@ -98,6 +178,103 @@ const Payroll = () => {
     };
   }, [token, isLecturer, selectedMonth]);
 
+  useEffect(() => {
+    if (!token || !isLecturer) {
+      setAttendanceRecords([]);
+      return;
+    }
+
+    let cancelled = false;
+    const loadAttendanceRecords = async () => {
+      try {
+        const res = await getUserAttendance(token);
+        if (cancelled) return;
+        if (res.success && res.data) {
+          setAttendanceRecords(res.data);
+        } else {
+          setAttendanceRecords([]);
+        }
+      } catch (error) {
+        if (cancelled) return;
+        console.error("Failed to load attendance records:", error);
+        setAttendanceRecords([]);
+      }
+    };
+
+    loadAttendanceRecords();
+    return () => {
+      cancelled = true;
+    };
+  }, [token, isLecturer]);
+
+  const attendanceBySession = useMemo(() => {
+    const map = new Map<string, AttendanceRecord>();
+    attendanceRecords.forEach((record) => {
+      if (!map.has(record.sessionId)) {
+        map.set(record.sessionId, record);
+      }
+    });
+    return map;
+  }, [attendanceRecords]);
+
+  const sessionsWithAttendance = useMemo(() => {
+    if (!lecturerData?.sessions?.length) return [] as SessionDetail[];
+    return lecturerData.sessions.map((session) => {
+      const attendance = attendanceBySession.get(session.sessionId);
+      return {
+        ...session,
+        checkInTime:
+          session.checkInTime ??
+          attendance?.checkInTime ??
+          attendance?.timestamp,
+        checkOutTime: session.checkOutTime ?? attendance?.checkOutTime,
+      };
+    });
+  }, [lecturerData?.sessions, attendanceBySession]);
+
+  const sessionHourTotals = useMemo(() => {
+    if (!sessionsWithAttendance.length) {
+      return { total: 0, regular: 0, overtime: 0 };
+    }
+    return sessionsWithAttendance.reduce(
+      (acc, session) => {
+        const hours = session.hours ?? 0;
+        const regular = Math.min(session.regularHours ?? hours, hours);
+        const overtime = session.overtimeHours ?? Math.max(0, hours - regular);
+        return {
+          total: acc.total + hours,
+          regular: acc.regular + regular,
+          overtime: acc.overtime + overtime,
+        };
+      },
+      { total: 0, regular: 0, overtime: 0 },
+    );
+  }, [sessionsWithAttendance]);
+
+  const activeSession = useMemo(() => {
+    if (!selectedSessionId) return null;
+    return (
+      sessionsWithAttendance.find(
+        (session) => session.sessionId === selectedSessionId,
+      ) ?? null
+    );
+  }, [selectedSessionId, sessionsWithAttendance]);
+
+  const selectedBreakdown = activeSession
+    ? computeSessionBreakdown(activeSession, lecturerData)
+    : null;
+
+  const handlePrint = useCallback(() => {
+    if (typeof window !== "undefined") {
+      window.print();
+    }
+  }, []);
+
+  const handleRecordPrint = useCallback(() => {
+    if (typeof window === "undefined") return;
+    window.print();
+  }, []);
+
   const monthLabel =
     selectedMonth === "all"
       ? "All Time"
@@ -134,11 +311,22 @@ const Payroll = () => {
   const tax = lecturerData?.taxDeduction ?? 0;
   const net = lecturerData?.earnings ?? 0;
   const taxPct = ((lecturerData?.taxRate ?? 0.1) * 100).toFixed(0);
-  const sessionCount = lecturerData?.sessions?.length ?? 0;
-  const workedHours = lecturerData?.totalHours ?? 0;
-  const overtimeHours = lecturerData?.overtimeHours ?? 0;
-  const regularHours =
-    lecturerData?.regularHours ?? Math.max(0, workedHours - overtimeHours);
+  const sessionCount = sessionsWithAttendance.length;
+  const hasSessionData = sessionCount > 0;
+  const fallbackWorked = lecturerData?.totalHours ?? 0;
+  const fallbackRegular =
+    lecturerData?.regularHours ??
+    Math.max(0, fallbackWorked - (lecturerData?.overtimeHours ?? 0));
+  const fallbackOvertime =
+    lecturerData?.overtimeHours ??
+    Math.max(0, fallbackWorked - fallbackRegular);
+  const workedHours = hasSessionData ? sessionHourTotals.total : fallbackWorked;
+  const regularHours = hasSessionData
+    ? sessionHourTotals.regular
+    : fallbackRegular;
+  const overtimeHours = hasSessionData
+    ? sessionHourTotals.overtime
+    : fallbackOvertime;
   const overtimeRate =
     lecturerData?.overtimeRate ?? lecturerData?.hourlyRate ?? 0;
   const regularEarnings =
@@ -157,20 +345,26 @@ const Payroll = () => {
           </p>
         </div>
 
-        <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-          <SelectTrigger className="w-52">
-            <Calendar className="w-4 h-4 mr-2 text-muted-foreground" />
-            <SelectValue placeholder="Select month" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Time</SelectItem>
-            {monthOptions.map((m) => (
-              <SelectItem key={m.value} value={m.value}>
-                {m.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2">
+          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+            <SelectTrigger className="w-52">
+              <Calendar className="w-4 h-4 mr-2 text-muted-foreground" />
+              <SelectValue placeholder="Select month" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Time</SelectItem>
+              {monthOptions.map((m) => (
+                <SelectItem key={m.value} value={m.value}>
+                  {m.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button variant="outline" onClick={handlePrint}>
+            <Printer className="w-4 h-4 mr-2" />
+            Print PDF
+          </Button>
+        </div>
       </div>
 
       {/* Lecturer Info Card */}
@@ -345,7 +539,7 @@ const Payroll = () => {
                       <div
                         className="bg-primary h-2.5 rounded-full transition-all"
                         style={{
-                          width: `${Math.min((lecturerData.totalHours / 100) * 100, 100)}%`,
+                          width: `${Math.min((workedHours / 100) * 100, 100)}%`,
                         }}
                       />
                     </div>
@@ -378,7 +572,7 @@ const Payroll = () => {
             </div>
 
             {/* Session breakdown table */}
-            {lecturerData.sessions && lecturerData.sessions.length > 0 && (
+            {sessionCount > 0 && (
               <div className="mt-6">
                 <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
                   Session Details
@@ -395,37 +589,52 @@ const Payroll = () => {
                           OT Earnings
                         </TableHead>
                         <TableHead className="text-right">Net</TableHead>
+                        <TableHead className="text-right">Details</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {lecturerData.sessions.map((s) => {
-                        const sRegularHours = s.regularHours ?? s.hours;
-                        const sOvertimeHours =
-                          s.overtimeHours ??
-                          Math.max(0, s.hours - sRegularHours);
-                        const sOvertimeEarnings = sOvertimeHours * overtimeRate;
-                        const sGross = s.hours * lecturerData.hourlyRate;
-                        const sTax = sGross * (lecturerData.taxRate ?? 0.1);
-                        const sNet = sGross - sTax;
+                      {sessionsWithAttendance.map((s) => {
+                        const breakdown = computeSessionBreakdown(
+                          s,
+                          lecturerData,
+                        );
                         return (
                           <TableRow key={s.sessionId}>
                             <TableCell className="font-medium">
-                              {s.sessionName}
+                              <div className="flex flex-col">
+                                <span>{s.sessionName}</span>
+                                {(s.date || s.checkInTime) && (
+                                  <span className="text-xs text-muted-foreground">
+                                    {formatDateOnly(s.date ?? s.checkInTime)}
+                                  </span>
+                                )}
+                              </div>
                             </TableCell>
                             <TableCell className="text-right">
-                              {s.hours.toFixed(2)}h
+                              {breakdown.hours.toFixed(2)}h
                             </TableCell>
                             <TableCell className="text-right">
-                              {sRegularHours.toFixed(2)}h
+                              {breakdown.regular.toFixed(2)}h
                             </TableCell>
                             <TableCell className="text-right">
-                              {sOvertimeHours.toFixed(2)}h
+                              {breakdown.overtime.toFixed(2)}h
                             </TableCell>
                             <TableCell className="text-right">
-                              {fmt(sOvertimeEarnings)}
+                              {fmt(breakdown.overtimeEarnings)}
                             </TableCell>
                             <TableCell className="text-right font-semibold text-green-600">
-                              {fmt(sNet)}
+                              {fmt(breakdown.net)}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                  setSelectedSessionId(s.sessionId)
+                                }
+                              >
+                                View
+                              </Button>
                             </TableCell>
                           </TableRow>
                         );
@@ -448,6 +657,116 @@ const Payroll = () => {
           </div>
         )}
       </div>
+
+      <Dialog
+        open={!!activeSession}
+        onOpenChange={(open) => {
+          if (!open) setSelectedSessionId(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Attendance &amp; Payroll Details</DialogTitle>
+            <DialogDescription>
+              {activeSession?.sessionName || "Session breakdown"}
+            </DialogDescription>
+          </DialogHeader>
+
+          {activeSession && selectedBreakdown && (
+            <div className="space-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="bg-muted/40 rounded-lg p-3">
+                  <p className="text-xs text-muted-foreground">Check-In</p>
+                  <p className="font-semibold text-foreground">
+                    {formatDateTime(activeSession.checkInTime)}
+                  </p>
+                </div>
+                <div className="bg-muted/40 rounded-lg p-3">
+                  <p className="text-xs text-muted-foreground">Check-Out</p>
+                  <p className="font-semibold text-foreground">
+                    {formatDateTime(activeSession.checkOutTime)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <span className="text-muted-foreground">Worked Hours</span>
+                <span className="text-right font-semibold">
+                  {selectedBreakdown.hours.toFixed(2)}h
+                </span>
+                <span className="text-muted-foreground">Regular Hours</span>
+                <span className="text-right font-semibold">
+                  {selectedBreakdown.regular.toFixed(2)}h
+                </span>
+                <span className="text-muted-foreground">Overtime Hours</span>
+                <span className="text-right font-semibold">
+                  {selectedBreakdown.overtime.toFixed(2)}h
+                </span>
+                <span className="text-muted-foreground">Hourly Rate</span>
+                <span className="text-right font-semibold">
+                  {fmt(selectedBreakdown.hourlyRate)}
+                </span>
+                <span className="text-muted-foreground">OT Rate</span>
+                <span className="text-right font-semibold">
+                  {fmt(selectedBreakdown.overtimeRate)}
+                </span>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">
+                    Regular Earnings
+                  </span>
+                  <span className="font-semibold">
+                    {fmt(selectedBreakdown.regularEarnings)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">
+                    Overtime Earnings
+                  </span>
+                  <span className="font-semibold">
+                    {fmt(selectedBreakdown.overtimeEarnings)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Gross Pay</span>
+                  <span className="font-semibold">
+                    {fmt(selectedBreakdown.gross)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-red-500">
+                  <span>
+                    Tax ({(selectedBreakdown.taxRate * 100).toFixed(0)}%)
+                  </span>
+                  <span className="font-semibold">
+                    -{fmt(selectedBreakdown.taxAmount)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-emerald-600 text-base font-semibold">
+                  <span>Net Pay</span>
+                  <span>{fmt(selectedBreakdown.net)}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="sm:justify-end gap-2">
+            <Button variant="outline" onClick={handleRecordPrint}>
+              <Printer className="w-4 h-4 mr-2" />
+              Print Record
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => setSelectedSessionId(null)}
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

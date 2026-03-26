@@ -60,6 +60,18 @@ const ProfileSetting = () => {
   const [repAssignedCourses, setRepAssignedCourses] = useState<Course[]>([]);
   const [repCoursesLoading, setRepCoursesLoading] = useState(false);
 
+  const [lecturerAssignedTopics, setLecturerAssignedTopics] = useState<
+    {
+      subtopicId: string;
+      moduleId: string;
+      moduleCode: string;
+      moduleName: string;
+      topic: string;
+      level: number;
+    }[]
+  >([]);
+  const [loadingLecturerTopics, setLoadingLecturerTopics] = useState(false);
+
   // Module enrollment local state (for UI before using context)
   const [availableModules, setAvailableModules] = useState<Module[]>([]);
 
@@ -137,6 +149,64 @@ const ProfileSetting = () => {
     contextEnrolledModules.length,
     autoEnrollByLevel,
   ]);
+
+  useEffect(() => {
+    const fetchLecturerAssignedTopics = async () => {
+      if (!isLecturer || !user?.id) return;
+
+      setLoadingLecturerTopics(true);
+      try {
+        const res = await modulesService.getModules();
+        const modules = res.success && res.data?.data ? res.data.data : [];
+
+        const lecturerUserId = user.id;
+        const lecturerProfileId = user.lecturer?.id;
+
+        const assigned = modules.flatMap((mod) =>
+          (mod.subtopics || [])
+            .filter((st) => {
+              const assignedId = st.lecturerId || st.lecturer?.id;
+              if (!assignedId) return false;
+              return (
+                assignedId === lecturerUserId ||
+                (!!lecturerProfileId && assignedId === lecturerProfileId)
+              );
+            })
+            .map((st) => ({
+              subtopicId: st.id,
+              moduleId: mod.id,
+              moduleCode: mod.code,
+              moduleName: mod.name,
+              topic: st.name,
+              level: mod.level,
+            })),
+        );
+
+        const uniqueAssigned = Array.from(
+          new Map(
+            assigned.map((item) => [
+              `${item.moduleId}-${item.subtopicId}`,
+              item,
+            ]),
+          ).values(),
+        ).sort((a, b) => {
+          if (a.level !== b.level) return a.level - b.level;
+          if (a.moduleCode !== b.moduleCode) {
+            return a.moduleCode.localeCompare(b.moduleCode);
+          }
+          return a.topic.localeCompare(b.topic);
+        });
+
+        setLecturerAssignedTopics(uniqueAssigned);
+      } catch {
+        setLecturerAssignedTopics([]);
+      } finally {
+        setLoadingLecturerTopics(false);
+      }
+    };
+
+    fetchLecturerAssignedTopics();
+  }, [isLecturer, user?.id, user?.lecturer?.id]);
 
   // Available student levels
   const STUDENT_LEVELS = [100, 200, 300, 400, 500, 600];
@@ -458,7 +528,7 @@ const ProfileSetting = () => {
                         setSavingLevel(true);
                         try {
                           const res = await usersServices.updateRecords(
-                            { level: studentLevel } as any,
+                              { level: String(studentLevel) },
                             token,
                           );
                           if (res.success) {
@@ -672,92 +742,77 @@ const ProfileSetting = () => {
             <div className="bg-card rounded-xl border border-border p-6 space-y-4">
               <div className="flex items-center gap-2 mb-2">
                 <BookOpen className="w-5 h-5 text-primary" />
-                <h3 className="font-semibold text-lg">Topics Assigned</h3>
+                <h3 className="font-semibold text-lg">Subtopics Assigned</h3>
               </div>
 
               {/* Stats Summary */}
               <div className="flex flex-wrap gap-3">
-                <Badge variant="secondary">2 modules</Badge>
-                <Badge variant="secondary">7 topics</Badge>
-                <Badge variant="outline">Levels: 100, 200</Badge>
+                <Badge variant="secondary">
+                  {
+                    new Set(lecturerAssignedTopics.map((item) => item.moduleId))
+                      .size
+                  }{" "}
+                  module
+                  {new Set(lecturerAssignedTopics.map((item) => item.moduleId))
+                    .size !== 1
+                    ? "s"
+                    : ""}
+                </Badge>
+                <Badge variant="secondary">
+                  {lecturerAssignedTopics.length} subtopic
+                  {lecturerAssignedTopics.length !== 1 ? "s" : ""}
+                </Badge>
+                <Badge variant="outline">
+                  Levels:{" "}
+                  {Array.from(
+                    new Set(lecturerAssignedTopics.map((item) => item.level)),
+                  )
+                    .sort((a, b) => a - b)
+                    .join(", ") || "-"}
+                </Badge>
               </div>
 
               <p className="text-sm text-muted-foreground">
-                These module topics have been assigned to you by the Admin.
-                Contact an administrator to request changes.
+                These subtopics are assigned to you by Admin during module
+                setup. Contact an administrator to request changes.
               </p>
 
               <div className="space-y-3">
-                {/* Lecturer Azumah's assigned module topics */}
-                {[
-                  // CMPC 103 - Professional and Behavioural Studies (Level 100)
-                  {
-                    moduleCode: "CMPC 103",
-                    moduleName: "Professional and Behavioural Studies",
-                    topic: "Medical Professionalism",
-                    level: 100,
-                  },
-                  {
-                    moduleCode: "CMPC 103",
-                    moduleName: "Professional and Behavioural Studies",
-                    topic: "Communication Skills in Healthcare",
-                    level: 100,
-                  },
-                  {
-                    moduleCode: "CMPC 103",
-                    moduleName: "Professional and Behavioural Studies",
-                    topic: "Ethics in Medical Practice",
-                    level: 100,
-                  },
-                  {
-                    moduleCode: "CMPC 103",
-                    moduleName: "Professional and Behavioural Studies",
-                    topic: "Behavioural Sciences Foundation",
-                    level: 100,
-                  },
-                  // CMPC 201 - Human Body Structure and Function II (Level 200)
-                  {
-                    moduleCode: "CMPC 201",
-                    moduleName: "Human Body Structure and Function II",
-                    topic: "Anatomy of Thorax",
-                    level: 200,
-                  },
-                  {
-                    moduleCode: "CMPC 201",
-                    moduleName: "Human Body Structure and Function II",
-                    topic: "Anatomy of Abdomen",
-                    level: 200,
-                  },
-                  {
-                    moduleCode: "CMPC 201",
-                    moduleName: "Human Body Structure and Function II",
-                    topic: "Cardiovascular Physiology",
-                    level: 200,
-                  },
-                ].map((item, index) => (
-                  <div
-                    key={`${item.moduleCode}-${index}`}
-                    className="flex items-start gap-3 p-3 bg-muted/50 border border-border rounded-lg"
-                  >
-                    <BookOpen className="w-4 h-4 text-primary mt-0.5" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium text-sm">
-                          {item.moduleCode}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {item.moduleName}
-                        </span>
-                      </div>
-                      <p className="text-sm text-foreground mt-1">
-                        {item.topic}
-                      </p>
-                    </div>
-                    <Badge variant="outline" className="text-xs shrink-0">
-                      Level {item.level}
-                    </Badge>
+                {loadingLecturerTopics ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground p-4 bg-muted/50 rounded-lg">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Loading your assigned subtopics...
                   </div>
-                ))}
+                ) : lecturerAssignedTopics.length === 0 ? (
+                  <p className="text-sm italic text-muted-foreground p-3 bg-muted rounded-lg">
+                    No subtopics have been assigned to you yet.
+                  </p>
+                ) : (
+                  lecturerAssignedTopics.map((item) => (
+                    <div
+                      key={`${item.moduleId}-${item.subtopicId}`}
+                      className="flex items-start gap-3 p-3 bg-muted/50 border border-border rounded-lg"
+                    >
+                      <BookOpen className="w-4 h-4 text-primary mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium text-sm">
+                            {item.moduleCode}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {item.moduleName}
+                          </span>
+                        </div>
+                        <p className="text-sm text-foreground mt-1">
+                          {item.topic}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="text-xs shrink-0">
+                        Level {item.level}
+                      </Badge>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           )}

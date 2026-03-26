@@ -9,6 +9,16 @@ export interface SessionDetail {
   regularHours?: number;
   overtimeHours?: number;
   date?: string; // present in period-based responses
+  checkInTime?: string;
+  checkOutTime?: string;
+  hourlyRate?: number;
+  overtimeRate?: number;
+  regularEarnings?: number;
+  overtimeEarnings?: number;
+  grossEarnings?: number;
+  netEarnings?: number;
+  taxAmount?: number;
+  taxRate?: number;
 }
 
 export interface LecturerEarning {

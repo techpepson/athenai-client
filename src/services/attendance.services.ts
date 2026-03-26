@@ -143,10 +143,19 @@ class AttendanceService {
     status: string,
     remarks?: string,
     token?: string,
+    startTime?: string,
+    endTime?: string,
   ): Promise<ApiResponse<ManualAttendanceResponse>> {
     return api.post<ManualAttendanceResponse>(
       "/attendance/mark-manual",
-      { sessionId, userId, status, remarks },
+      {
+        sessionId,
+        userId,
+        status,
+        remarks,
+        ...(startTime && { startTime }),
+        ...(endTime && { endTime }),
+      },
       token,
     );
   }
@@ -254,10 +263,19 @@ export async function markManualAttendance(
   status: string,
   remarks?: string,
   token?: string,
+  startTime?: string,
+  endTime?: string,
 ): Promise<ApiResponse<ManualAttendanceResponse>> {
   return api.post<ManualAttendanceResponse>(
     "/attendance/mark-manual",
-    { sessionId, userId, status, remarks },
+    {
+      sessionId,
+      userId,
+      status,
+      remarks,
+      ...(startTime && { startTime }),
+      ...(endTime && { endTime }),
+    },
     token,
   );
 }
