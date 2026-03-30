@@ -8,7 +8,13 @@ interface ActiveSessionCardProps {
 }
 
 export const ActiveSessionCard = ({ session }: ActiveSessionCardProps) => {
-  const progress = (session.presentCount / session.expectedCount) * 100;
+  const rawProgress =
+    session.expectedCount > 0
+      ? (session.presentCount / session.expectedCount) * 100
+      : 0;
+  const progress = Number.isFinite(rawProgress)
+    ? Math.max(0, Math.min(100, rawProgress))
+    : 0;
 
   const typeColors = {
     class: "bg-primary/20 text-primary",
