@@ -1,78 +1,108 @@
-<<<<<<< HEAD
-# Welcome to your Lovable project
+# FaceTrack Client
 
-## Project info
+Frontend application for the FaceTrack facial-recognition attendance platform.
 
-**URL**: https://lovable.dev/projects/cb991aa8-011f-4701-9735-92802dff6e34
+## Overview
 
-## How can I edit this code?
+This app provides role-based attendance workflows for schools and organizations:
 
-There are several ways of editing your application.
+- Students and reps can view attendance records and session details.
+- Lecturers can manage attendance sessions and view personal payroll.
+- Staff can track their own attendance dashboard.
+- Admin and system admin users can manage members, sessions, modules, and staff payroll.
+- Kiosk and lecturer-kiosk flows support face-based check-in/check-out.
 
-**Use Lovable**
+## Key Features
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/cb991aa8-011f-4701-9735-92802dff6e34) and start prompting.
+- Role-based authentication and protected routes.
+- Dashboard views by role (student, lecturer, staff, admin).
+- Session management with check-in/check-out attendance modes.
+- Attendance analytics, charts, and reporting.
+- Staff management payroll view with worked-hours and overtime breakdown.
+- Admin payroll slip printing from lecturer details.
+- Face model assets loaded from public/models.
 
-Changes made via Lovable will be committed automatically to this repo.
+## Tech Stack
 
-**Use your preferred IDE**
+- React 18
+- TypeScript
+- Vite
+- React Router
+- TanStack Query
+- Tailwind CSS
+- shadcn/ui + Radix UI
+- Recharts
+- face-api.js
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+## Prerequisites
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+- Node.js 18+
+- npm 9+
 
-Follow these steps:
+## Getting Started
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+1. Install dependencies:
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+```bash
+npm install
+```
 
-# Step 3: Install the necessary dependencies.
-npm i
+2. Create a .env file in the project root (or set env vars in your shell):
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+```env
+VITE_ENVIRONMENT=development
+VITE_API_DEV_URL=http://localhost:4000/api
+VITE_API_PROD_URL=https://api.comas.edu.gh/api
+```
+
+3. Start development server:
+
+```bash
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+Default dev server runs on:
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+- http://localhost:5175
 
-**Use GitHub Codespaces**
+## Scripts
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+- npm run dev: start local development server
+- npm run build: production build
+- npm run build:dev: development-mode build
+- npm run preview: preview production build locally
+- npm run lint: run ESLint
 
-## What technologies are used for this project?
+## Routing Notes
 
-This project is built with:
+- Auth page: /auth
+- Role-based app routes: /:role/dashboard, /:role/members, /:role/sessions, etc.
+- Kiosk route: /kiosk/:sessionId
+- Lecturer kiosk route: /kiosk/lecturer/:slotId
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## Backend Integration
 
-## How can I deploy this project?
+The frontend expects the FaceTrack backend API to be running and reachable via:
 
-Simply open [Lovable](https://lovable.dev/projects/cb991aa8-011f-4701-9735-92802dff6e34) and click on Share -> Publish.
+- VITE_API_DEV_URL for development
+- VITE_API_PROD_URL for production
 
-## Can I connect a custom domain to my Lovable project?
+If env vars are not provided, the app falls back to:
 
-Yes, you can!
+- Development: http://localhost:4000/api
+- Production: https://api.comas.edu.gh/api
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+## Deployment
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
-=======
-# face-check-client
-The frontend repository for the face-chek attendance tracking system.
->>>>>>> bf23e97da6c71a0606e400dd49cc0815d079942e
+The repo includes Vercel SPA rewrites in vercel.json so client-side routes resolve correctly.
+
+Typical deployment flow:
+
+1. Build the app with npm run build.
+2. Deploy the dist output to your hosting provider.
+3. Configure production environment variables.
+
+## Notes
+
+- Face recognition model files are stored in public/models and should be present in deployments.
+- Analytics is enabled via @vercel/analytics.

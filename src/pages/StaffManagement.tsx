@@ -167,9 +167,9 @@ const StaffManagement = () => {
 
   // Data
   const [lecturers, setLecturers] = useState<LecturerEarning[]>([]);
-  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>(
-    [],
-  );
+  const [attendanceRecords, setAttendanceRecords] = useState<
+    AttendanceRecord[]
+  >([]);
   const [loading, setLoading] = useState(true);
 
   // Filters
@@ -349,7 +349,7 @@ const StaffManagement = () => {
     }, 0);
     const totalOvertimeHours = lecturers.reduce((s, l) => {
       const derived = attendanceHoursByLecturer.get(l.lecturerId);
-      return s + (derived?.overtimeHours ?? (l.overtimeHours ?? 0));
+      return s + (derived?.overtimeHours ?? l.overtimeHours ?? 0);
     }, 0);
     const totalGross = lecturers.reduce(
       (s, l) => s + (l.grossEarnings ?? l.earnings),
@@ -357,7 +357,7 @@ const StaffManagement = () => {
     );
     const totalOvertimeEarnings = lecturers.reduce((s, l) => {
       const derived = attendanceHoursByLecturer.get(l.lecturerId);
-      const overtimeHours = derived?.overtimeHours ?? (l.overtimeHours ?? 0);
+      const overtimeHours = derived?.overtimeHours ?? l.overtimeHours ?? 0;
       const overtimeRate = l.overtimeRate ?? l.hourlyRate;
       const overtimeEarnings =
         derived != null
@@ -395,11 +395,7 @@ const StaffManagement = () => {
         overtimeHours:
           fromAttendance?.overtimeHours ??
           session.overtimeHours ??
-          Math.max(
-            0,
-            session.hours -
-              (session.regularHours ?? session.hours),
-          ),
+          Math.max(0, session.hours - (session.regularHours ?? session.hours)),
       };
     });
 
@@ -424,10 +420,13 @@ const StaffManagement = () => {
     const workedHours = derived?.workedHours ?? detailLecturer.totalHours;
     const regularHours =
       derived?.regularHours ??
-      (detailLecturer.regularHours ??
-        Math.max(0, detailLecturer.totalHours - (detailLecturer.overtimeHours ?? 0)));
+      detailLecturer.regularHours ??
+      Math.max(
+        0,
+        detailLecturer.totalHours - (detailLecturer.overtimeHours ?? 0),
+      );
     const overtimeHours =
-      derived?.overtimeHours ?? (detailLecturer.overtimeHours ?? 0);
+      derived?.overtimeHours ?? detailLecturer.overtimeHours ?? 0;
 
     return {
       workedHours,
@@ -553,9 +552,11 @@ const StaffManagement = () => {
       return;
     }
 
-    const overtimeRate = detailLecturer.overtimeRate ?? detailLecturer.hourlyRate;
+    const overtimeRate =
+      detailLecturer.overtimeRate ?? detailLecturer.hourlyRate;
     const overtimeEarnings =
-      detailLecturer.overtimeEarnings ?? detailSummary.overtimeHours * overtimeRate;
+      detailLecturer.overtimeEarnings ??
+      detailSummary.overtimeHours * overtimeRate;
     const gross = detailLecturer.grossEarnings ?? detailLecturer.earnings;
     const taxRate = detailLecturer.taxRate ?? 0.1;
     const generatedAt = new Date().toLocaleString();
@@ -934,7 +935,7 @@ const StaffManagement = () => {
                 const derived = attendanceHoursByLecturer.get(lec.lecturerId);
                 const workedHours = derived?.workedHours ?? lec.totalHours;
                 const overtimeHours =
-                  derived?.overtimeHours ?? (lec.overtimeHours ?? 0);
+                  derived?.overtimeHours ?? lec.overtimeHours ?? 0;
                 const overtimeRate = lec.overtimeRate ?? lec.hourlyRate;
                 const overtimeEarnings =
                   derived != null
@@ -1099,45 +1100,46 @@ const StaffManagement = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {detailSummary && (
                     <>
-                  <SummaryItem
-                    label="Hourly Rate"
-                    value={fmt(detailLecturer.hourlyRate)}
-                  />
-                  <SummaryItem
-                    label="Worked Hours"
-                    value={`${detailSummary.workedHours.toFixed(1)}h`}
-                  />
-                  <SummaryItem
-                    label="Regular Hours"
-                    value={`${detailSummary.regularHours.toFixed(1)}h`}
-                  />
-                  <SummaryItem
-                    label="Overtime Hours"
-                    value={`${detailSummary.overtimeHours.toFixed(1)}h`}
-                    className="text-amber-600"
-                  />
-                  <SummaryItem
-                    label="Overtime Earnings"
-                    value={fmt(
-                      detailLecturer.overtimeEarnings ??
-                        detailSummary.overtimeHours *
-                          (detailLecturer.overtimeRate ??
-                            detailLecturer.hourlyRate),
-                    )}
-                    className="text-amber-600"
-                  />
-                  <SummaryItem
-                    label="Gross Earnings"
-                    value={fmt(
-                      detailLecturer.grossEarnings ?? detailLecturer.earnings,
-                    )}
-                    className="text-foreground"
-                  />
-                  <SummaryItem
-                    label={`Tax Deduction (${((detailLecturer.taxRate ?? 0.1) * 100).toFixed(0)}%)`}
-                    value={`-${fmt(detailLecturer.taxDeduction ?? 0)}`}
-                    className="text-red-500"
-                  />
+                      <SummaryItem
+                        label="Hourly Rate"
+                        value={fmt(detailLecturer.hourlyRate)}
+                      />
+                      <SummaryItem
+                        label="Worked Hours"
+                        value={`${detailSummary.workedHours.toFixed(1)}h`}
+                      />
+                      <SummaryItem
+                        label="Regular Hours"
+                        value={`${detailSummary.regularHours.toFixed(1)}h`}
+                      />
+                      <SummaryItem
+                        label="Overtime Hours"
+                        value={`${detailSummary.overtimeHours.toFixed(1)}h`}
+                        className="text-amber-600"
+                      />
+                      <SummaryItem
+                        label="Overtime Earnings"
+                        value={fmt(
+                          detailLecturer.overtimeEarnings ??
+                            detailSummary.overtimeHours *
+                              (detailLecturer.overtimeRate ??
+                                detailLecturer.hourlyRate),
+                        )}
+                        className="text-amber-600"
+                      />
+                      <SummaryItem
+                        label="Gross Earnings"
+                        value={fmt(
+                          detailLecturer.grossEarnings ??
+                            detailLecturer.earnings,
+                        )}
+                        className="text-foreground"
+                      />
+                      <SummaryItem
+                        label={`Tax Deduction (${((detailLecturer.taxRate ?? 0.1) * 100).toFixed(0)}%)`}
+                        value={`-${fmt(detailLecturer.taxDeduction ?? 0)}`}
+                        className="text-red-500"
+                      />
                     </>
                   )}
                 </div>
@@ -1161,8 +1163,7 @@ const StaffManagement = () => {
                 <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
                   Session Breakdown
                 </h4>
-                {detailLecturer.sessions &&
-                detailSessionRows.length > 0 ? (
+                {detailLecturer.sessions && detailSessionRows.length > 0 ? (
                   <div className="rounded-lg border border-border overflow-hidden">
                     <Table>
                       <TableHeader>
@@ -1180,8 +1181,7 @@ const StaffManagement = () => {
                       <TableBody>
                         {detailSessionRows.map((s) => {
                           const sRegularHours = s.regularHours;
-                          const sOvertimeHours =
-                            s.overtimeHours;
+                          const sOvertimeHours = s.overtimeHours;
                           const sOvertimeEarnings =
                             sOvertimeHours *
                             (detailLecturer.overtimeRate ??
