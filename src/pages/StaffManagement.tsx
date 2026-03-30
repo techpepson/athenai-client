@@ -47,6 +47,10 @@ import {
   getLecturerPayroll,
   LecturerEarning,
 } from "@/services/payroll.service";
+import {
+  AttendanceRecord,
+  getAllAttendancesAdmin,
+} from "@/services/attendance.services";
 
 // ─── Helpers ────────────────────────────────────────────
 
@@ -68,6 +72,63 @@ function buildMonthOptions(count = 12) {
 
 /** Format currency */
 const fmt = (n: number) => `₵${n.toFixed(2)}`;
+
+const toHours = (milliseconds: number) => milliseconds / (1000 * 60 * 60);
+
+const getMonthParts = (value: string) => {
+  const [yearRaw, monthRaw] = value.split("-");
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  if (!year || !month) return null;
+  return { year, month };
+};
+
+const isAttendanceInMonth = (
+  attendance: AttendanceRecord,
+  selectedMonth: string,
+) => {
+  if (selectedMonth === "all") return true;
+  const monthParts = getMonthParts(selectedMonth);
+  if (!monthParts) return true;
+
+  const referenceTime = attendance.checkOutTime ?? attendance.checkInTime;
+  if (!referenceTime) return false;
+
+  const date = new Date(referenceTime);
+  return (
+    date.getFullYear() === monthParts.year &&
+    date.getMonth() + 1 === monthParts.month
+  );
+};
+
+const getAttendanceHourBreakdown = (attendance: AttendanceRecord) => {
+  if (!attendance.checkInTime || !attendance.checkOutTime) {
+    return { workedHours: 0, regularHours: 0, overtimeHours: 0 };
+  }
+
+  const checkIn = new Date(attendance.checkInTime).getTime();
+  const checkOut = new Date(attendance.checkOutTime).getTime();
+
+  if (Number.isNaN(checkIn) || Number.isNaN(checkOut) || checkOut <= checkIn) {
+    return { workedHours: 0, regularHours: 0, overtimeHours: 0 };
+  }
+
+  const workedHours = toHours(checkOut - checkIn);
+  const expectedEnd = attendance.session?.endTime
+    ? new Date(attendance.session.endTime).getTime()
+    : null;
+
+  if (!expectedEnd || Number.isNaN(expectedEnd)) {
+    return { workedHours, regularHours: workedHours, overtimeHours: 0 };
+  }
+
+  // Overtime is only attendance time after the expected session end.
+  const overtimeMillis = Math.max(0, checkOut - Math.max(checkIn, expectedEnd));
+  const overtimeHours = Math.min(workedHours, toHours(overtimeMillis));
+  const regularHours = Math.max(0, workedHours - overtimeHours);
+
+  return { workedHours, regularHours, overtimeHours };
+};
 
 // ─── Small helper component ─────────────────────────────
 function SummaryItem({
@@ -97,6 +158,9 @@ const StaffManagement = () => {
 
   // Data
   const [lecturers, setLecturers] = useState<LecturerEarning[]>([]);
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>(
+    [],
+  );
   const [loading, setLoading] = useState(true);
 
   // Filters
@@ -159,6 +223,97 @@ const StaffManagement = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, selectedMonth]);
 
+  useEffect(() => {
+    if (!token) {
+      setAttendanceRecords([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    const fetchAttendance = async () => {
+      try {
+        const res = await getAllAttendancesAdmin(token);
+        if (cancelled) return;
+        if (res.success && Array.isArray(res.data)) {
+          setAttendanceRecords(res.data);
+        } else {
+          setAttendanceRecords([]);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        console.error("Failed to load attendance records:", err);
+        setAttendanceRecords([]);
+      }
+    };
+
+    fetchAttendance();
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  const attendanceHoursByLecturer = useMemo(() => {
+    const lecturerMap = new Map<
+      string,
+      {
+        workedHours: number;
+        regularHours: number;
+        overtimeHours: number;
+        sessions: Map<
+          string,
+          {
+            sessionId: string;
+            sessionName: string;
+            hours: number;
+            regularHours: number;
+            overtimeHours: number;
+          }
+        >;
+      }
+    >();
+
+    attendanceRecords.forEach((attendance) => {
+      const lecturerId = attendance.user?.lecturer?.id;
+      if (!lecturerId) return;
+      if (!isAttendanceInMonth(attendance, selectedMonth)) return;
+
+      const breakdown = getAttendanceHourBreakdown(attendance);
+      if (breakdown.workedHours <= 0) return;
+
+      const existing = lecturerMap.get(lecturerId) ?? {
+        workedHours: 0,
+        regularHours: 0,
+        overtimeHours: 0,
+        sessions: new Map(),
+      };
+
+      existing.workedHours += breakdown.workedHours;
+      existing.regularHours += breakdown.regularHours;
+      existing.overtimeHours += breakdown.overtimeHours;
+
+      const sessionId = attendance.sessionId;
+      if (sessionId) {
+        const existingSession = existing.sessions.get(sessionId) ?? {
+          sessionId,
+          sessionName: attendance.session?.name ?? "Session",
+          hours: 0,
+          regularHours: 0,
+          overtimeHours: 0,
+        };
+
+        existingSession.hours += breakdown.workedHours;
+        existingSession.regularHours += breakdown.regularHours;
+        existingSession.overtimeHours += breakdown.overtimeHours;
+        existing.sessions.set(sessionId, existingSession);
+      }
+
+      lecturerMap.set(lecturerId, existing);
+    });
+
+    return lecturerMap;
+  }, [attendanceRecords, selectedMonth]);
+
   // ── Search filter ───────────────────────────────────
   const filteredLecturers = useMemo(() => {
     if (!searchQuery.trim()) return lecturers;
@@ -173,25 +328,34 @@ const StaffManagement = () => {
 
   // ── Stats ───────────────────────────────────────────
   const stats = useMemo(() => {
-    const totalHours = lecturers.reduce((s, l) => s + l.totalHours, 0);
-    const totalRegularHours = lecturers.reduce(
-      (s, l) =>
-        s +
-        (l.regularHours ?? Math.max(0, l.totalHours - (l.overtimeHours ?? 0))),
-      0,
-    );
-    const totalOvertimeHours = lecturers.reduce(
-      (s, l) => s + (l.overtimeHours ?? 0),
-      0,
-    );
+    const totalHours = lecturers.reduce((s, l) => {
+      const derived = attendanceHoursByLecturer.get(l.lecturerId);
+      return s + (derived?.workedHours ?? l.totalHours);
+    }, 0);
+    const totalRegularHours = lecturers.reduce((s, l) => {
+      const derived = attendanceHoursByLecturer.get(l.lecturerId);
+      const fallbackRegular =
+        l.regularHours ?? Math.max(0, l.totalHours - (l.overtimeHours ?? 0));
+      return s + (derived?.regularHours ?? fallbackRegular);
+    }, 0);
+    const totalOvertimeHours = lecturers.reduce((s, l) => {
+      const derived = attendanceHoursByLecturer.get(l.lecturerId);
+      return s + (derived?.overtimeHours ?? (l.overtimeHours ?? 0));
+    }, 0);
     const totalGross = lecturers.reduce(
       (s, l) => s + (l.grossEarnings ?? l.earnings),
       0,
     );
-    const totalOvertimeEarnings = lecturers.reduce(
-      (s, l) => s + (l.overtimeEarnings ?? 0),
-      0,
-    );
+    const totalOvertimeEarnings = lecturers.reduce((s, l) => {
+      const derived = attendanceHoursByLecturer.get(l.lecturerId);
+      const overtimeHours = derived?.overtimeHours ?? (l.overtimeHours ?? 0);
+      const overtimeRate = l.overtimeRate ?? l.hourlyRate;
+      const overtimeEarnings =
+        derived != null
+          ? overtimeHours * overtimeRate
+          : (l.overtimeEarnings ?? overtimeHours * overtimeRate);
+      return s + overtimeEarnings;
+    }, 0);
     const totalTax = lecturers.reduce((s, l) => s + (l.taxDeduction ?? 0), 0);
     const totalNet = lecturers.reduce((s, l) => s + l.earnings, 0);
     return {
@@ -204,7 +368,46 @@ const StaffManagement = () => {
       totalTax,
       totalNet,
     };
-  }, [lecturers]);
+  }, [lecturers, attendanceHoursByLecturer]);
+
+  const detailSessionRows = useMemo(() => {
+    if (!detailLecturer) return [];
+
+    const derived = attendanceHoursByLecturer.get(detailLecturer.lecturerId);
+    const derivedSessions = derived?.sessions ?? new Map();
+    const rows = (detailLecturer.sessions ?? []).map((session) => {
+      const fromAttendance = derivedSessions.get(session.sessionId);
+      return {
+        sessionId: session.sessionId,
+        sessionName: session.sessionName,
+        hours: fromAttendance?.hours ?? session.hours,
+        regularHours:
+          fromAttendance?.regularHours ?? session.regularHours ?? session.hours,
+        overtimeHours:
+          fromAttendance?.overtimeHours ??
+          session.overtimeHours ??
+          Math.max(
+            0,
+            session.hours -
+              (session.regularHours ?? session.hours),
+          ),
+      };
+    });
+
+    const knownSessionIds = new Set(rows.map((row) => row.sessionId));
+    derivedSessions.forEach((session, sessionId) => {
+      if (knownSessionIds.has(sessionId)) return;
+      rows.push({
+        sessionId,
+        sessionName: session.sessionName,
+        hours: session.hours,
+        regularHours: session.regularHours,
+        overtimeHours: session.overtimeHours,
+      });
+    });
+
+    return rows;
+  }, [detailLecturer, attendanceHoursByLecturer]);
 
   // ── Open detail dialog ──────────────────────────────
   const openDetail = async (lecturer: LecturerEarning) => {
@@ -442,10 +645,15 @@ const StaffManagement = () => {
             </TableHeader>
             <TableBody>
               {filteredLecturers.map((lec) => {
-                const overtimeHours = lec.overtimeHours ?? 0;
+                const derived = attendanceHoursByLecturer.get(lec.lecturerId);
+                const workedHours = derived?.workedHours ?? lec.totalHours;
+                const overtimeHours =
+                  derived?.overtimeHours ?? (lec.overtimeHours ?? 0);
+                const overtimeRate = lec.overtimeRate ?? lec.hourlyRate;
                 const overtimeEarnings =
-                  lec.overtimeEarnings ??
-                  overtimeHours * (lec.overtimeRate ?? lec.hourlyRate);
+                  derived != null
+                    ? overtimeHours * overtimeRate
+                    : (lec.overtimeEarnings ?? overtimeHours * overtimeRate);
                 const gross = lec.grossEarnings ?? lec.earnings;
                 const tax = lec.taxDeduction ?? 0;
                 const net = lec.earnings;
@@ -504,7 +712,7 @@ const StaffManagement = () => {
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      {lec.totalHours.toFixed(1)}h
+                      {workedHours.toFixed(1)}h
                     </TableCell>
                     <TableCell className="text-right">
                       {overtimeHours.toFixed(1)}h
@@ -603,28 +811,46 @@ const StaffManagement = () => {
                   Earnings Summary &mdash; {monthLabel}
                 </h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {(() => {
+                    const derived = attendanceHoursByLecturer.get(
+                      detailLecturer.lecturerId,
+                    );
+                    const workedHours = derived?.workedHours ?? detailLecturer.totalHours;
+                    const regularHours =
+                      derived?.regularHours ??
+                      (detailLecturer.regularHours ??
+                        Math.max(
+                          0,
+                          detailLecturer.totalHours -
+                            (detailLecturer.overtimeHours ?? 0),
+                        ));
+                    const overtimeHours =
+                      derived?.overtimeHours ?? (detailLecturer.overtimeHours ?? 0);
+
+                    return (
+                      <>
                   <SummaryItem
                     label="Hourly Rate"
                     value={fmt(detailLecturer.hourlyRate)}
                   />
                   <SummaryItem
                     label="Worked Hours"
-                    value={`${detailLecturer.totalHours.toFixed(1)}h`}
+                    value={`${workedHours.toFixed(1)}h`}
                   />
                   <SummaryItem
                     label="Regular Hours"
-                    value={`${(detailLecturer.regularHours ?? Math.max(0, detailLecturer.totalHours - (detailLecturer.overtimeHours ?? 0))).toFixed(1)}h`}
+                    value={`${regularHours.toFixed(1)}h`}
                   />
                   <SummaryItem
                     label="Overtime Hours"
-                    value={`${(detailLecturer.overtimeHours ?? 0).toFixed(1)}h`}
+                    value={`${overtimeHours.toFixed(1)}h`}
                     className="text-amber-600"
                   />
                   <SummaryItem
                     label="Overtime Earnings"
                     value={fmt(
                       detailLecturer.overtimeEarnings ??
-                        (detailLecturer.overtimeHours ?? 0) *
+                        overtimeHours *
                           (detailLecturer.overtimeRate ??
                             detailLecturer.hourlyRate),
                     )}
@@ -642,6 +868,9 @@ const StaffManagement = () => {
                     value={`-${fmt(detailLecturer.taxDeduction ?? 0)}`}
                     className="text-red-500"
                   />
+                      </>
+                    );
+                  })()}
                 </div>
 
                 <Separator className="my-4" />
@@ -664,7 +893,7 @@ const StaffManagement = () => {
                   Session Breakdown
                 </h4>
                 {detailLecturer.sessions &&
-                detailLecturer.sessions.length > 0 ? (
+                detailSessionRows.length > 0 ? (
                   <div className="rounded-lg border border-border overflow-hidden">
                     <Table>
                       <TableHeader>
@@ -680,11 +909,10 @@ const StaffManagement = () => {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {detailLecturer.sessions.map((s) => {
-                          const sRegularHours = s.regularHours ?? s.hours;
+                        {detailSessionRows.map((s) => {
+                          const sRegularHours = s.regularHours;
                           const sOvertimeHours =
-                            s.overtimeHours ??
-                            Math.max(0, s.hours - sRegularHours);
+                            s.overtimeHours;
                           const sOvertimeEarnings =
                             sOvertimeHours *
                             (detailLecturer.overtimeRate ??
