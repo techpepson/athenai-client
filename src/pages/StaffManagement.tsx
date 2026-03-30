@@ -13,6 +13,7 @@ import {
   X,
   FileText,
   TrendingDown,
+  Printer,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -47,6 +48,10 @@ import {
   getLecturerPayroll,
   LecturerEarning,
 } from "@/services/payroll.service";
+import {
+  AttendanceRecord,
+  getAllAttendancesAdmin,
+} from "@/services/attendance.services";
 
 // ─── Helpers ────────────────────────────────────────────
 
@@ -68,6 +73,71 @@ function buildMonthOptions(count = 12) {
 
 /** Format currency */
 const fmt = (n: number) => `₵${n.toFixed(2)}`;
+
+const escapeHtml = (input: string) =>
+  input
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const toHours = (milliseconds: number) => milliseconds / (1000 * 60 * 60);
+
+const getMonthParts = (value: string) => {
+  const [yearRaw, monthRaw] = value.split("-");
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  if (!year || !month) return null;
+  return { year, month };
+};
+
+const isAttendanceInMonth = (
+  attendance: AttendanceRecord,
+  selectedMonth: string,
+) => {
+  if (selectedMonth === "all") return true;
+  const monthParts = getMonthParts(selectedMonth);
+  if (!monthParts) return true;
+
+  const referenceTime = attendance.checkOutTime ?? attendance.checkInTime;
+  if (!referenceTime) return false;
+
+  const date = new Date(referenceTime);
+  return (
+    date.getFullYear() === monthParts.year &&
+    date.getMonth() + 1 === monthParts.month
+  );
+};
+
+const getAttendanceHourBreakdown = (attendance: AttendanceRecord) => {
+  if (!attendance.checkInTime || !attendance.checkOutTime) {
+    return { workedHours: 0, regularHours: 0, overtimeHours: 0 };
+  }
+
+  const checkIn = new Date(attendance.checkInTime).getTime();
+  const checkOut = new Date(attendance.checkOutTime).getTime();
+
+  if (Number.isNaN(checkIn) || Number.isNaN(checkOut) || checkOut <= checkIn) {
+    return { workedHours: 0, regularHours: 0, overtimeHours: 0 };
+  }
+
+  const workedHours = toHours(checkOut - checkIn);
+  const expectedEnd = attendance.session?.endTime
+    ? new Date(attendance.session.endTime).getTime()
+    : null;
+
+  if (!expectedEnd || Number.isNaN(expectedEnd)) {
+    return { workedHours, regularHours: workedHours, overtimeHours: 0 };
+  }
+
+  // Overtime is only attendance time after the expected session end.
+  const overtimeMillis = Math.max(0, checkOut - Math.max(checkIn, expectedEnd));
+  const overtimeHours = Math.min(workedHours, toHours(overtimeMillis));
+  const regularHours = Math.max(0, workedHours - overtimeHours);
+
+  return { workedHours, regularHours, overtimeHours };
+};
 
 // ─── Small helper component ─────────────────────────────
 function SummaryItem({
@@ -97,6 +167,9 @@ const StaffManagement = () => {
 
   // Data
   const [lecturers, setLecturers] = useState<LecturerEarning[]>([]);
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>(
+    [],
+  );
   const [loading, setLoading] = useState(true);
 
   // Filters
@@ -159,6 +232,97 @@ const StaffManagement = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, selectedMonth]);
 
+  useEffect(() => {
+    if (!token) {
+      setAttendanceRecords([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    const fetchAttendance = async () => {
+      try {
+        const res = await getAllAttendancesAdmin(token);
+        if (cancelled) return;
+        if (res.success && Array.isArray(res.data)) {
+          setAttendanceRecords(res.data);
+        } else {
+          setAttendanceRecords([]);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        console.error("Failed to load attendance records:", err);
+        setAttendanceRecords([]);
+      }
+    };
+
+    fetchAttendance();
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  const attendanceHoursByLecturer = useMemo(() => {
+    const lecturerMap = new Map<
+      string,
+      {
+        workedHours: number;
+        regularHours: number;
+        overtimeHours: number;
+        sessions: Map<
+          string,
+          {
+            sessionId: string;
+            sessionName: string;
+            hours: number;
+            regularHours: number;
+            overtimeHours: number;
+          }
+        >;
+      }
+    >();
+
+    attendanceRecords.forEach((attendance) => {
+      const lecturerId = attendance.user?.lecturer?.id;
+      if (!lecturerId) return;
+      if (!isAttendanceInMonth(attendance, selectedMonth)) return;
+
+      const breakdown = getAttendanceHourBreakdown(attendance);
+      if (breakdown.workedHours <= 0) return;
+
+      const existing = lecturerMap.get(lecturerId) ?? {
+        workedHours: 0,
+        regularHours: 0,
+        overtimeHours: 0,
+        sessions: new Map(),
+      };
+
+      existing.workedHours += breakdown.workedHours;
+      existing.regularHours += breakdown.regularHours;
+      existing.overtimeHours += breakdown.overtimeHours;
+
+      const sessionId = attendance.sessionId;
+      if (sessionId) {
+        const existingSession = existing.sessions.get(sessionId) ?? {
+          sessionId,
+          sessionName: attendance.session?.name ?? "Session",
+          hours: 0,
+          regularHours: 0,
+          overtimeHours: 0,
+        };
+
+        existingSession.hours += breakdown.workedHours;
+        existingSession.regularHours += breakdown.regularHours;
+        existingSession.overtimeHours += breakdown.overtimeHours;
+        existing.sessions.set(sessionId, existingSession);
+      }
+
+      lecturerMap.set(lecturerId, existing);
+    });
+
+    return lecturerMap;
+  }, [attendanceRecords, selectedMonth]);
+
   // ── Search filter ───────────────────────────────────
   const filteredLecturers = useMemo(() => {
     if (!searchQuery.trim()) return lecturers;
@@ -173,25 +337,34 @@ const StaffManagement = () => {
 
   // ── Stats ───────────────────────────────────────────
   const stats = useMemo(() => {
-    const totalHours = lecturers.reduce((s, l) => s + l.totalHours, 0);
-    const totalRegularHours = lecturers.reduce(
-      (s, l) =>
-        s +
-        (l.regularHours ?? Math.max(0, l.totalHours - (l.overtimeHours ?? 0))),
-      0,
-    );
-    const totalOvertimeHours = lecturers.reduce(
-      (s, l) => s + (l.overtimeHours ?? 0),
-      0,
-    );
+    const totalHours = lecturers.reduce((s, l) => {
+      const derived = attendanceHoursByLecturer.get(l.lecturerId);
+      return s + (derived?.workedHours ?? l.totalHours);
+    }, 0);
+    const totalRegularHours = lecturers.reduce((s, l) => {
+      const derived = attendanceHoursByLecturer.get(l.lecturerId);
+      const fallbackRegular =
+        l.regularHours ?? Math.max(0, l.totalHours - (l.overtimeHours ?? 0));
+      return s + (derived?.regularHours ?? fallbackRegular);
+    }, 0);
+    const totalOvertimeHours = lecturers.reduce((s, l) => {
+      const derived = attendanceHoursByLecturer.get(l.lecturerId);
+      return s + (derived?.overtimeHours ?? (l.overtimeHours ?? 0));
+    }, 0);
     const totalGross = lecturers.reduce(
       (s, l) => s + (l.grossEarnings ?? l.earnings),
       0,
     );
-    const totalOvertimeEarnings = lecturers.reduce(
-      (s, l) => s + (l.overtimeEarnings ?? 0),
-      0,
-    );
+    const totalOvertimeEarnings = lecturers.reduce((s, l) => {
+      const derived = attendanceHoursByLecturer.get(l.lecturerId);
+      const overtimeHours = derived?.overtimeHours ?? (l.overtimeHours ?? 0);
+      const overtimeRate = l.overtimeRate ?? l.hourlyRate;
+      const overtimeEarnings =
+        derived != null
+          ? overtimeHours * overtimeRate
+          : (l.overtimeEarnings ?? overtimeHours * overtimeRate);
+      return s + overtimeEarnings;
+    }, 0);
     const totalTax = lecturers.reduce((s, l) => s + (l.taxDeduction ?? 0), 0);
     const totalNet = lecturers.reduce((s, l) => s + l.earnings, 0);
     return {
@@ -204,7 +377,64 @@ const StaffManagement = () => {
       totalTax,
       totalNet,
     };
-  }, [lecturers]);
+  }, [lecturers, attendanceHoursByLecturer]);
+
+  const detailSessionRows = useMemo(() => {
+    if (!detailLecturer) return [];
+
+    const derived = attendanceHoursByLecturer.get(detailLecturer.lecturerId);
+    const derivedSessions = derived?.sessions ?? new Map();
+    const rows = (detailLecturer.sessions ?? []).map((session) => {
+      const fromAttendance = derivedSessions.get(session.sessionId);
+      return {
+        sessionId: session.sessionId,
+        sessionName: session.sessionName,
+        hours: fromAttendance?.hours ?? session.hours,
+        regularHours:
+          fromAttendance?.regularHours ?? session.regularHours ?? session.hours,
+        overtimeHours:
+          fromAttendance?.overtimeHours ??
+          session.overtimeHours ??
+          Math.max(
+            0,
+            session.hours -
+              (session.regularHours ?? session.hours),
+          ),
+      };
+    });
+
+    const knownSessionIds = new Set(rows.map((row) => row.sessionId));
+    derivedSessions.forEach((session, sessionId) => {
+      if (knownSessionIds.has(sessionId)) return;
+      rows.push({
+        sessionId,
+        sessionName: session.sessionName,
+        hours: session.hours,
+        regularHours: session.regularHours,
+        overtimeHours: session.overtimeHours,
+      });
+    });
+
+    return rows;
+  }, [detailLecturer, attendanceHoursByLecturer]);
+
+  const detailSummary = useMemo(() => {
+    if (!detailLecturer) return null;
+    const derived = attendanceHoursByLecturer.get(detailLecturer.lecturerId);
+    const workedHours = derived?.workedHours ?? detailLecturer.totalHours;
+    const regularHours =
+      derived?.regularHours ??
+      (detailLecturer.regularHours ??
+        Math.max(0, detailLecturer.totalHours - (detailLecturer.overtimeHours ?? 0)));
+    const overtimeHours =
+      derived?.overtimeHours ?? (detailLecturer.overtimeHours ?? 0);
+
+    return {
+      workedHours,
+      regularHours,
+      overtimeHours,
+    };
+  }, [detailLecturer, attendanceHoursByLecturer]);
 
   // ── Open detail dialog ──────────────────────────────
   const openDetail = async (lecturer: LecturerEarning) => {
@@ -317,6 +547,265 @@ const StaffManagement = () => {
       ? "All Time"
       : (monthOptions.find((m) => m.value === selectedMonth)?.label ??
         selectedMonth);
+
+  const handlePrintPayrollSlip = () => {
+    if (!detailLecturer || !detailSummary || typeof window === "undefined") {
+      return;
+    }
+
+    const overtimeRate = detailLecturer.overtimeRate ?? detailLecturer.hourlyRate;
+    const overtimeEarnings =
+      detailLecturer.overtimeEarnings ?? detailSummary.overtimeHours * overtimeRate;
+    const gross = detailLecturer.grossEarnings ?? detailLecturer.earnings;
+    const taxRate = detailLecturer.taxRate ?? 0.1;
+    const generatedAt = new Date().toLocaleString();
+
+    const sessionRowsHtml =
+      detailSessionRows.length > 0
+        ? detailSessionRows
+            .map((session) => {
+              const sessionOvertimeEarnings =
+                session.overtimeHours *
+                (detailLecturer.overtimeRate ?? detailLecturer.hourlyRate);
+              const sessionNet = session.hours * detailLecturer.hourlyRate;
+              return `
+                <tr>
+                  <td>${escapeHtml(session.sessionName)}</td>
+                  <td class="right">${session.hours.toFixed(2)}h</td>
+                  <td class="right">${session.regularHours.toFixed(2)}h</td>
+                  <td class="right">${session.overtimeHours.toFixed(2)}h</td>
+                  <td class="right">${fmt(sessionOvertimeEarnings)}</td>
+                  <td class="right">${fmt(sessionNet)}</td>
+                </tr>
+              `;
+            })
+            .join("")
+        : `
+            <tr>
+              <td colspan="6" class="empty">No session data available for this period.</td>
+            </tr>
+          `;
+
+    const printWindow = window.open("", "_blank", "width=1000,height=800");
+
+    if (!printWindow) {
+      toast({
+        title: "Print blocked",
+        description: "Enable pop-ups to print payroll slips.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const staffNumber = detailLecturer.staffNo
+      ? escapeHtml(detailLecturer.staffNo)
+      : "N/A";
+
+    printWindow.document.write(`
+      <!doctype html>
+      <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Payroll Slip - ${escapeHtml(detailLecturer.name)}</title>
+        <style>
+          * { box-sizing: border-box; }
+          body {
+            margin: 0;
+            padding: 24px;
+            font-family: "Segoe UI", Arial, sans-serif;
+            color: #0f172a;
+            background: #ffffff;
+          }
+          .slip {
+            max-width: 900px;
+            margin: 0 auto;
+          }
+          .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #0f172a;
+            padding-bottom: 12px;
+          }
+          .title {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 700;
+          }
+          .subtitle {
+            margin: 6px 0 0;
+            color: #475569;
+            font-size: 13px;
+          }
+          .meta {
+            text-align: right;
+            font-size: 13px;
+            color: #334155;
+          }
+          .section-title {
+            margin: 18px 0 10px;
+            font-size: 13px;
+            font-weight: 700;
+            color: #334155;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+          }
+          .grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+          }
+          .card {
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            padding: 10px 12px;
+          }
+          .label {
+            margin: 0;
+            font-size: 11px;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+          }
+          .value {
+            margin: 6px 0 0;
+            font-size: 18px;
+            font-weight: 700;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+          }
+          th, td {
+            border: 1px solid #cbd5e1;
+            padding: 8px 10px;
+            font-size: 12px;
+          }
+          th {
+            background: #f1f5f9;
+            text-align: left;
+            font-weight: 700;
+          }
+          .right {
+            text-align: right;
+          }
+          .empty {
+            color: #64748b;
+            text-align: center;
+            padding: 14px;
+          }
+          .footer {
+            margin-top: 18px;
+            font-size: 11px;
+            color: #64748b;
+            display: flex;
+            justify-content: space-between;
+          }
+          @media print {
+            body { padding: 10px; }
+            .slip { max-width: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="slip">
+          <div class="header">
+            <div>
+              <h1 class="title">Payroll Slip</h1>
+              <p class="subtitle">Period: ${escapeHtml(monthLabel)}</p>
+            </div>
+            <div class="meta">
+              <div><strong>Generated:</strong> ${escapeHtml(generatedAt)}</div>
+            </div>
+          </div>
+
+          <div class="section-title">Lecturer Information</div>
+          <div class="grid">
+            <div class="card">
+              <p class="label">Name</p>
+              <p class="value">${escapeHtml(detailLecturer.name)}</p>
+            </div>
+            <div class="card">
+              <p class="label">Staff Number</p>
+              <p class="value">${staffNumber}</p>
+            </div>
+            <div class="card">
+              <p class="label">Email</p>
+              <p class="value">${escapeHtml(detailLecturer.email)}</p>
+            </div>
+            <div class="card">
+              <p class="label">Hourly Rate</p>
+              <p class="value">${fmt(detailLecturer.hourlyRate)}</p>
+            </div>
+          </div>
+
+          <div class="section-title">Hours and Earnings</div>
+          <div class="grid">
+            <div class="card">
+              <p class="label">Worked Hours</p>
+              <p class="value">${detailSummary.workedHours.toFixed(2)}h</p>
+            </div>
+            <div class="card">
+              <p class="label">Regular Hours</p>
+              <p class="value">${detailSummary.regularHours.toFixed(2)}h</p>
+            </div>
+            <div class="card">
+              <p class="label">Overtime Hours</p>
+              <p class="value">${detailSummary.overtimeHours.toFixed(2)}h</p>
+            </div>
+            <div class="card">
+              <p class="label">Overtime Earnings</p>
+              <p class="value">${fmt(overtimeEarnings)}</p>
+            </div>
+            <div class="card">
+              <p class="label">Gross Earnings</p>
+              <p class="value">${fmt(gross)}</p>
+            </div>
+            <div class="card">
+              <p class="label">Tax Deduction (${(taxRate * 100).toFixed(0)}%)</p>
+              <p class="value">-${fmt(detailLecturer.taxDeduction ?? 0)}</p>
+            </div>
+            <div class="card">
+              <p class="label">Net Payable</p>
+              <p class="value">${fmt(detailLecturer.earnings)}</p>
+            </div>
+          </div>
+
+          <div class="section-title">Session Breakdown</div>
+          <table>
+            <thead>
+              <tr>
+                <th>Session</th>
+                <th class="right">Worked</th>
+                <th class="right">Regular</th>
+                <th class="right">Overtime</th>
+                <th class="right">OT Earnings</th>
+                <th class="right">Earnings</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${sessionRowsHtml}
+            </tbody>
+          </table>
+
+          <div class="footer">
+            <span>Face Updated Payroll</span>
+            <span>This slip is system-generated.</span>
+          </div>
+        </div>
+      </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+    printWindow.onafterprint = () => {
+      printWindow.close();
+    };
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -442,10 +931,15 @@ const StaffManagement = () => {
             </TableHeader>
             <TableBody>
               {filteredLecturers.map((lec) => {
-                const overtimeHours = lec.overtimeHours ?? 0;
+                const derived = attendanceHoursByLecturer.get(lec.lecturerId);
+                const workedHours = derived?.workedHours ?? lec.totalHours;
+                const overtimeHours =
+                  derived?.overtimeHours ?? (lec.overtimeHours ?? 0);
+                const overtimeRate = lec.overtimeRate ?? lec.hourlyRate;
                 const overtimeEarnings =
-                  lec.overtimeEarnings ??
-                  overtimeHours * (lec.overtimeRate ?? lec.hourlyRate);
+                  derived != null
+                    ? overtimeHours * overtimeRate
+                    : (lec.overtimeEarnings ?? overtimeHours * overtimeRate);
                 const gross = lec.grossEarnings ?? lec.earnings;
                 const tax = lec.taxDeduction ?? 0;
                 const net = lec.earnings;
@@ -504,7 +998,7 @@ const StaffManagement = () => {
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      {lec.totalHours.toFixed(1)}h
+                      {workedHours.toFixed(1)}h
                     </TableCell>
                     <TableCell className="text-right">
                       {overtimeHours.toFixed(1)}h
@@ -603,28 +1097,30 @@ const StaffManagement = () => {
                   Earnings Summary &mdash; {monthLabel}
                 </h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {detailSummary && (
+                    <>
                   <SummaryItem
                     label="Hourly Rate"
                     value={fmt(detailLecturer.hourlyRate)}
                   />
                   <SummaryItem
                     label="Worked Hours"
-                    value={`${detailLecturer.totalHours.toFixed(1)}h`}
+                    value={`${detailSummary.workedHours.toFixed(1)}h`}
                   />
                   <SummaryItem
                     label="Regular Hours"
-                    value={`${(detailLecturer.regularHours ?? Math.max(0, detailLecturer.totalHours - (detailLecturer.overtimeHours ?? 0))).toFixed(1)}h`}
+                    value={`${detailSummary.regularHours.toFixed(1)}h`}
                   />
                   <SummaryItem
                     label="Overtime Hours"
-                    value={`${(detailLecturer.overtimeHours ?? 0).toFixed(1)}h`}
+                    value={`${detailSummary.overtimeHours.toFixed(1)}h`}
                     className="text-amber-600"
                   />
                   <SummaryItem
                     label="Overtime Earnings"
                     value={fmt(
                       detailLecturer.overtimeEarnings ??
-                        (detailLecturer.overtimeHours ?? 0) *
+                        detailSummary.overtimeHours *
                           (detailLecturer.overtimeRate ??
                             detailLecturer.hourlyRate),
                     )}
@@ -642,6 +1138,8 @@ const StaffManagement = () => {
                     value={`-${fmt(detailLecturer.taxDeduction ?? 0)}`}
                     className="text-red-500"
                   />
+                    </>
+                  )}
                 </div>
 
                 <Separator className="my-4" />
@@ -664,7 +1162,7 @@ const StaffManagement = () => {
                   Session Breakdown
                 </h4>
                 {detailLecturer.sessions &&
-                detailLecturer.sessions.length > 0 ? (
+                detailSessionRows.length > 0 ? (
                   <div className="rounded-lg border border-border overflow-hidden">
                     <Table>
                       <TableHeader>
@@ -680,11 +1178,10 @@ const StaffManagement = () => {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {detailLecturer.sessions.map((s) => {
-                          const sRegularHours = s.regularHours ?? s.hours;
+                        {detailSessionRows.map((s) => {
+                          const sRegularHours = s.regularHours;
                           const sOvertimeHours =
-                            s.overtimeHours ??
-                            Math.max(0, s.hours - sRegularHours);
+                            s.overtimeHours;
                           const sOvertimeEarnings =
                             sOvertimeHours *
                             (detailLecturer.overtimeRate ??
@@ -724,6 +1221,10 @@ const StaffManagement = () => {
 
               {/* Footer actions */}
               <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={handlePrintPayrollSlip}>
+                  <Printer className="w-4 h-4 mr-1" />
+                  Print Slip
+                </Button>
                 <Button variant="outline" onClick={() => setDetailOpen(false)}>
                   <X className="w-4 h-4 mr-1" />
                   Close
