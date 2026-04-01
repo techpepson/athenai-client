@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
@@ -73,3 +74,7 @@ export default defineConfig([
   },
 ])
 ```
+=======
+# athenai-client
+The official repository of the attendance tracking app with in-built online meeting tool.
+>>>>>>> c6e7341eef1bacfed514f09ba6de1f43533d20c6
