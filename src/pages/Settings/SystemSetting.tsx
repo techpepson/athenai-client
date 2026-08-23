@@ -49,7 +49,7 @@ import {
   GraduationCap,
   Layers,
 } from "lucide-react";
-import ModulesManagement from "@/components/modules/ModulesManagement";
+
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { Role } from "@/enums/enums";
@@ -87,6 +87,21 @@ const SystemSetting = () => {
   const [newCourseTitle, setNewCourseTitle] = useState("");
   const [newCourseDescription, setNewCourseDescription] = useState("");
   const [newCourseCreditHours, setNewCourseCreditHours] = useState("3");
+  const [newCourseLevel, setNewCourseLevel] = useState("100");
+  const [newCourseSemester, setNewCourseSemester] = useState("1");
+  const [selectedLecturers, setSelectedLecturers] = useState<string[]>([]);
+  const [slots, setSlots] = useState<{
+    day: "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY";
+    startTime: string;
+    endTime: string;
+    venue?: string;
+    lecturerId?: string;
+  }[]>([]);
+  const [newSlotDay, setNewSlotDay] = useState<"MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY">("MONDAY");
+  const [newSlotStart, setNewSlotStart] = useState("08:00");
+  const [newSlotEnd, setNewSlotEnd] = useState("10:00");
+  const [newSlotVenue, setNewSlotVenue] = useState("");
+  const [newSlotLecturer, setNewSlotLecturer] = useState("");
   const [addingCourse, setAddingCourse] = useState(false);
 
   // Delete course dialog
@@ -222,9 +237,15 @@ const SystemSetting = () => {
   // Helper to get lecturers for a course
   const getLecturersForCourse = (course: CourseWithDetails) => {
     if (course.lecturers && course.lecturers.length > 0) {
-      return staffList.filter((s) =>
-        course.lecturers?.some((l) => l.userId === s.id),
-      );
+      return course.lecturers.map(cl => {
+        const u = (cl as any).lecturer?.user;
+        if (u) {
+          return { id: u.id, name: u.name, email: u.email };
+        }
+        const s = staffList.find(s => s.id === cl.userId || s.id === cl.lecturerId);
+        if (s) return s;
+        return null;
+      }).filter(Boolean) as any[];
     }
     return [];
   };
@@ -236,6 +257,15 @@ const SystemSetting = () => {
     setNewCourseTitle("");
     setNewCourseDescription("");
     setNewCourseCreditHours("3");
+    setNewCourseLevel("100");
+    setNewCourseSemester("1");
+    setSelectedLecturers([]);
+    setSlots([]);
+    setNewSlotDay("MONDAY");
+    setNewSlotStart("08:00");
+    setNewSlotEnd("10:00");
+    setNewSlotVenue("");
+    setNewSlotLecturer("");
     setCourseModalOpen(true);
   };
 
@@ -246,6 +276,23 @@ const SystemSetting = () => {
     setNewCourseTitle(course.title);
     setNewCourseDescription(course.description || "");
     setNewCourseCreditHours(String(course.creditHours || 3));
+    setNewCourseLevel(String((course as any).level || 100));
+    setNewCourseSemester(String((course as any).semester || 1));
+    const lecturerIds = course.lecturers?.map((l) => l.lecturer?.userId || l.userId).filter(Boolean) as string[] || [];
+    setSelectedLecturers(lecturerIds);
+    const loadedSlots = (course as any).timetables?.[0]?.slots?.map((s: any) => ({
+      day: s.day,
+      startTime: s.startTime,
+      endTime: s.endTime,
+      venue: s.venue || "",
+      lecturerId: s.lecturerId || "",
+    })) || [];
+    setSlots(loadedSlots);
+    setNewSlotDay("MONDAY");
+    setNewSlotStart("08:00");
+    setNewSlotEnd("10:00");
+    setNewSlotVenue("");
+    setNewSlotLecturer("");
     setCourseModalOpen(true);
   };
 
@@ -258,14 +305,26 @@ const SystemSetting = () => {
 
     setAddingCourse(true);
     try {
+      const payload = {
+        courseCode: newCourseCode.trim().toUpperCase(),
+        title: newCourseTitle.trim(),
+        description: newCourseDescription.trim() || newCourseTitle.trim(),
+        creditHours: parseInt(newCourseCreditHours) || 3,
+        level: parseInt(newCourseLevel) || 100,
+        semester: parseInt(newCourseSemester) || 1,
+        lecturerIds: selectedLecturers,
+        slots: slots.map((s) => ({
+          day: s.day,
+          startTime: s.startTime,
+          endTime: s.endTime,
+          venue: s.venue || undefined,
+          lecturerId: s.lecturerId || undefined,
+        })),
+      };
+
       if (editingCourse) {
         // Update existing course
-        const response = await coursesService.updateCourse(editingCourse.id, {
-          courseCode: newCourseCode.trim().toUpperCase(),
-          title: newCourseTitle.trim(),
-          description: newCourseDescription.trim() || undefined,
-          creditHours: parseInt(newCourseCreditHours) || 3,
-        });
+        const response = await coursesService.updateCourse(editingCourse.id, payload);
 
         if (response.success) {
           toast.success(`Course "${newCourseTitle}" updated successfully`);
@@ -276,12 +335,7 @@ const SystemSetting = () => {
         }
       } else {
         // Add new course
-        const response = await coursesService.addCourse({
-          courseCode: newCourseCode.trim().toUpperCase(),
-          title: newCourseTitle.trim(),
-          description: newCourseDescription.trim() || newCourseTitle.trim(),
-          creditHours: parseInt(newCourseCreditHours) || 3,
-        });
+        const response = await coursesService.addCourse(payload);
 
         if (response.success) {
           toast.success(`Course "${newCourseTitle}" added successfully`);
@@ -331,7 +385,7 @@ const SystemSetting = () => {
     <div className="space-y-6 animate-fade-in">
       {/* Course Add/Edit Modal */}
       <Dialog open={courseModalOpen} onOpenChange={setCourseModalOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[650px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingCourse ? "Edit Course" : "Add New Course"}
@@ -381,10 +435,220 @@ const SystemSetting = () => {
                 rows={3}
               />
             </div>
+
+            {/* Level and Semester */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="courseLevel">Level *</Label>
+                <Select value={newCourseLevel} onValueChange={setNewCourseLevel}>
+                  <SelectTrigger id="courseLevel">
+                    <SelectValue placeholder="Select Level" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="100">Level 100</SelectItem>
+                    <SelectItem value="200">Level 200</SelectItem>
+                    <SelectItem value="300">Level 300</SelectItem>
+                    <SelectItem value="400">Level 400</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="courseSemester">Semester *</Label>
+                <Select value={newCourseSemester} onValueChange={setNewCourseSemester}>
+                  <SelectTrigger id="courseSemester">
+                    <SelectValue placeholder="Select Semester" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">Semester 1</SelectItem>
+                    <SelectItem value="2">Semester 2</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Lecturers Selection */}
+            <div className="space-y-2">
+              <Label>Assign Lecturers</Label>
+              <div className="border border-border rounded-md p-3 max-h-[120px] overflow-y-auto space-y-2 bg-secondary/20">
+                {staffList.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No lecturers available</p>
+                ) : (
+                  staffList.map((staff) => (
+                    <div key={staff.id} className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id={`lecturer-${staff.id}`}
+                        checked={selectedLecturers.includes(staff.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedLecturers([...selectedLecturers, staff.id]);
+                          } else {
+                            setSelectedLecturers(selectedLecturers.filter((id) => id !== staff.id));
+                          }
+                        }}
+                        className="rounded border-gray-300 text-primary focus:ring-primary h-4 w-4 animate-scale-in"
+                      />
+                      <Label htmlFor={`lecturer-${staff.id}`} className="text-sm font-normal cursor-pointer select-none">
+                        {staff.name} ({staff.email})
+                      </Label>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Timetable Slots Configuration */}
+            <div className="space-y-4 border-t border-border pt-4">
+              <div className="flex items-center justify-between">
+                <Label className="text-base font-semibold text-primary">Timetable Slots</Label>
+              </div>
+              
+              {/* Existing Slots List */}
+              {slots.length > 0 ? (
+                <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
+                  {slots.map((slot, idx) => {
+                    const slotLecturer = staffList.find(s => s.id === slot.lecturerId);
+                    return (
+                      <div key={idx} className="flex items-center justify-between p-2 bg-secondary/50 rounded-lg text-sm border border-border animate-fade-in">
+                        <div>
+                          <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 mr-2">
+                            {slot.day}
+                          </Badge>
+                          <span className="font-medium">{slot.startTime} - {slot.endTime}</span>
+                          {slot.venue && (
+                            <span className="ml-2 text-muted-foreground text-xs bg-muted px-1.5 py-0.5 rounded">
+                              Venue: {slot.venue}
+                            </span>
+                          )}
+                          {slotLecturer && (
+                            <span className="ml-2 text-muted-foreground text-xs italic">
+                              ({slotLecturer.name})
+                            </span>
+                          )}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          type="button"
+                          className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                          onClick={() => setSlots(slots.filter((_, i) => i !== idx))}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground italic">No timetable slots added yet.</p>
+              )}
+
+              {/* Add New Slot Form */}
+              <div className="p-3 border border-border rounded-lg bg-secondary/10 space-y-3">
+                <p className="text-xs font-semibold text-muted-foreground">Add Timetable Slot</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Day</Label>
+                    <Select
+                      value={newSlotDay}
+                      onValueChange={(val: any) => setNewSlotDay(val)}
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="MONDAY">Monday</SelectItem>
+                        <SelectItem value="TUESDAY">Tuesday</SelectItem>
+                        <SelectItem value="WEDNESDAY">Wednesday</SelectItem>
+                        <SelectItem value="THURSDAY">Thursday</SelectItem>
+                        <SelectItem value="FRIDAY">Friday</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Venue</Label>
+                    <Input
+                      placeholder="e.g. Room 10"
+                      className="h-8 text-xs"
+                      value={newSlotVenue}
+                      onChange={(e) => setNewSlotVenue(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Start Time</Label>
+                    <Input
+                      type="time"
+                      className="h-8 text-xs"
+                      value={newSlotStart}
+                      onChange={(e) => setNewSlotStart(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">End Time</Label>
+                    <Input
+                      type="time"
+                      className="h-8 text-xs"
+                      value={newSlotEnd}
+                      onChange={(e) => setNewSlotEnd(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs">Slot Lecturer (Optional)</Label>
+                  <Select
+                    value={newSlotLecturer || "NONE"}
+                    onValueChange={(val) => setNewSlotLecturer(val)}
+                  >
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="NONE">Default / None</SelectItem>
+                      {staffList.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-xs h-8 gap-1"
+                  onClick={() => {
+                    if (!newSlotStart || !newSlotEnd) {
+                      toast.error("Please select start and end times");
+                      return;
+                    }
+                    setSlots([
+                      ...slots,
+                      {
+                        day: newSlotDay,
+                        startTime: newSlotStart,
+                        endTime: newSlotEnd,
+                        venue: newSlotVenue.trim() || undefined,
+                        lecturerId: newSlotLecturer !== "NONE" && newSlotLecturer ? newSlotLecturer : undefined
+                      }
+                    ]);
+                    setNewSlotVenue("");
+                    setNewSlotLecturer("");
+                  }}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Add Slot to Course
+                </Button>
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button
               variant="outline"
+              type="button"
               onClick={() => {
                 setCourseModalOpen(false);
                 setEditingCourse(null);
@@ -392,7 +656,7 @@ const SystemSetting = () => {
             >
               Cancel
             </Button>
-            <Button onClick={handleSaveCourse} disabled={addingCourse}>
+            <Button onClick={handleSaveCourse} disabled={addingCourse} type="button">
               {addingCourse ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -465,10 +729,7 @@ const SystemSetting = () => {
             <BookOpen className="w-4 h-4" />
             Courses
           </TabsTrigger>
-          <TabsTrigger value="modules" className="gap-2">
-            <Layers className="w-4 h-4" />
-            Modules
-          </TabsTrigger>
+
           {/* <TabsTrigger value="organization" className="gap-2">
             <Building className="w-4 h-4" />
             Organization
@@ -734,10 +995,7 @@ const SystemSetting = () => {
           </div>
         </TabsContent>
 
-        {/* Modules Management */}
-        <TabsContent value="modules">
-          <ModulesManagement />
-        </TabsContent>
+
 
         {/* Organization Settings */}
         <TabsContent value="organization">

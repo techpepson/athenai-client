@@ -38,6 +38,8 @@ export interface CreateSessionPayload {
   longitude?: number;
   geofenceRadius?: number;
   week?: number;
+  isOnline?: boolean;
+  meetingLink?: string;
 }
 
 export interface UpdateSessionPayload {
@@ -124,6 +126,8 @@ export interface Session {
   userId: string;
   createdAt: Date;
   updatedAt: Date;
+  isOnline?: boolean;
+  meetingLink?: string;
   createdBy?: {
     id: string;
     name: string;
@@ -397,3 +401,51 @@ export const formatSessionMode = (mode: SessionMode): string => {
   };
   return modeMap[mode] || mode;
 };
+
+// ============================================
+// WEBRTC SIGNALING METHODS
+// ============================================
+
+export const joinMeeting = async (
+  sessionId: string,
+  peerId: string,
+  name: string,
+  role: string,
+  token: string
+): Promise<ApiResponse<{ success: boolean; peers: any[] }>> => {
+  return api.post("/sessions/join-meeting", { sessionId, peerId, name, role }, token);
+};
+
+export const sendMeetingSignal = async (
+  sessionId: string,
+  senderId: string,
+  receiverId: string,
+  signal: any,
+  token: string
+): Promise<ApiResponse<{ success: boolean }>> => {
+  return api.post("/sessions/signal-meeting", { sessionId, senderId, receiverId, signal }, token);
+};
+
+export const getMeetingSignals = async (
+  sessionId: string,
+  peerId: string,
+  token: string
+): Promise<ApiResponse<{ success: boolean; signals: any[] }>> => {
+  return api.get("/sessions/signals-meeting", token, { params: { sessionId, peerId } });
+};
+
+export const leaveMeeting = async (
+  sessionId: string,
+  peerId: string,
+  token: string
+): Promise<ApiResponse<{ success: boolean }>> => {
+  return api.post("/sessions/leave-meeting", { sessionId, peerId }, token);
+};
+
+export const getMeetingPeers = async (
+  sessionId: string,
+  token: string
+): Promise<ApiResponse<{ success: boolean; peers: any[] }>> => {
+  return api.get("/sessions/peers-meeting", token, { params: { sessionId } });
+};
+

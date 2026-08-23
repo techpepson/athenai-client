@@ -42,6 +42,7 @@ const formSchema = z
     email: z.string().email("Invalid email address"),
     fullName: z.string().min(2, "Full name is required"),
     phone: z.string().min(10, "Phone number must be at least 10 digits"),
+    studentId: z.string().min(3, "Student ID must be at least 3 characters"),
     level: z.number().min(100, "Please select your level"),
     password: z.string().min(6, "Password must be at least 6 characters"),
     confirmPassword: z.string(),
@@ -69,6 +70,7 @@ export const StudentForm = ({ onSuccess }: StudentFormProps) => {
       email: "",
       fullName: "",
       phone: "",
+      studentId: "",
       level: 100,
       password: "",
       confirmPassword: "",
@@ -88,7 +90,8 @@ export const StudentForm = ({ onSuccess }: StudentFormProps) => {
         phone: data.phone,
         password: data.password,
         role: Role.STUDENT,
-        // Note: level would be sent to backend in real implementation
+        studentId: data.studentId,
+        level: data.level,
       });
 
       if (response.success) {
@@ -192,6 +195,20 @@ export const StudentForm = ({ onSuccess }: StudentFormProps) => {
                         placeholder="Enter your student email (e.g., name@st.comas.edu.gh)"
                         {...field}
                       />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="studentId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Student ID</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter your student ID" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

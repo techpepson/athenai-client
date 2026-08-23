@@ -444,7 +444,7 @@ const StudentDashboard = () => {
           {isCourseRep && (
             <Badge variant="secondary" className="gap-1 w-fit">
               <GraduationCap className="w-3 h-3" />
-              Level Representative
+              Level Assistant
             </Badge>
           )}
         </div>

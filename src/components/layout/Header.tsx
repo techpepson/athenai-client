@@ -47,10 +47,12 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
   };
 
   const formattedRole = user?.role
-    ? user.role
-        .split("_")
-        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(" ")
+    ? user.role === Role.REP
+      ? "Assistant"
+      : user.role
+          .split("_")
+          .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(" ")
     : "Guest";
 
   const firstName = user?.name?.split(" ")[0] || "Guest";

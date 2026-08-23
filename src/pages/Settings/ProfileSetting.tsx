@@ -30,9 +30,8 @@ import { FacialRegistration } from "@/components/auth/FacialRegistration";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { usersServices } from "@/services/users.services";
 import { coursesService, Course } from "@/services/courses.services";
-import { modulesService, Module } from "@/services/modules.service";
+import { modulesService } from "@/services/modules.service";
 import { getStudentLevel } from "@/data/mockAttendanceData";
-import { useAttendance } from "@/contexts/AttendanceContext";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -44,19 +43,28 @@ import {
 } from "@/components/ui/select";
 
 const ProfileSetting = () => {
-  // Use AttendanceContext for module enrollment
-  const {
-    enrolledModules: contextEnrolledModules,
-    availableModules: contextAvailableModules,
-    enrollModule: contextEnrollModule,
-    unenrollModule: contextUnenrollModule,
-    autoEnrollByLevel,
-  } = useAttendance();
+  const { user, updateUser } = useAuth();
+
+  // State for editable fields
+  const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
+  const [facialImages, setFacialImages] = useState<string[] | null>(null);
+  const [facialData, setFacialData] = useState<string | null>(null);
+  const [studentIdCard, setStudentIdCard] = useState<string>("");
+  const [studentLevel, setStudentLevel] = useState<number>(
+    user?.student?.level || 100,
+  );
+  const [savingLevel, setSavingLevel] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [showSaveAlert, setShowSaveAlert] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  // Enrolled courses state (fetched from backend)
+  const [enrolledCourses, setEnrolledCourses] = useState<Course[]>([]);
+  const [availableCourses, setAvailableCourses] = useState<Course[]>([]);
+  const [currentSemester, setCurrentSemester] = useState<number>(1);
+  const [loadingCourses, setLoadingCourses] = useState(false);
 
   // Courses where user is assigned as a rep (for Level Rep display only)
-  // Note: userCourses, allCourses removed - no longer displaying Courses Registered/Taught
-
-  // Courses where user is assigned as a rep
   const [repAssignedCourses, setRepAssignedCourses] = useState<Course[]>([]);
   const [repCoursesLoading, setRepCoursesLoading] = useState(false);
 
@@ -71,11 +79,6 @@ const ProfileSetting = () => {
     }[]
   >([]);
   const [loadingLecturerTopics, setLoadingLecturerTopics] = useState(false);
-
-  // Module enrollment local state (for UI before using context)
-  const [availableModules, setAvailableModules] = useState<Module[]>([]);
-
-  const { user, updateUser } = useAuth();
 
   const isStudent = user?.role === Role.STUDENT;
   const isCourseRep = user?.role === Role.REP;
@@ -123,32 +126,43 @@ const ProfileSetting = () => {
     fetchRepCourses();
   }, [isCourseRep, user?.id, user?.student?.id]);
 
-  // Load modules by student level (API-based)
+  // Fetch available courses (filtered by level/semester on backend) and enrolled courses
   useEffect(() => {
     if (!isStudent && !isCourseRep) return;
 
-    // Get student level from user data or localStorage
-    const level = user?.student?.level || getStudentLevel() || 100;
-
-    // Load modules for the student's level
-    const fetchModules = async () => {
-      const res = await modulesService.getModulesByLevel(level);
-      if (res.success && res.data?.data) {
-        setAvailableModules(res.data.data);
-        // Auto-enroll all modules if none enrolled yet
-        if (contextEnrolledModules.length === 0 && res.data.data.length > 0) {
-          autoEnrollByLevel();
+    const fetchStudentCourseInfo = async () => {
+      setLoadingCourses(true);
+      try {
+        // Fetch global semester
+        const semRes = await coursesService.getSemester();
+        if (semRes.success && semRes.data) {
+          setCurrentSemester(semRes.data.semester);
         }
+
+        // Fetch enrolled courses
+        const enrolledRes = await coursesService.getStudentCourses();
+        if (enrolledRes.success && enrolledRes.data?.data) {
+          setEnrolledCourses(enrolledRes.data.data);
+        } else {
+          setEnrolledCourses([]);
+        }
+
+        // Fetch all available courses for this level and semester
+        const availableRes = await coursesService.getAllCourses();
+        if (availableRes.success && availableRes.data?.data) {
+          setAvailableCourses(availableRes.data.data);
+        } else {
+          setAvailableCourses([]);
+        }
+      } catch (error) {
+        console.error("Failed to load student courses:", error);
+      } finally {
+        setLoadingCourses(false);
       }
     };
-    fetchModules();
-  }, [
-    isStudent,
-    isCourseRep,
-    user?.student?.level,
-    contextEnrolledModules.length,
-    autoEnrollByLevel,
-  ]);
+
+    fetchStudentCourseInfo();
+  }, [isStudent, isCourseRep, studentLevel]);
 
   useEffect(() => {
     const fetchLecturerAssignedTopics = async () => {
@@ -211,19 +225,6 @@ const ProfileSetting = () => {
   // Available student levels
   const STUDENT_LEVELS = [100, 200, 300, 400, 500, 600];
 
-  // State for editable fields
-  const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
-  const [facialImages, setFacialImages] = useState<string[] | null>(null);
-  const [facialData, setFacialData] = useState<string | null>(null);
-  const [studentIdCard, setStudentIdCard] = useState<string>("");
-  const [studentLevel, setStudentLevel] = useState<number>(
-    user?.student?.level || 100,
-  );
-  const [savingLevel, setSavingLevel] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [showSaveAlert, setShowSaveAlert] = useState(false);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-
   // Track changes
   useEffect(() => {
     if (!user) return;
@@ -275,6 +276,44 @@ const ProfileSetting = () => {
   }, [user]);
 
   if (!user) return null;
+
+  const handleCourseToggle = async (course: Course) => {
+    const isEnrolled = enrolledCourses.some((c) => c.id === course.id);
+    const token = await usersServices.utilService.getTokenFromLocalStorage();
+
+    if (!token) {
+      toast.error("You must be logged in to modify course enrollment");
+      return;
+    }
+
+    if (isEnrolled) {
+      // Unenroll / remove course enrollment
+      const studentId = user?.student?.id;
+      if (!studentId) {
+        toast.error("Student ID not found");
+        return;
+      }
+      const res = await coursesService.removeStudentFromCourse(course.id, studentId);
+      if (res.success || !res.error) {
+        setEnrolledCourses((prev) => prev.filter((c) => c.id !== course.id));
+        toast.success(`Unenrolled from ${course.code} successfully`);
+      } else {
+        toast.error(res.error || `Failed to unenroll from ${course.code}`);
+      }
+    } else {
+      // Enroll / add course enrollment
+      const res = await usersServices.updateRecords(
+        { courses: [course.code] },
+        token
+      );
+      if (res.success) {
+        setEnrolledCourses((prev) => [...prev, course]);
+        toast.success(`Enrolled in ${course.code} successfully`);
+      } else {
+        toast.error(res.error || `Failed to enroll in ${course.code}`);
+      }
+    }
+  };
 
   const handleSaveProfile = () => {
     setShowSaveAlert(true);
@@ -689,7 +728,7 @@ const ProfileSetting = () => {
               <div className="flex items-center gap-2 mb-2">
                 <Shield className="w-5 h-5 text-primary" />
                 <h3 className="font-semibold text-lg">
-                  Assigned Courses (Level Rep)
+                  Assigned Courses (Level Assistant)
                 </h3>
                 {repAssignedCourses.length > 0 && (
                   <Badge variant="secondary" className="ml-auto">
@@ -699,18 +738,18 @@ const ProfileSetting = () => {
                 )}
               </div>
               <p className="text-sm text-muted-foreground">
-                You are a representative for the following courses. This is
+                You are an assistant for the following courses. This is
                 assigned by administrators.
               </p>
               <div className="space-y-2">
                 {repCoursesLoading ? (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground p-4 bg-muted/50 rounded-lg">
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Loading your rep assignments...
+                    Loading your assistant assignments...
                   </div>
                 ) : repAssignedCourses.length === 0 ? (
                   <p className="text-sm italic text-muted-foreground p-3 bg-muted rounded-lg">
-                    You are not assigned as a representative for any courses
+                    You are not assigned as an assistant for any courses
                     yet.
                   </p>
                 ) : (
@@ -817,77 +856,95 @@ const ProfileSetting = () => {
             </div>
           )}
 
-          {/* Enroll Modules Section - Students and Reps only */}
+          {/* Enroll Courses Section - Students and Reps only */}
           {(isStudent || isCourseRep) && (
             <div className="bg-card rounded-xl border border-border p-6 space-y-4">
               <div className="flex items-center gap-2 mb-2">
                 <BookOpen className="w-5 h-5 text-primary" />
                 <h3 className="font-semibold text-lg">
-                  Enroll Modules (Level{" "}
-                  {user?.student?.level || getStudentLevel() || 100})
+                  Semester Course Enrollment
                 </h3>
-                {contextEnrolledModules.length > 0 && (
+                {enrolledCourses.length > 0 && (
                   <Badge variant="secondary" className="ml-auto">
-                    {contextEnrolledModules.length} module
-                    {contextEnrolledModules.length !== 1 ? "s" : ""}
+                    {enrolledCourses.length} course
+                    {enrolledCourses.length !== 1 ? "s" : ""}
                   </Badge>
                 )}
               </div>
 
+              <div className="p-3 bg-muted/40 rounded-lg flex items-center justify-between text-sm text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-foreground">Current Status:</span>
+                  <span>Level {studentLevel}</span>
+                  <span>•</span>
+                  <span>Semester {currentSemester}</span>
+                </div>
+                <Badge variant="outline" className="bg-background text-primary border-primary/20">
+                  UG EduTrack
+                </Badge>
+              </div>
+
               <p className="text-sm text-muted-foreground">
-                All modules for your level are pre-selected. Uncheck to remove
-                from enrollment.
+                Select the courses you will be offering for the semester. Changes are updated in real-time.
               </p>
 
-              {availableModules.length === 0 ? (
+              {loadingCourses ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground p-4 bg-muted/50 rounded-lg">
+                  <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                  Loading available courses...
+                </div>
+              ) : availableCourses.length === 0 ? (
                 <EmptyState
-                  title="No Modules Available"
-                  message="No modules have been added for your level yet."
+                  title="No Courses Available"
+                  message={`No courses have been added for Level ${studentLevel}, Semester ${currentSemester} yet.`}
                 />
               ) : (
-                <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                  {availableModules.map((mod) => {
-                    const isEnrolled = contextEnrolledModules.includes(
-                      mod.code,
-                    );
+                <div className="space-y-2.5 max-h-[350px] overflow-y-auto pr-1">
+                  {availableCourses.map((course) => {
+                    const isEnrolled = enrolledCourses.some((c) => c.id === course.id);
                     return (
                       <div
-                        key={mod.code}
-                        className="flex items-center space-x-3 p-2 rounded-lg hover:bg-muted/50 cursor-pointer"
-                        onClick={() => {
-                          if (isEnrolled) {
-                            contextUnenrollModule(mod.code);
-                          } else {
-                            contextEnrollModule(mod.code);
-                          }
-                        }}
+                        key={course.id}
+                        className={`flex items-center justify-between p-3 rounded-xl border transition-all duration-200 cursor-pointer ${
+                          isEnrolled
+                            ? "bg-primary/5 border-primary/20 shadow-sm"
+                            : "bg-background border-border hover:bg-muted/50"
+                        }`}
+                        onClick={() => handleCourseToggle(course)}
                       >
-                        <Checkbox
-                          id={`module-${mod.code}`}
-                          checked={isEnrolled}
-                          onCheckedChange={(checked) => {
-                            if (checked) {
-                              contextEnrollModule(mod.code);
-                            } else {
-                              contextUnenrollModule(mod.code);
-                            }
-                          }}
-                        />
-                        <label
-                          htmlFor={`module-${mod.code}`}
-                          className="flex-1 text-sm cursor-pointer"
-                        >
-                          <span className="font-medium">{mod.code}</span>
-                          <span className="text-muted-foreground">
-                            {" "}
-                            - {mod.name}
-                          </span>
-                        </label>
-                        {isEnrolled && (
-                          <Badge variant="secondary" className="text-xs">
-                            Enrolled
-                          </Badge>
-                        )}
+                        <div className="flex items-center space-x-3 flex-1">
+                          <Checkbox
+                            id={`course-${course.id}`}
+                            checked={isEnrolled}
+                            onCheckedChange={() => handleCourseToggle(course)}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                          <div className="flex-1">
+                            <label
+                              htmlFor={`course-${course.id}`}
+                              className="text-sm font-semibold text-foreground cursor-pointer block"
+                            >
+                              {course.code} - {course.title}
+                            </label>
+                            {course.description && (
+                              <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
+                                {course.description}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {course.creditHours !== undefined && (
+                            <Badge variant="outline" className="text-xs text-muted-foreground">
+                              {course.creditHours} Credits
+                            </Badge>
+                          )}
+                          {isEnrolled && (
+                            <Badge variant="default" className="text-xs font-semibold">
+                              Enrolled
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                     );
                   })}

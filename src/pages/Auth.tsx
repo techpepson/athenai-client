@@ -17,7 +17,6 @@ import { StudentForm } from "@/components/auth/StudentForm";
 import { StaffForm } from "@/components/auth/StaffForm";
 import { KioskScanner } from "@/components/ui/kiosk-scanner";
 import { authServices } from "@/services/auth.services";
-import comasLogo from "../../public/logo.jpg";
 
 const Auth = () => {
   const [email, setEmail] = useState("");
@@ -89,14 +88,16 @@ const Auth = () => {
               {/* Login Header */}
               <div className="text-center space-y-2">
                 <div className="flex justify-center mb-6">
-                  <img
-                    src="/comasIcon.png"
-                    alt="FaceTrack"
-                    className="w-16 h-16 object-contain"
-                  />
+                  <div className="w-20 h-20 rounded-2xl bg-white dark:bg-slate-950 flex items-center justify-center border border-slate-100 dark:border-slate-800 shadow-[0_8px_30px_rgb(0,0,0,0.06)] hover:scale-105 transition-all duration-300 p-3.5">
+                    <img
+                      src="/ug_logo.png"
+                      alt="EduTrack"
+                      className="w-full h-full object-contain rounded-xl filter drop-shadow-[0_2px_8px_rgba(0,0,0,0.05)]"
+                    />
+                  </div>
                 </div>
                 <h1 className="text-3xl font-bold tracking-tight text-foreground">
-                  FaceTrack
+                  EduTrack
                 </h1>
                 <p className="text-muted-foreground">Sign into your account</p>
               </div>
@@ -190,11 +191,13 @@ const Auth = () => {
             <div className="space-y-8 animate-fade-in">
               <div className="text-center space-y-2">
                 <div className="flex justify-center mb-6">
-                  <img
-                    src="/comasIcon.png"
-                    alt="FaceTrack"
-                    className="w-16 h-16 object-contain"
-                  />
+                  <div className="w-20 h-20 rounded-2xl bg-white dark:bg-slate-950 flex items-center justify-center border border-slate-100 dark:border-slate-800 shadow-[0_8px_30px_rgb(0,0,0,0.06)] hover:scale-105 transition-all duration-300 p-3.5">
+                    <img
+                      src="/ug_logo.png"
+                      alt="EduTrack"
+                      className="w-full h-full object-contain rounded-xl filter drop-shadow-[0_2px_8px_rgba(0,0,0,0.05)]"
+                    />
+                  </div>
                 </div>
                 <h1 className="text-3xl font-bold tracking-tight text-foreground">
                   {resetStep === 1
@@ -606,28 +609,55 @@ const Auth = () => {
         >
           {view === "login" || view === "forgot-password" ? (
             /* Login Visual */
-            <>
-              <img
-                src={comasLogo}
-                alt="Login Visual"
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-black/20" />
-            </>
+            <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 p-8">
+              {/* Decorative background glow circles */}
+              <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl" />
+              <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl" />
+              
+              <div className="relative flex flex-col items-center text-center max-w-md space-y-6 z-10">
+                {/* Logo Container with gold/blue glow and glassmorphism */}
+                <div className="w-48 h-48 rounded-full bg-white/10 flex items-center justify-center backdrop-blur-xl border border-white/20 shadow-[0_0_50px_rgba(59,130,246,0.15)] hover:scale-105 transition-transform duration-500 p-6">
+                  <div className="w-full h-full rounded-full bg-white flex items-center justify-center p-5 shadow-inner">
+                    <img
+                      src="/ug_logo.png"
+                      alt="University of Ghana Logo"
+                      className="w-full h-full object-contain rounded-full filter drop-shadow-[0_4px_12px_rgba(0,0,0,0.15)]"
+                    />
+                  </div>
+                </div>
+                
+                <div className="space-y-2">
+                  <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight drop-shadow-md">
+                    University of Ghana
+                  </h2>
+                  <p className="text-indigo-200/80 text-sm sm:text-base font-medium tracking-wide">
+                    Integri Procedamus
+                  </p>
+                </div>
+                
+                <div className="w-16 h-1 bg-gradient-to-r from-transparent via-primary to-transparent rounded-full opacity-60" />
+                
+                <p className="text-slate-400 text-xs sm:text-sm font-normal max-w-xs leading-relaxed">
+                  Welcome to EduTrack. Access your courses, mark attendance via face check-in, and manage academic activities.
+                </p>
+              </div>
+            </div>
           ) : (
             /* Kiosk Visual for Registration */
             <div className="w-full h-full flex items-center justify-center">
               <KioskScanner isScanning={true} status="scanning" className="p-0">
                 <div className="flex flex-col items-center justify-center text-center p-6">
-                  <div className="w-24 h-24 mb-6 rounded-3xl bg-primary/20 flex items-center justify-center backdrop-blur-md border border-primary/30 shadow-glow">
-                    <img
-                      src="/comasIcon.png"
-                      alt="FaceTrack"
-                      className="w-14 h-14 object-contain contrast-125"
-                    />
+                  <div className="w-24 h-24 mb-6 rounded-3xl bg-white/10 flex items-center justify-center backdrop-blur-md border border-white/20 shadow-glow p-3">
+                    <div className="w-full h-full rounded-2xl bg-white flex items-center justify-center p-2.5">
+                      <img
+                        src="/ug_logo.png"
+                        alt="EduTrack"
+                        className="w-full h-full object-contain rounded-xl"
+                      />
+                    </div>
                   </div>
                   <h1 className="text-5xl font-bold tracking-tight text-white drop-shadow-lg">
-                    FaceTrack
+                    EduTrack
                   </h1>
                   <p className="text-base text-slate-300 mt-3 font-medium tracking-wide">
                     Identity Verification System

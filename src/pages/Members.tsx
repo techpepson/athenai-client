@@ -507,14 +507,14 @@ const Members = () => {
       } else {
         toast({
           title: "Error",
-          description: response.error || "Could not remove rep privilege.",
+          description: response.error || "Could not remove assistant privilege.",
           variant: "destructive",
         });
       }
     } catch {
       toast({
         title: "Error",
-        description: "Could not remove rep privilege.",
+        description: "Could not remove assistant privilege.",
         variant: "destructive",
       });
     } finally {
@@ -820,9 +820,9 @@ const Members = () => {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove Level Rep</AlertDialogTitle>
+            <AlertDialogTitle>Remove Level Assistant</AlertDialogTitle>
             <AlertDialogDescription>
-              {selectedMember?.name} is a Level Representative. How would you
+              {selectedMember?.name} is a Level Assistant. How would you
               like to proceed?
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -833,7 +833,7 @@ const Members = () => {
               onClick={handleRemoveCourseRepPrivilege}
             >
               <div className="text-left">
-                <p className="font-medium">Remove Level Rep Privilege</p>
+                <p className="font-medium">Remove Level Assistant Privilege</p>
                 <p className="text-sm text-muted-foreground mt-1">
                   Demote to regular student. Keep all attendance and course
                   data.
@@ -866,7 +866,7 @@ const Members = () => {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove Level Rep Privilege</AlertDialogTitle>
+            <AlertDialogTitle>Remove Level Assistant Privilege</AlertDialogTitle>
             <AlertDialogDescription className="space-y-2">
               <span className="block">
                 <strong>{selectedMember?.name}</strong> will return back as a
@@ -905,7 +905,7 @@ const Members = () => {
               <span className="block text-destructive font-medium">
                 ⚠️ All data about this student will be permanently lost,
                 including attendance records, course registrations, and course
-                rep assignments.
+                assistant assignments.
               </span>
               <span className="block text-sm text-muted-foreground mt-2">
                 Consider using "Remove Privilege" action instead to preserve

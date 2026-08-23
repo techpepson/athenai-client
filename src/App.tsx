@@ -16,13 +16,12 @@ import Members from "./pages/Members";
 import Sessions from "./pages/Sessions";
 import Kiosk from "./pages/Kiosk";
 import LecturerKiosk from "./pages/LecturerKiosk";
+import MeetingRoom from "./pages/MeetingRoom";
 // Analytics page removed — dashboard shows analytics data
 import Notifications from "./pages/Notifications";
 import Settings from "./pages/Settings";
-import StaffManagement from "./pages/StaffManagement";
 import AdminManagement from "./pages/AdminManagement";
 import CourseRepManagement from "./pages/CourseRepManagement";
-import Payroll from "./pages/Payroll";
 import NotFound from "./pages/NotFound";
 import { Analytics } from "@vercel/analytics/react";
 
@@ -59,8 +58,6 @@ const App = () => (
                       {/* Analytics page removed — dashboard shows analytics data */}
                       <Route path="notifications" element={<Notifications />} />
                       <Route path="settings" element={<Settings />} />
-
-                      {/* Admin Specific */}
                       <Route
                         path="admins"
                         element={
@@ -72,20 +69,6 @@ const App = () => (
                             ]}
                           >
                             <AdminManagement />
-                          </ProtectedRoute>
-                        }
-                      />
-                      <Route
-                        path="staff"
-                        element={
-                          <ProtectedRoute
-                            allowedRoles={[
-                              Role.OWNER,
-                              Role.SYSTEM_ADMIN,
-                              Role.ADMIN,
-                            ]}
-                          >
-                            <StaffManagement />
                           </ProtectedRoute>
                         }
                       />
@@ -104,17 +87,10 @@ const App = () => (
                           </ProtectedRoute>
                         }
                       />
-                      <Route
-                        path="payroll"
-                        element={
-                          <ProtectedRoute allowedRoles={[Role.LECTURER]}>
-                            <Payroll />
-                          </ProtectedRoute>
-                        }
-                      />
                     </Route>
                   </Route>
                   <Route path="/kiosk/:sessionId" element={<Kiosk />} />
+                  <Route path="/meeting/:sessionId" element={<MeetingRoom />} />
                   <Route
                     path="/kiosk/lecturer/:slotId"
                     element={<LecturerKiosk />}

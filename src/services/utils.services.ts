@@ -60,14 +60,12 @@ export class UtilServices {
       };
     }
 
-    // PRESENT = fully completed (checked in AND checked out)
+    // PRESENT = fully completed
     const presentCount = attendances.filter(
-      (a) => a.status === "PRESENT",
+      (a) => a.status === "PRESENT" || a.status === "CHECKED_IN",
     ).length;
-    // CHECKED_IN = only checked in, waiting for checkout
-    const checkedInCount = attendances.filter(
-      (a) => a.status === "CHECKED_IN",
-    ).length;
+    // CHECKED_IN = treated same as present
+    const checkedInCount = 0;
     const lateCount = attendances.filter((a) => a.status === "LATE").length;
     const absentCount = attendances.filter((a) => a.status === "ABSENT").length;
     const excusedCount = attendances.filter(
@@ -75,7 +73,6 @@ export class UtilServices {
     ).length;
 
     // Attendance rate = (present + late + excused) / total * 100
-    // Note: CHECKED_IN is NOT counted as attended since checkout is required
     const attendedCount = presentCount + lateCount + excusedCount;
     const attendanceRate = Math.round((attendedCount / totalSessions) * 100);
 
@@ -237,14 +234,13 @@ export class UtilServices {
     // Create table
     autoTable(doc, {
       startY: statsY + 16,
-      head: [["Session/Course", "Date", "Status", "Check In", "Check Out"]],
+      head: [["Session/Course", "Date", "Status", "Check In"]],
       body: attendanceRecords.map((r) => [
         r.sessionName || r.courseName || "-",
         r.date,
         r.status.charAt(0).toUpperCase() +
           r.status.slice(1).toLowerCase().replace("_", " "),
         r.checkInTime || "-",
-        r.checkOutTime || "-",
       ]),
       styles: {
         fontSize: 9,

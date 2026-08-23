@@ -25,6 +25,7 @@ import MasterAttendanceSheet from "@/components/sessions/MasterAttendanceSheet";
 import { Button } from "@/components/ui/button";
 import { SessionCard } from "@/components/sessions/SessionCard";
 import { SessionReportModal } from "@/components/sessions/SessionReportModal";
+import { CreateSessionModal } from "@/components/sessions/CreateSessionModal";
 import {
   AttendanceSession,
   SessionAttendanceRecord,
@@ -201,12 +202,18 @@ const mapSessionToAttendanceSession = (
     expectedCount: expectedCount,
     presentCount: presentCount,
     courseId: session.courseId || session.moduleId || undefined,
-    courseName: session.module
-      ? `${session.module.name} (${session.module.code})`
-      : session.course?.title || undefined,
-    department: session.module?.code || undefined,
+    courseName: session.course?.title
+      ? `${session.course.title}${session.course.code ? ` (${session.course.code})` : ""}`
+      : session.module?.title
+        ? `${session.module.title}${session.module.code ? ` (${session.module.code})` : ""}`
+        : session.module?.name
+          ? `${session.module.name}${session.module.code ? ` (${session.module.code})` : ""}`
+          : undefined,
+    department: session.course?.code || session.module?.code || undefined,
     createdBy: session.userId,
     createdByRole: session.createdBy?.name ? Role.LECTURER : undefined,
+    isOnline: session.isOnline,
+    meetingLink: session.meetingLink || undefined,
     attendances: mappedAttendances,
     expectedAttendees: mappedExpectedAttendees,
   };
@@ -302,9 +309,6 @@ const Sessions = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [clockTick, setClockTick] = useState(Date.now());
   const remindedSessionKeysRef = useRef<Set<string>>(new Set());
-  const [togglingSessionId, setTogglingSessionId] = useState<string | null>(
-    null,
-  );
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(
     null,
   );
@@ -313,13 +317,13 @@ const Sessions = () => {
   const [qrCodeSessionName, setQrCodeSessionName] = useState<string>("");
   const [generatingQrCode, setGeneratingQrCode] = useState<string | null>(null);
   const [endingSessionId, setEndingSessionId] = useState<string | null>(null);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   // Check if user is admin (can see all sessions)
   const isAdmin = user?.role === Role.ADMIN || user?.role === Role.SYSTEM_ADMIN;
 
-  // Check if user can view lecturer attendance (REP/LECTURER/ADMIN/SYSTEM_ADMIN)
-  const canViewLecturerAttendance =
-    isAdmin || user?.role === Role.REP || user?.role === Role.LECTURER;
+  // Check if user can view lecturer attendance (Disabled, app focuses on student attendance)
+  const canViewLecturerAttendance = false;
 
   // Check if user is a student (for My Attendance Sheet)
   const isStudent = user?.role === Role.STUDENT;
@@ -1019,11 +1023,6 @@ const Sessions = () => {
     setReportModalOpen(true);
   };
 
-  const handleCheckout = (session: AttendanceSession) => {
-    toast.success("Session checked out successfully");
-    // The SessionCard handles localStorage sync internally
-  };
-
   const handleDeleteSession = async (session: AttendanceSession) => {
     if (!token) {
       toast.error("You must be logged in to delete a session");
@@ -1046,39 +1045,6 @@ const Sessions = () => {
       toast.error("Failed to delete session");
     } finally {
       setDeletingSessionId(null);
-    }
-  };
-
-  const handleToggleMode = async (session: AttendanceSession) => {
-    if (!token) {
-      toast.error("You must be logged in to toggle session mode");
-      return;
-    }
-
-    setTogglingSessionId(session.id);
-    try {
-      const response = await toggleSessionMode(session.id, token);
-
-      if (response.success) {
-        toast.success("Session mode switched to Check-Out");
-        // Update local state to reflect the mode change
-        setSessions((prev) =>
-          prev.map((s) =>
-            s.id === session.id
-              ? { ...s, attendanceType: "checkout" as const }
-              : s,
-          ),
-        );
-        // Refresh sessions to get updated data
-        fetchSessions();
-      } else {
-        toast.error(response.error || "Failed to toggle session mode");
-      }
-    } catch (error) {
-      console.error("Error toggling session mode:", error);
-      toast.error("Failed to toggle session mode");
-    } finally {
-      setTogglingSessionId(null);
     }
   };
 
@@ -1163,6 +1129,15 @@ const Sessions = () => {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {(isRep || isLecturer || isAdmin) && (
+            <Button
+              variant="gradient"
+              onClick={() => setIsCreateModalOpen(true)}
+              className="gap-2"
+            >
+              Create Custom Session
+            </Button>
+          )}
           {mainTab === "sessions" && (
             <Button
               variant="outline"
@@ -1291,7 +1266,6 @@ const Sessions = () => {
                       session={session}
                       user={user}
                       onStart={handleStartSession}
-                      onCheckout={handleCheckout}
                       onViewReport={handleViewReport}
                       isStarting={
                         isCreatingSession && startingSession?.id === session.id
@@ -1331,16 +1305,13 @@ const Sessions = () => {
                         onEnd={handleEndSession}
                         onViewReport={handleViewReport}
                         onDelete={handleDeleteSession}
-                        onToggleMode={handleToggleMode}
                         onGenerateQrCode={handleGenerateQrCode}
-                        onCheckout={handleCheckout}
                         user={user}
                         isStarting={
                           isCreatingSession &&
                           startingSession?.id === session.id
                         }
                         isEnding={endingSessionId === session.id}
-                        isTogglingMode={togglingSessionId === session.id}
                         isDeleting={deletingSessionId === session.id}
                         isGeneratingQrCode={generatingQrCode === session.id}
                       />
@@ -1630,7 +1601,6 @@ const Sessions = () => {
                                     session={session}
                                     user={user}
                                     onStart={handleStartSession}
-                                    onCheckout={handleCheckout}
                                     onViewReport={handleViewReport}
                                     isStarting={
                                       isCreatingSession &&
@@ -1668,16 +1638,13 @@ const Sessions = () => {
                             onEnd={handleEndSession}
                             onViewReport={handleViewReport}
                             onDelete={handleDeleteSession}
-                            onToggleMode={handleToggleMode}
                             onGenerateQrCode={handleGenerateQrCode}
-                            onCheckout={handleCheckout}
                             user={user}
                             isStarting={
                               isCreatingSession &&
                               startingSession?.id === session.id
                             }
                             isEnding={endingSessionId === session.id}
-                            isTogglingMode={togglingSessionId === session.id}
                             isDeleting={deletingSessionId === session.id}
                             isGeneratingQrCode={generatingQrCode === session.id}
                           />
@@ -1908,6 +1875,16 @@ const Sessions = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Create Session Modal */}
+      <CreateSessionModal
+        open={isCreateModalOpen}
+        onOpenChange={setIsCreateModalOpen}
+        user={user}
+        onCreateSession={() => {
+          fetchSessions();
+        }}
+      />
     </div>
   );
 };

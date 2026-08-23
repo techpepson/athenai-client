@@ -19,7 +19,7 @@ export const EMPTY_STATE_MESSAGES = {
   analytics: "No analytics data available yet.",
   admins: "No admin users found.",
   staff: "No staff members found.",
-  courseReps: "No course representatives assigned yet.",
+  courseReps: "No course assistants assigned yet.",
   attendance: "No attendance records found for this period.",
   search: "No results match your search criteria.",
   default: "No data available.",
@@ -32,7 +32,7 @@ export const ROLE_FILTER_OPTIONS = [
   { label: "Staff", value: Role.STAFF },
   { label: "Admin", value: Role.ADMIN },
   { label: "Lecturers", value: Role.LECTURER },
-  { label: "Course Reps", value: Role.REP },
+  { label: "Course Assistants", value: Role.REP },
   { label: "System Admin", value: Role.SYSTEM_ADMIN },
   { label: "Owner", value: Role.OWNER },
 ] as const;

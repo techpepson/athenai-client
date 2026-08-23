@@ -89,7 +89,7 @@ export const SessionReportModal = ({
       if (apiStatus === "LATE") {
         displayStatus = "late";
       } else if (apiStatus === "CHECKED_IN") {
-        displayStatus = "checked_in";
+        displayStatus = "present";
       } else if (apiStatus === "ABSENT") {
         displayStatus = "absent";
       } else if (apiStatus === "PRESENT") {
@@ -128,9 +128,6 @@ export const SessionReportModal = ({
 
   // Categorize attendees
   const presentRecords = sessionRecords.filter((r) => r.status === "present");
-  const checkedInRecords = sessionRecords.filter(
-    (r) => r.status === "checked_in",
-  );
   const lateRecords = sessionRecords.filter((r) => r.status === "late");
 
   const stats = [
@@ -524,9 +521,6 @@ export const SessionReportModal = ({
             <TabsTrigger value="present">
               Present ({presentRecords.length})
             </TabsTrigger>
-            <TabsTrigger value="checked_in">
-              Checked In ({checkedInRecords.length})
-            </TabsTrigger>
             <TabsTrigger value="late">Late ({lateRecords.length})</TabsTrigger>
             <TabsTrigger value="absent">
               Absent ({absentMembers.length})
@@ -551,21 +545,7 @@ export const SessionReportModal = ({
             />
           </TabsContent>
 
-          <TabsContent value="checked_in" className="mt-4">
-            {checkedInRecords.length > 0 && (
-              <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg text-sm text-blue-600 dark:text-blue-400">
-                <strong>Note:</strong> These members have checked in but have
-                not checked out yet. They need to checkout to be marked as fully
-                present.
-              </div>
-            )}
-            <AttendanceTable
-              records={checkedInRecords}
-              getStatusBadge={getStatusBadge}
-              getMethodBadge={getMethodBadge}
-              attendanceType={session.attendanceType}
-            />
-          </TabsContent>
+
 
           <TabsContent value="late" className="mt-4">
             <AttendanceTable
@@ -660,11 +640,7 @@ const AttendanceTable = ({
           <TableRow className="bg-muted/50">
             <TableHead>Member</TableHead>
             <TableHead>Student ID</TableHead>
-            <TableHead>
-              {attendanceType === "checkin"
-                ? "Check-in Time"
-                : "Check-out Time"}
-            </TableHead>
+            <TableHead>Check-in Time</TableHead>
             <TableHead>Status</TableHead>
             <TableHead>Verification</TableHead>
             <TableHead>Confidence</TableHead>

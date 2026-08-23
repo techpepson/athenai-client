@@ -50,7 +50,6 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<Role>(Role.LECTURER);
   const [idNumber, setIdNumber] = useState(""); // Used for studentId, staffId, lecturerId
-  const [hourlyRate, setHourlyRate] = useState("");
   const [courses, setCourses] = useState<string[]>([]);
   const [generatedPassword, setGeneratedPassword] = useState("");
   const [copied, setCopied] = useState(false);
@@ -117,7 +116,6 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
       if (role === Role.LECTURER) {
         payload.lecturerId = idNumber;
         payload.staffId = staffId;
-        payload.lecturerHourlyRate = parseFloat(hourlyRate) || 0;
         payload.lecturerCreditHours = parseInt(lecturerCreditHours) || 0;
         payload.courses = courses;
       } else if (role === Role.STAFF) {
@@ -168,7 +166,6 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
     setRole(Role.LECTURER);
     // department removed
     setIdNumber("");
-    setHourlyRate("");
     setLecturerCreditHours("");
     setStaffId("");
     setIsMinor(false);
@@ -404,19 +401,7 @@ export const AddMemberModal = ({ open, onOpenChange }: AddMemberModalProps) => {
                   />
                 </div>
               )}
-              {role === Role.LECTURER && (
-                <div className="space-y-2">
-                  <Label htmlFor="hourlyRate">Hourly Rate</Label>
-                  <Input
-                    id="hourlyRate"
-                    type="number"
-                    placeholder="e.g., 50"
-                    required
-                    value={hourlyRate}
-                    onChange={(e) => setHourlyRate(e.target.value)}
-                  />
-                </div>
-              )}
+
             </div>
 
             {/* Actions */}

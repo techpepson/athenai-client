@@ -7,6 +7,8 @@ export interface IRegister {
   phone: string;
   password: string;
   role: Role;
+  studentId?: string;
+  level?: number;
 }
 
 export interface RegisterResponse {

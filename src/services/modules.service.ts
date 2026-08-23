@@ -215,7 +215,7 @@ class ModulesService {
     if (semester !== undefined) params.semester = semester;
 
     const response = await api.get<BackendResponse<Module[]>>(
-      `${this.basePath}/modules`,
+      `${this.basePath}/courses`,
       token || undefined,
       { params },
     );
@@ -260,7 +260,7 @@ class ModulesService {
   ): Promise<ApiResponse<BackendResponse<Module>>> {
     const token = await this.getToken();
     const response = await api.get<BackendResponse<Module>>(
-      `${this.basePath}/modules/${id}`,
+      `${this.basePath}/courses/${id}`,
       token || undefined,
     );
 
@@ -285,7 +285,7 @@ class ModulesService {
   }): Promise<ApiResponse<BackendResponse<Module>>> {
     const token = await this.getToken();
     const response = await api.post<BackendResponse<Module>>(
-      `${this.basePath}/create-modules`,
+      `${this.basePath}/create-courses`,
       module,
       token || undefined,
     );
@@ -314,7 +314,7 @@ class ModulesService {
   ): Promise<ApiResponse<BackendResponse<Module>>> {
     const token = await this.getToken();
     const response = await api.patch<BackendResponse<Module>>(
-      `${this.basePath}/update-modules/${id}`,
+      `${this.basePath}/update-courses/${id}`,
       updates,
       token || undefined,
     );
@@ -335,7 +335,7 @@ class ModulesService {
   ): Promise<ApiResponse<BackendResponse<Module>>> {
     const token = await this.getToken();
     return api.delete<BackendResponse<Module>>(
-      `${this.basePath}/modules/${id}`,
+      `${this.basePath}/courses/${id}`,
       token || undefined,
     );
   }
@@ -351,7 +351,7 @@ class ModulesService {
   ): Promise<ApiResponse<BackendResponse<SubTopic[]>>> {
     const token = await this.getToken();
     const response = await api.get<BackendResponse<SubTopic[]>>(
-      `${this.basePath}/modules/${moduleId}/get-subtopics`,
+      `${this.basePath}/courses/${moduleId}/get-subtopics`,
       token || undefined,
     );
 
@@ -388,7 +388,7 @@ class ModulesService {
   ): Promise<ApiResponse<BackendResponse<SubTopic>>> {
     const token = await this.getToken();
     const response = await api.post<BackendResponse<SubTopic>>(
-      `${this.basePath}/modules/${moduleId}/create-subtopic`,
+      `${this.basePath}/courses/${moduleId}/create-subtopic`,
       subtopic,
       token || undefined,
     );
@@ -420,7 +420,7 @@ class ModulesService {
   ): Promise<ApiResponse<BackendResponse<SubTopic>>> {
     const token = await this.getToken();
     const response = await api.patch<BackendResponse<SubTopic>>(
-      `${this.basePath}/modules/${moduleId}/update-subtopic/${subtopicId}`,
+      `${this.basePath}/courses/${moduleId}/update-subtopic/${subtopicId}`,
       updates,
       token || undefined,
     );
@@ -442,7 +442,7 @@ class ModulesService {
   ): Promise<ApiResponse<BackendResponse<SubTopic>>> {
     const token = await this.getToken();
     return api.delete<BackendResponse<SubTopic>>(
-      `${this.basePath}/modules/${moduleId}/subtopics/${subtopicId}`,
+      `${this.basePath}/courses/${moduleId}/subtopics/${subtopicId}`,
       token || undefined,
     );
   }
@@ -512,7 +512,7 @@ class ModulesService {
     if (academicYear) params.academicYear = academicYear;
 
     const response = await api.get<BackendResponse<ModuleTimetable>>(
-      `${this.basePath}/modules/${moduleId}/timetable`,
+      `${this.basePath}/courses/${moduleId}/timetable`,
       token || undefined,
       { params },
     );

@@ -581,7 +581,7 @@ const StudentAttendanceTab = () => {
               {!sheet.sessionStarted && (
                 <div className="p-3 bg-muted/30 border-t border-border text-sm text-muted-foreground">
                   <AlertCircle className="w-4 h-4 inline mr-2" />
-                  This attendance sheet will become active when the class rep
+                  This attendance sheet will become active when the class assistant
                   starts the session.
                 </div>
               )}

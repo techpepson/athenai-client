@@ -156,14 +156,11 @@ const MyAttendanceSheet = () => {
   // Stats
   const stats = useMemo(() => {
     const present = filteredRecords.filter(
-      (r) => r.status === "PRESENT",
+      (r) => r.status === "PRESENT" || r.status === "CHECKED_IN",
     ).length;
     const late = filteredRecords.filter((r) => r.status === "LATE").length;
     const absent = filteredRecords.filter((r) => r.status === "ABSENT").length;
-    const checkedIn = filteredRecords.filter(
-      (r) => r.status === "CHECKED_IN",
-    ).length;
-    return { present, late, absent, checkedIn };
+    return { present, late, absent };
   }, [filteredRecords]);
 
   if (isLoading) {
@@ -236,10 +233,9 @@ const MyAttendanceSheet = () => {
           <TableHeader>
             <TableRow className="bg-muted/50">
               <TableHead className="w-[8%] text-center">S/N</TableHead>
-              <TableHead className="w-[14%]">Date</TableHead>
-              <TableHead className="w-[30%]">Session</TableHead>
-              <TableHead className="w-[14%] text-center">Check In</TableHead>
-              <TableHead className="w-[14%] text-center">Check Out</TableHead>
+              <TableHead className="w-[16%]">Date</TableHead>
+              <TableHead className="w-[36%]">Session</TableHead>
+              <TableHead className="w-[20%] text-center">Check In</TableHead>
               <TableHead className="w-[20%] text-center">Status</TableHead>
             </TableRow>
           </TableHeader>
@@ -247,7 +243,7 @@ const MyAttendanceSheet = () => {
             {filteredRecords.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={5}
                   className="text-center py-8 text-muted-foreground"
                 >
                   No attendance records found for the selected module.
@@ -293,16 +289,7 @@ const MyAttendanceSheet = () => {
                         "—"
                       )}
                     </TableCell>
-                    <TableCell className="text-center text-sm">
-                      {record.checkOutTime ? (
-                        <span className="flex items-center justify-center gap-1">
-                          <Clock className="w-3 h-3 text-muted-foreground" />
-                          {formatTime(record.checkOutTime)}
-                        </span>
-                      ) : (
-                        "—"
-                      )}
-                    </TableCell>
+
                     <TableCell className="text-center">
                       <span
                         className={cn(
@@ -364,12 +351,6 @@ const MyAttendanceSheet = () => {
           <span className="w-3 h-3 rounded-full bg-red-500" />
           Absent: {stats.absent}
         </div>
-        {stats.checkedIn > 0 && (
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-blue-500" />
-            Checked In: {stats.checkedIn}
-          </div>
-        )}
       </div>
     </div>
   );

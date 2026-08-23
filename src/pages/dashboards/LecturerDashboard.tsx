@@ -1,6 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
 import {
-  BookOpen,
   Users,
   CalendarClock,
   CheckCircle2,
@@ -23,52 +22,30 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { Badge } from "@/components/ui/badge";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
   Session,
   SessionStatus,
-  SessionType,
   SessionMode,
   AttendanceStatus,
   getLecturerSessions,
 } from "@/services/sessions.service";
 import { usersServices } from "@/services/users.services";
 import { IUser, ILecturer } from "@/interface/user.interface";
-import { modulesService, Module, SubTopic } from "@/services/modules.service";
-import {
-  AttendanceRecord,
-  getUserAttendance,
-  markManualAttendance,
-} from "@/services/attendance.services";
-import { toast } from "sonner";
+import { coursesService, Course } from "@/services/courses.services";
 
 const LecturerDashboard = () => {
   const { user, token } = useAuth();
-  const [selectedModule, setSelectedModule] = useState<string>("all");
+  const [selectedCourse, setSelectedCourse] = useState<string>("all");
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [lecturerModules, setLecturerModules] = useState<Module[]>([]);
+  const [lecturerCourses, setLecturerCourses] = useState<Course[]>([]);
   const [lecturerData, setLecturerData] = useState<
     (IUser & { lecturer?: ILecturer | null }) | null
   >(null);
-  const [userAttendanceRecords, setUserAttendanceRecords] = useState<
-    AttendanceRecord[]
-  >([]);
-  const [verifyingAttendanceId, setVerifyingAttendanceId] = useState<
-    string | null
-  >(null);
   const [loading, setLoading] = useState(true);
 
-  // Fetch sessions and determine lecturer's subtopics
+  // Fetch sessions and courses
   useEffect(() => {
     const fetchData = async () => {
       if (!token) {
@@ -78,38 +55,22 @@ const LecturerDashboard = () => {
 
       setLoading(true);
       try {
-        // Fetch lecturer details to get their lecturer ID
+        // Fetch lecturer details to get their ID
         const userResponse = await usersServices.getUserById(token);
-        let lecturerId: string | undefined;
-
         if (userResponse.success && userResponse.data?.user) {
-          const userData = userResponse.data.user;
-          setLecturerData(userData);
-          lecturerId = userData.id; // Use user ID — subtopic.lecturerId stores User ID
+          setLecturerData(userResponse.data.user);
         }
 
-        // Fetch all modules (we'll filter subtopics by lecturerId)
-        const modulesResponse = await modulesService.getModules();
-        if (modulesResponse.success && modulesResponse.data?.data) {
-          // Only keep modules that have subtopics assigned to this lecturer
-          const allMods = modulesResponse.data.data;
-          if (lecturerId) {
-            const relevantModules = allMods.filter((mod) =>
-              (mod.subtopics || []).some(
-                (st) =>
-                  st.lecturerId === lecturerId ||
-                  st.lecturer?.id === lecturerId,
-              ),
-            );
-            setLecturerModules(relevantModules);
-          } else {
-            setLecturerModules([]);
-          }
+        // Fetch courses assigned to this lecturer
+        const coursesResponse = await coursesService.getLecturerCourses();
+        if (coursesResponse.success && coursesResponse.data) {
+          const list = (coursesResponse.data.data as Course[]) || (coursesResponse.data as unknown as Course[]) || [];
+          setLecturerCourses(list);
         } else {
-          setLecturerModules([]);
+          setLecturerCourses([]);
         }
 
-        // Fetch sessions for this lecturer's assigned subtopics
+        // Fetch sessions for this lecturer
         const sessionsResponse = await getLecturerSessions(token);
         if (sessionsResponse.success && sessionsResponse.data) {
           const data = sessionsResponse.data as Record<string, unknown>;
@@ -123,18 +84,10 @@ const LecturerDashboard = () => {
         } else {
           setSessions([]);
         }
-
-        const attendanceResponse = await getUserAttendance(token);
-        if (attendanceResponse.success && attendanceResponse.data) {
-          setUserAttendanceRecords(attendanceResponse.data);
-        } else {
-          setUserAttendanceRecords([]);
-        }
       } catch (error) {
         console.error("Failed to fetch data:", error);
         setSessions([]);
-        setLecturerModules([]);
-        setUserAttendanceRecords([]);
+        setLecturerCourses([]);
       } finally {
         setLoading(false);
       }
@@ -143,83 +96,32 @@ const LecturerDashboard = () => {
     fetchData();
   }, [token]);
 
-  // Get the lecturer's assigned subtopics (filtered from their modules)
-  const lecturerSubtopics = useMemo(() => {
-    const lecturerId = lecturerData?.id; // User ID — subtopic.lecturerId stores User ID
-    if (!lecturerId) return [];
+  // Lecturer sessions are already filtered to this lecturer by the backend
+  const lecturerSessions = sessions;
 
-    const subtopics: (SubTopic & {
-      moduleName: string;
-      moduleCode: string;
-      moduleLevel: number;
-    })[] = [];
-    lecturerModules.forEach((mod) => {
-      (mod.subtopics || []).forEach((st) => {
-        if (st.lecturerId === lecturerId || st.lecturer?.id === lecturerId) {
-          subtopics.push({
-            ...st,
-            moduleName: mod.name,
-            moduleCode: mod.code,
-            moduleLevel: mod.level,
-          });
-        }
-      });
-    });
-    return subtopics;
-  }, [lecturerModules, lecturerData?.id]);
-
-  // Get subtopic IDs assigned to this lecturer
-  const lecturerSubtopicIds = useMemo(() => {
-    return lecturerSubtopics.map((st) => st.id);
-  }, [lecturerSubtopics]);
-
-  // Filter sessions that match the lecturer's subtopics
-  const lecturerSessions = useMemo(() => {
-    return sessions.filter(
-      (s) => s.subtopicId && lecturerSubtopicIds.includes(s.subtopicId),
-    );
-  }, [sessions, lecturerSubtopicIds]);
-
-  // Get selected module subtopic IDs
-  const selectedSubtopicIds = useMemo(() => {
-    if (selectedModule === "all") return lecturerSubtopicIds;
-    const mod = lecturerModules.find((m) => m.id === selectedModule);
-    const lecturerId = lecturerData?.id;
-    return (mod?.subtopics || [])
-      .filter(
-        (st) => st.lecturerId === lecturerId || st.lecturer?.id === lecturerId,
-      )
-      .map((st) => st.id);
-  }, [selectedModule, lecturerModules, lecturerSubtopicIds, lecturerData?.id]);
-
-  // Filter sessions based on module selection
+  // Filter sessions based on course selection
   const filteredSessions = useMemo(() => {
-    if (selectedModule === "all") {
+    if (selectedCourse === "all") {
       return lecturerSessions;
     }
-    return lecturerSessions.filter(
-      (s) => s.subtopicId && selectedSubtopicIds.includes(s.subtopicId),
-    );
-  }, [selectedModule, lecturerSessions, selectedSubtopicIds]);
+    return lecturerSessions.filter((s) => s.courseId === selectedCourse);
+  }, [selectedCourse, lecturerSessions]);
 
   // Calculate real statistics
   const totalSessions = filteredSessions.length;
 
-  // Calculate attendance statistics
+  // Calculate student attendance statistics
   const attendanceStats = useMemo(() => {
     let totalPresent = 0;
     let totalLate = 0;
     let totalAbsent = 0;
-    let totalCheckedIn = 0;
 
     filteredSessions.forEach((session) => {
       session.attendances?.forEach((attendance) => {
         switch (attendance.status) {
           case AttendanceStatus.PRESENT:
-            totalPresent++;
-            break;
           case AttendanceStatus.CHECKED_IN:
-            totalCheckedIn++;
+            totalPresent++;
             break;
           case AttendanceStatus.LATE:
             totalLate++;
@@ -233,10 +135,9 @@ const LecturerDashboard = () => {
 
     return {
       present: totalPresent,
-      checkedIn: totalCheckedIn,
       late: totalLate,
       absent: totalAbsent,
-      total: totalPresent + totalCheckedIn + totalLate + totalAbsent,
+      total: totalPresent + totalLate + totalAbsent,
     };
   }, [filteredSessions]);
 
@@ -250,85 +151,11 @@ const LecturerDashboard = () => {
     );
   }, [attendanceStats]);
 
-  // Lecturer's own attendance records (like student self attendance sheet)
-  const lecturerAttendanceRecords = useMemo(() => {
-    const records = userAttendanceRecords.filter((record) => {
-      const subtopicId = record.session?.subtopicId;
-      if (!subtopicId || !lecturerSubtopicIds.includes(subtopicId)) {
-        return false;
-      }
-      if (selectedModule === "all") {
-        return true;
-      }
-      return selectedSubtopicIds.includes(subtopicId);
-    });
-
-    return records.sort((a, b) => {
-      const ta = new Date(
-        a.session?.startTime || a.checkInTime || a.timestamp || 0,
-      ).getTime();
-      const tb = new Date(
-        b.session?.startTime || b.checkInTime || b.timestamp || 0,
-      ).getTime();
-      return tb - ta;
-    });
-  }, [
-    userAttendanceRecords,
-    lecturerSubtopicIds,
-    selectedModule,
-    selectedSubtopicIds,
-  ]);
-
-  const isPendingManualVerification = (record: AttendanceRecord) => {
-    const remarks = (record.remarks || "").toUpperCase();
-    const source = (record.source || "").toLowerCase();
-    return (
-      record.status === AttendanceStatus.CHECKED_IN &&
-      (remarks.includes("PENDING_VERIFICATION") || source === "manual")
-    );
-  };
-
-  const handleVerifyManualAttendance = async (
-    record: AttendanceRecord,
-    status: "PRESENT" | "ABSENT",
-  ) => {
-    if (!token || !user?.id) return;
-    setVerifyingAttendanceId(record.id);
-    try {
-      const res = await markManualAttendance(
-        record.sessionId,
-        user.id,
-        status,
-        "LECTURER_VERIFIED",
-        token,
-      );
-
-      if (res.success) {
-        setUserAttendanceRecords((prev) =>
-          prev.map((r) =>
-            r.id === record.id
-              ? { ...r, status, remarks: "LECTURER_VERIFIED" }
-              : r,
-          ),
-        );
-        toast.success(`Attendance verified as ${status}`);
-      } else {
-        toast.error(
-          res.error || "Verification failed. Ask admin to enable this action.",
-        );
-      }
-    } catch {
-      toast.error("Verification failed. Ask admin to enable this action.");
-    } finally {
-      setVerifyingAttendanceId(null);
-    }
-  };
-
-  // Subtopic statistics breakdown
-  const subtopicStats = useMemo(() => {
+  // Course statistics breakdown
+  const courseStats = useMemo(() => {
     const stats: {
-      [subtopicId: string]: {
-        subtopic: SubTopic & { moduleName: string; moduleCode: string };
+      [courseId: string]: {
+        course: Course;
         sessions: number;
         presentCount: number;
         lateCount: number;
@@ -337,19 +164,17 @@ const LecturerDashboard = () => {
       };
     } = {};
 
-    lecturerSubtopics.forEach((st) => {
-      const stSessions = lecturerSessions.filter((s) => s.subtopicId === st.id);
+    lecturerCourses.forEach((course) => {
+      const courseSessions = lecturerSessions.filter((s) => s.courseId === course.id);
 
       let totalPresent = 0;
       let totalLate = 0;
       let totalAbsent = 0;
 
-      stSessions.forEach((session) => {
+      courseSessions.forEach((session) => {
         session.attendances?.forEach((attendance) => {
-          if (attendance.status === AttendanceStatus.PRESENT) {
+          if (attendance.status === AttendanceStatus.PRESENT || attendance.status === AttendanceStatus.CHECKED_IN) {
             totalPresent++;
-          } else if (attendance.status === AttendanceStatus.CHECKED_IN) {
-            totalAbsent++;
           } else if (attendance.status === AttendanceStatus.LATE) {
             totalLate++;
           } else if (attendance.status === AttendanceStatus.ABSENT) {
@@ -358,23 +183,23 @@ const LecturerDashboard = () => {
         });
       });
 
-      stats[st.id] = {
-        subtopic: st,
-        sessions: stSessions.length,
+      stats[course.id] = {
+        course,
+        sessions: courseSessions.length,
         presentCount: totalPresent,
         lateCount: totalLate,
         absentCount: totalAbsent,
         avgAttendance:
-          stSessions.length > 0
-            ? Math.round(totalPresent / stSessions.length)
+          courseSessions.length > 0
+            ? Math.round(totalPresent / courseSessions.length)
             : 0,
       };
     });
 
     return stats;
-  }, [lecturerSubtopics, lecturerSessions]);
+  }, [lecturerCourses, lecturerSessions]);
 
-  const firstName = user?.name.split(" ")[0] || "User";
+  const firstName = user?.name?.split(" ")[0] || "User";
   const welcomeMessage = `Welcome back ${firstName}, here's the attendance overview`;
 
   const activeSessions = lecturerSessions.filter(
@@ -398,7 +223,7 @@ const LecturerDashboard = () => {
         const sessionDay = new Date(s.startTime).toISOString().split("T")[0];
         if (sessionDay !== dayKey) return;
         s.attendances?.forEach((a) => {
-          if (a.status === AttendanceStatus.PRESENT) present++;
+          if (a.status === AttendanceStatus.PRESENT || a.status === AttendanceStatus.CHECKED_IN) present++;
           else if (a.status === AttendanceStatus.LATE) late++;
         });
       });
@@ -412,12 +237,8 @@ const LecturerDashboard = () => {
     id: session.id,
     name: session.name,
     type: session.type.toLowerCase() as "class" | "exam" | "event" | "shift",
-    attendanceType:
-      session.mode === SessionMode.CHECK_IN
-        ? ("checkin" as const)
-        : ("checkout" as const),
-    department:
-      session.subtopic?.name || session.module?.name || session.course?.title,
+    attendanceType: "checkin" as const,
+    department: session.course?.title || "Unknown",
     startTime: new Date(session.startTime),
     endTime: new Date(session.endTime),
     status:
@@ -429,11 +250,10 @@ const LecturerDashboard = () => {
     location: session.location,
     expectedCount: session.attendances?.length || 0,
     presentCount:
-      session.attendances?.filter((a) => a.status === AttendanceStatus.PRESENT)
+      session.attendances?.filter((a) => a.status === AttendanceStatus.PRESENT || a.status === AttendanceStatus.CHECKED_IN)
         .length || 0,
     courseId: session.courseId,
-    courseName:
-      session.subtopic?.name || session.module?.name || session.course?.title,
+    courseName: session.course?.title || "Unknown",
     createdBy: session.createdBy?.id,
   }));
 
@@ -461,28 +281,28 @@ const LecturerDashboard = () => {
         </p>
       </div>
 
-      {/* Module Filter */}
+      {/* Course Filter */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-        <label className="text-sm font-medium">Filter by Module:</label>
+        <label className="text-sm font-medium">Filter by Course:</label>
         <Select
-          value={selectedModule}
-          onValueChange={setSelectedModule}
-          disabled={lecturerModules.length === 0}
+          value={selectedCourse}
+          onValueChange={setSelectedCourse}
+          disabled={lecturerCourses.length === 0}
         >
           <SelectTrigger className="w-full sm:w-64">
             <SelectValue
               placeholder={
-                lecturerModules.length === 0
-                  ? "No modules available"
-                  : "Select a module"
+                lecturerCourses.length === 0
+                  ? "No courses available"
+                  : "Select a course"
               }
             />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Modules</SelectItem>
-            {lecturerModules.map((mod) => (
-              <SelectItem key={mod.id} value={mod.id}>
-                {mod.name} ({mod.code}) - Level {mod.level}
+            <SelectItem value="all">All Courses</SelectItem>
+            {lecturerCourses.map((course) => (
+              <SelectItem key={course.id} value={course.id}>
+                {course.title} ({course.code}) - Level {course.level}
               </SelectItem>
             ))}
           </SelectContent>
@@ -492,12 +312,12 @@ const LecturerDashboard = () => {
       {/* Stats Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2 sm:gap-3 md:gap-4">
         <StatCard
-          title="Assigned Subtopics"
-          value={lecturerSubtopics.length}
+          title="Assigned Courses"
+          value={lecturerCourses.length}
           icon={Layers}
           trend={
-            lecturerSubtopics.length > 0
-              ? { value: lecturerSubtopics.length, isPositive: true }
+            lecturerCourses.length > 0
+              ? { value: lecturerCourses.length, isPositive: true }
               : undefined
           }
         />
@@ -579,37 +399,36 @@ const LecturerDashboard = () => {
           )}
         </div>
 
-        {/* Subtopic Summary (replaces Courses Overview) */}
+        {/* Courses Overview */}
         <div className="bg-card rounded-lg sm:rounded-xl border border-border p-4 sm:p-6">
           <div className="flex items-center justify-between mb-3 sm:mb-4">
             <h2 className="text-base sm:text-lg font-semibold text-foreground">
-              Subtopic Overview
+              Courses Overview
             </h2>
             <Layers className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
           </div>
           <div className="space-y-3 sm:space-y-4 max-h-[280px] sm:max-h-[360px] overflow-y-auto scrollbar-hide">
-            {lecturerSubtopics.length === 0 ? (
+            {lecturerCourses.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-8 text-center">
                 <BookX className="w-10 h-10 text-muted-foreground/50 mb-3" />
                 <p className="text-sm font-medium text-muted-foreground">
-                  No subtopics assigned
+                  No courses assigned
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  You haven't been assigned to any subtopics yet
+                  You haven't been assigned to any courses yet
                 </p>
               </div>
             ) : (
-              lecturerSubtopics.map((st) => {
-                const stats = subtopicStats[st.id];
+              lecturerCourses.map((course) => {
+                const stats = courseStats[course.id];
                 return (
                   <div
-                    key={st.id}
+                    key={course.id}
                     className="p-3 rounded-lg border border-border"
                   >
-                    <p className="text-sm font-medium">{st.name}</p>
+                    <p className="text-sm font-medium">{course.title}</p>
                     <p className="text-xs text-muted-foreground mb-2">
-                      {st.moduleName} ({st.moduleCode}) &middot; Level{" "}
-                      {st.moduleLevel}
+                      {course.code} &middot; Level {course.level}
                     </p>
                     <div className="space-y-1 text-xs">
                       <div className="flex justify-between">
@@ -617,13 +436,13 @@ const LecturerDashboard = () => {
                         <Badge variant="outline">{stats?.sessions || 0}</Badge>
                       </div>
                       <div className="flex justify-between">
-                        <span>Present:</span>
+                        <span>Present Students:</span>
                         <Badge variant="outline">
                           {stats?.presentCount || 0}
                         </Badge>
                       </div>
                       <div className="flex justify-between">
-                        <span>Avg per Session:</span>
+                        <span>Avg Present per Session:</span>
                         <Badge
                           variant={
                             (stats?.avgAttendance || 0) > 30
@@ -641,125 +460,6 @@ const LecturerDashboard = () => {
             )}
           </div>
         </div>
-      </div>
-
-      {/* My Attendance Records */}
-      <div className="bg-card rounded-lg sm:rounded-xl border border-border p-4 sm:p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-base sm:text-lg font-semibold text-foreground">
-              My Attendance Records
-            </h2>
-            <p className="text-xs sm:text-sm text-muted-foreground">
-              Your attendance history, including manual attendance verification
-            </p>
-          </div>
-          <Badge variant="secondary">
-            {lecturerAttendanceRecords.length} record
-            {lecturerAttendanceRecords.length !== 1 ? "s" : ""}
-          </Badge>
-        </div>
-
-        {lecturerAttendanceRecords.length === 0 ? (
-          <div className="text-sm text-muted-foreground py-6 text-center border border-dashed rounded-lg">
-            No attendance records found for your assigned sessions.
-          </div>
-        ) : (
-          <div className="overflow-x-auto border rounded-lg">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Module</TableHead>
-                  <TableHead>Subtopic</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {lecturerAttendanceRecords.slice(0, 20).map((record) => {
-                  const recordDate =
-                    record.session?.startTime ||
-                    record.checkInTime ||
-                    record.timestamp ||
-                    "";
-                  const pending = isPendingManualVerification(record);
-                  const isVerifying = verifyingAttendanceId === record.id;
-
-                  return (
-                    <TableRow key={record.id}>
-                      <TableCell>
-                        {recordDate
-                          ? new Date(recordDate).toLocaleString("en-GB", {
-                              day: "2-digit",
-                              month: "short",
-                              year: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })
-                          : "-"}
-                      </TableCell>
-                      <TableCell>
-                        {record.session?.module?.code ||
-                          record.session?.module?.name ||
-                          "-"}
-                      </TableCell>
-                      <TableCell>{record.session?.subtopic?.name || "-"}</TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={
-                            record.status === "PRESENT"
-                              ? "bg-green-50 text-green-700 border-green-200"
-                              : record.status === "ABSENT"
-                                ? "bg-red-50 text-red-700 border-red-200"
-                                : record.status === "CHECKED_IN"
-                                  ? "bg-yellow-50 text-yellow-700 border-yellow-200"
-                                  : ""
-                          }
-                        >
-                          {pending ? "Pending Verification" : record.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {pending ? (
-                          <div className="inline-flex items-center gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={isVerifying}
-                              onClick={() =>
-                                handleVerifyManualAttendance(record, "PRESENT")
-                              }
-                            >
-                              {isVerifying ? (
-                                <Loader2 className="w-3 h-3 animate-spin" />
-                              ) : (
-                                "Verify Present"
-                              )}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={isVerifying}
-                              onClick={() =>
-                                handleVerifyManualAttendance(record, "ABSENT")
-                              }
-                            >
-                              Mark Absent
-                            </Button>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-        )}
       </div>
 
       {/* Active Sessions */}

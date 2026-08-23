@@ -39,7 +39,7 @@ export const MemberCard = ({
     [Role.STUDENT]: "Student",
     [Role.STAFF]: "Staff",
     [Role.ADMIN]: "Admin",
-    [Role.REP]: "Level Rep",
+    [Role.REP]: "Level Assistant",
     [Role.LECTURER]: "Lecturer",
     [Role.SYSTEM_ADMIN]: "System Admin",
     [Role.OWNER]: "Owner",

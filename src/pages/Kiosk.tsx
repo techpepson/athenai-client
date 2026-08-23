@@ -172,8 +172,7 @@ const Kiosk = () => {
             lecturerName: session.lecturer?.user?.name || undefined,
             lecturerStaffNo: session.lecturer?.staffNo || undefined,
             type: session.type,
-            attendanceType:
-              session.mode === "CHECK_IN" ? "checkin" : "checkout",
+            attendanceType: "checkin",
             location: session.location || undefined,
             startTime: session.startTime,
             endTime: session.endTime,
@@ -191,6 +190,12 @@ const Kiosk = () => {
           };
 
           setSessionInfo(mappedSession);
+
+          // If session is online, redirect to the video conferencing room
+          if (session.isOnline) {
+            navigate(`/meeting/${session.id}`);
+            return;
+          }
 
           // Set initial attendance stats
           setAttendanceStats({
@@ -356,12 +361,8 @@ const Kiosk = () => {
           // Update stats
           setAttendanceStats((prev) => {
             const newStats = { ...prev };
-            // Only PRESENT (checked in + checked out) counts as fully present
-            if (data.attendance.status === "PRESENT") {
+            if (data.attendance.status === "PRESENT" || data.attendance.status === "CHECKED_IN") {
               newStats.present += 1;
-            } else if (data.attendance.status === "CHECKED_IN") {
-              // CHECKED_IN is separate - user still needs to checkout
-              // Don't increment present count
             } else if (data.attendance.status === "LATE") {
               newStats.late += 1;
             }
@@ -371,7 +372,7 @@ const Kiosk = () => {
           // Show appropriate message based on status
           let statusMessage = data.attendance.status;
           if (data.attendance.status === "CHECKED_IN") {
-            statusMessage = "CHECKED IN - Remember to check out!";
+            statusMessage = "PRESENT";
           }
 
           toast.success(

@@ -62,6 +62,16 @@ export interface AddCoursePayload {
   description: string;
   creditHours?: number;
   lecturerId?: string;
+  level: number;
+  semester: number;
+  lecturerIds?: string[];
+  slots?: {
+    day: "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY";
+    startTime: string;
+    endTime: string;
+    venue?: string;
+    lecturerId?: string;
+  }[];
 }
 
 export interface AddCourseResponse {
@@ -75,6 +85,16 @@ export interface UpdateCoursePayload {
   description?: string;
   creditHours?: number;
   lecturerId?: string;
+  level?: number;
+  semester?: number;
+  lecturerIds?: string[];
+  slots?: {
+    day: "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY";
+    startTime: string;
+    endTime: string;
+    venue?: string;
+    lecturerId?: string;
+  }[];
 }
 
 export interface UpdateCourseResponse {
@@ -170,6 +190,24 @@ class CoursesService {
     }
   }
 
+  async getSemester(): Promise<ApiResponse<{ success: boolean; semester: number }>> {
+    try {
+      const token = await this.utilService.getTokenFromLocalStorage();
+      const response = await api.get<{ success: boolean; semester: number }>(
+        `${this.basePath}/semester`,
+        token,
+      );
+      return response;
+    } catch (error) {
+      return {
+        data: null,
+        error: error instanceof Error ? error.message : "Failed to fetch semester",
+        status: 0,
+        success: false,
+      };
+    }
+  }
+
   async getStudentCourses(): Promise<ApiResponse<GetStudentCoursesResponse>> {
     try {
       const token = await this.utilService.getTokenFromLocalStorage();
@@ -185,6 +223,27 @@ class CoursesService {
           error instanceof Error
             ? error.message
             : "Failed to fetch student courses",
+        status: 0,
+        success: false,
+      };
+    }
+  }
+
+  async getRepCourses(): Promise<ApiResponse<GetStudentCoursesResponse>> {
+    try {
+      const token = await this.utilService.getTokenFromLocalStorage();
+      const response = await api.get<GetStudentCoursesResponse>(
+        `${this.basePath}/rep-courses`,
+        token,
+      );
+      return response;
+    } catch (error) {
+      return {
+        data: null,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to fetch representative courses",
         status: 0,
         success: false,
       };
@@ -353,6 +412,25 @@ class CoursesService {
           error instanceof Error
             ? error.message
             : "Failed to remove lecturer from course",
+        status: 0,
+        success: false,
+      };
+    }
+  }
+
+  async getMyTimetable(): Promise<ApiResponse<{ success: boolean; data: any[] }>> {
+    try {
+      const token = await this.utilService.getTokenFromLocalStorage();
+      const response = await api.get<{ success: boolean; data: any[] }>(
+        "/activities/my-timetable",
+        token,
+      );
+      return response;
+    } catch (error) {
+      return {
+        data: null,
+        error:
+          error instanceof Error ? error.message : "Failed to fetch timetable",
         status: 0,
         success: false,
       };

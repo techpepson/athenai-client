@@ -36,6 +36,7 @@ import { Badge } from "@/components/ui/badge";
 import { EditMemberModal } from "@/components/members/EditMemberModal";
 import { Member } from "@/types/attendance";
 import { useAuth } from "@/contexts/AuthContext";
+import { coursesService } from "@/services/courses.services";
 
 // Rep user type for this component
 interface RepUser {
@@ -76,6 +77,8 @@ const CourseRepManagement = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [isAssigning, setIsAssigning] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
+  const [coursesList, setCoursesList] = useState<any[]>([]);
+  const [selectedCourseId, setSelectedCourseId] = useState<string>("");
 
   // Add modal state
   const [studentSearch, setStudentSearch] = useState("");
@@ -92,6 +95,7 @@ const CourseRepManagement = () => {
   useEffect(() => {
     if (token) {
       loadReps();
+      loadCourses();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
@@ -140,6 +144,7 @@ const CourseRepManagement = () => {
         const reps: RepUser[] = response.data.data.map((rep) => ({
           id: rep.student?.user?.id || rep.studentId,
           studentTableId: rep.studentId,
+          repId: rep.id,
           name: rep.student?.user?.name || "Unknown",
           email: rep.student?.user?.email || "",
           phone: rep.student?.user?.phone,
@@ -147,6 +152,13 @@ const CourseRepManagement = () => {
             rep.student?.studentId || rep.student?.matricNo || undefined,
           level: rep.student?.level,
           assignedAt: rep.assignedAt,
+          assignedCourse: rep.course
+            ? {
+                courseId: rep.course.id,
+                courseName: rep.course.title,
+                courseCode: rep.course.code,
+              }
+            : undefined,
           enrolledCourses:
             rep.student?.enrollments?.map((e) => ({
               courseId: e.courseId,
@@ -166,6 +178,17 @@ const CourseRepManagement = () => {
     }
   };
 
+  const loadCourses = async () => {
+    try {
+      const response = await coursesService.getAllCourses();
+      if (response.success && response.data?.data) {
+        setCoursesList(response.data.data);
+      }
+    } catch (err) {
+      console.error("Failed to load courses:", err);
+    }
+  };
+
   const handleAssign = async () => {
     if (!selectedStudent || !token) {
       toast({
@@ -176,19 +199,30 @@ const CourseRepManagement = () => {
       return;
     }
 
+    if (!selectedCourseId) {
+      toast({
+        title: "Error",
+        description: "Please select a course for this representative",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsAssigning(true);
     try {
       const response = await usersServices.assignRep(
         selectedStudent.studentTableId,
+        selectedCourseId,
         token,
       );
 
       if (response.success) {
         toast({
           title: "Success",
-          description: `${selectedStudent.name} has been assigned as a student representative`,
+          description: `${selectedStudent.name} has been assigned as a representative for the selected course`,
         });
         setAddModalOpen(false);
+        setSelectedCourseId("");
         loadReps();
       } else {
         toast({
@@ -226,17 +260,29 @@ const CourseRepManagement = () => {
       return;
     }
 
+    if (!selectedRep.assignedCourse?.courseId) {
+      toast({
+        title: "Error",
+        description: "Assigned course information not found",
+        variant: "destructive",
+      });
+      setDeleteDialogOpen(false);
+      setSelectedRep(null);
+      return;
+    }
+
     setIsRemoving(true);
     try {
       const response = await usersServices.removeRep(
         selectedRep.studentTableId,
+        selectedRep.assignedCourse.courseId,
         token,
       );
 
       if (response.success) {
         toast({
           title: "Success",
-          description: `${selectedRep.name} has been removed as student representative`,
+          description: `${selectedRep.name} has been removed as representative for the course`,
         });
         loadReps();
       } else {
@@ -291,15 +337,15 @@ const CourseRepManagement = () => {
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-foreground">
-            Student Representatives
+            Student Assistants
           </h1>
           <p className="text-muted-foreground mt-1">
-            Assign students as representatives to manage attendance sessions
+            Assign students as assistants to manage attendance sessions
           </p>
         </div>
         <Button variant="gradient" onClick={() => setAddModalOpen(true)}>
           <Plus className="w-4 h-4 mr-2" />
-          Assign Rep
+          Assign Assistant
         </Button>
       </div>
 
@@ -309,12 +355,12 @@ const CourseRepManagement = () => {
           <GraduationCap className="w-5 h-5 text-primary mt-0.5" />
           <div>
             <p className="text-sm font-medium text-foreground">
-              Student Rep Permissions
+              Student Assistant Permissions
             </p>
             <p className="text-sm text-muted-foreground mt-1">
-              Student representatives can create attendance sessions and take
+              Student assistants can create attendance sessions and take
               attendance of lecturers for all courses they are enrolled in. They
-              serve as reps throughout their studies, not per-course.
+              serve as assistants throughout their studies, not per-course.
             </p>
           </div>
         </div>
@@ -333,7 +379,7 @@ const CourseRepManagement = () => {
         </div>
 
         <div className="text-sm text-muted-foreground whitespace-nowrap">
-          {filteredReps.length} rep{filteredReps.length !== 1 ? "s" : ""}
+          {filteredReps.length} assistant{filteredReps.length !== 1 ? "s" : ""}
         </div>
       </div>
 
@@ -342,7 +388,7 @@ const CourseRepManagement = () => {
         {loading ? (
           <div className="p-12 text-center">
             <Loader2 className="w-8 h-8 text-muted-foreground mx-auto mb-4 animate-spin" />
-            <p className="text-muted-foreground">Loading representatives...</p>
+            <p className="text-muted-foreground">Loading assistants...</p>
           </div>
         ) : filteredReps.length === 0 && searchQuery ? (
           <div className="p-12 text-center">
@@ -351,7 +397,7 @@ const CourseRepManagement = () => {
               No results found
             </h3>
             <p className="text-muted-foreground mb-4">
-              No student representatives match your search
+              No student assistants match your search
             </p>
             <Button variant="outline" onClick={() => setSearchQuery("")}>
               Clear Search
@@ -361,14 +407,14 @@ const CourseRepManagement = () => {
           <div className="p-12 text-center">
             <UserCheck className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-medium text-foreground mb-2">
-              No student representatives
+              No student assistants
             </h3>
             <p className="text-muted-foreground mb-4">
-              Assign students as reps to help manage attendance
+              Assign students as assistants to help manage attendance
             </p>
             <Button variant="outline" onClick={() => setAddModalOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
-              Assign First Rep
+              Assign First Assistant
             </Button>
           </div>
         ) : (
@@ -386,11 +432,11 @@ const CourseRepManagement = () => {
                     <div className="flex items-center gap-2">
                       <p className="font-medium text-foreground">{rep.name}</p>
                       <Badge variant="secondary" className="text-xs">
-                        Student Rep
+                        Student Assistant
                       </Badge>
                       {rep.level && (
                         <Badge variant="outline" className="text-xs">
-                          Level {rep.level}
+                           Level {rep.level}
                         </Badge>
                       )}
                     </div>
@@ -402,20 +448,17 @@ const CourseRepManagement = () => {
                     )}
 
                     <div className="flex flex-wrap items-center gap-2 mt-1">
-                      {rep.enrolledCourses && rep.enrolledCourses.length > 0 ? (
-                        rep.enrolledCourses.map((course, idx) => (
-                          <Badge
-                            key={idx}
-                            variant="outline"
-                            className="text-[10px] font-normal gap-1"
-                          >
-                            <BookOpen className="w-3 h-3" />
-                            {course.courseCode || course.courseName}
-                          </Badge>
-                        ))
+                      {rep.assignedCourse ? (
+                        <Badge
+                          variant="gradient"
+                          className="text-[10px] font-normal gap-1"
+                        >
+                          <BookOpen className="w-3 h-3" />
+                          Assistant for: {rep.assignedCourse.courseCode} - {rep.assignedCourse.courseName}
+                        </Badge>
                       ) : (
                         <span className="text-xs text-muted-foreground italic">
-                          No enrolled courses
+                          No assigned course
                         </span>
                       )}
                     </div>
@@ -468,7 +511,7 @@ const CourseRepManagement = () => {
       <Dialog open={addModalOpen} onOpenChange={setAddModalOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Assign Student Representative</DialogTitle>
+            <DialogTitle>Assign Student Assistant</DialogTitle>
           </DialogHeader>
 
           <div className="py-4 space-y-4">
@@ -534,8 +577,27 @@ const CourseRepManagement = () => {
                   {selectedStudent.level && ` · Level ${selectedStudent.level}`}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Will be promoted to Student Representative role
+                  Will be promoted to Student Assistant role
                 </p>
+              </div>
+            )}
+
+            {selectedStudent && (
+              <div className="space-y-2 animate-fade-in">
+                <Label htmlFor="courseSelect">Select Course</Label>
+                <select
+                  id="courseSelect"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  value={selectedCourseId}
+                  onChange={(e) => setSelectedCourseId(e.target.value)}
+                >
+                  <option value="">Select a course...</option>
+                  {coursesList.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.code} - {c.title}
+                    </option>
+                  ))}
+                </select>
               </div>
             )}
           </div>
@@ -547,7 +609,7 @@ const CourseRepManagement = () => {
             <Button
               variant="gradient"
               onClick={handleAssign}
-              disabled={!selectedStudent || isAssigning}
+              disabled={!selectedStudent || !selectedCourseId || isAssigning}
             >
               {isAssigning ? (
                 <>
@@ -556,7 +618,7 @@ const CourseRepManagement = () => {
                 </>
               ) : (
                 <>
-                  Assign Rep <UserCheck className="w-4 h-4 ml-2" />
+                  Assign Assistant <UserCheck className="w-4 h-4 ml-2" />
                 </>
               )}
             </Button>
@@ -579,10 +641,10 @@ const CourseRepManagement = () => {
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove Student Representative?</AlertDialogTitle>
+            <AlertDialogTitle>Remove Student Assistant?</AlertDialogTitle>
             <AlertDialogDescription>
               This will remove {selectedRep?.name} from the student
-              representative role and demote them back to a regular student.
+              assistant role and demote them back to a regular student.
               They will no longer be able to create sessions or take attendance.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -600,7 +662,7 @@ const CourseRepManagement = () => {
                   Removing...
                 </>
               ) : (
-                "Remove Rep"
+                "Remove Assistant"
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

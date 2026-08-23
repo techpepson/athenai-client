@@ -70,6 +70,8 @@ export interface AttendanceSession {
   courseName?: string;
   createdBy?: string;
   createdByRole?: Role;
+  isOnline?: boolean;
+  meetingLink?: string;
   // Attendance records for the session
   attendances?: SessionAttendanceRecord[];
   // Expected attendees (from course enrollment)

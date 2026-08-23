@@ -1,4 +1,3 @@
-import { useState, useEffect } from "react";
 import { AttendanceSession } from "@/types/attendance";
 import { cn } from "@/lib/utils";
 import {
@@ -11,9 +10,8 @@ import {
   Eye,
   Trash2,
   RefreshCw,
-  LogIn,
-  LogOut,
   QrCode,
+  Video,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -44,39 +42,13 @@ interface SessionCardProps {
   onEnd?: (session: AttendanceSession) => void;
   onViewReport?: (session: AttendanceSession) => void;
   onDelete?: (session: AttendanceSession) => void;
-  onToggleMode?: (session: AttendanceSession) => void;
   onGenerateQrCode?: (session: AttendanceSession) => void;
-  onCheckout?: (session: AttendanceSession) => void;
   user: User | null;
   isStarting?: boolean;
   isEnding?: boolean;
-  isTogglingMode?: boolean;
   isDeleting?: boolean;
   isGeneratingQrCode?: boolean;
 }
-
-// localStorage key for checked out sessions
-const CHECKED_OUT_SESSIONS_KEY = "checked_out_sessions";
-
-// Helper to check if a session is checked out
-const isSessionCheckedOut = (sessionId: string): boolean => {
-  const stored = localStorage.getItem(CHECKED_OUT_SESSIONS_KEY);
-  if (!stored) return false;
-  const checkedOut: string[] = JSON.parse(stored);
-  return checkedOut.includes(sessionId);
-};
-
-// Helper to mark a session as checked out
-const markSessionCheckedOut = (sessionId: string): void => {
-  const stored = localStorage.getItem(CHECKED_OUT_SESSIONS_KEY);
-  const checkedOut: string[] = stored ? JSON.parse(stored) : [];
-  if (!checkedOut.includes(sessionId)) {
-    checkedOut.push(sessionId);
-    localStorage.setItem(CHECKED_OUT_SESSIONS_KEY, JSON.stringify(checkedOut));
-    // Dispatch event for cross-component sync
-    window.dispatchEvent(new Event("session-checked-out"));
-  }
-};
 
 export const SessionCard = ({
   session,
@@ -84,90 +56,22 @@ export const SessionCard = ({
   onEnd,
   onViewReport,
   onDelete,
-  onToggleMode,
   onGenerateQrCode,
-  onCheckout,
   user,
   isStarting = false,
   isEnding = false,
-  isTogglingMode = false,
   isDeleting = false,
   isGeneratingQrCode = false,
 }: SessionCardProps) => {
   const navigate = useNavigate();
-  const [isCheckedOut, setIsCheckedOut] = useState(() =>
-    isSessionCheckedOut(session.id),
-  );
 
   // Check if past end time
   const now = new Date();
   const endTimeMs = new Date(session.endTime).getTime();
   const isPastEndTime = now.getTime() >= endTimeMs;
 
-  // Auto checkout after 30 minutes past end time
-  useEffect(() => {
-    if (session.status !== "active") return;
-    if (isCheckedOut) return;
-
-    const AUTO_CHECKOUT_MINUTES = 30;
-    const autoCheckoutTime = endTimeMs + AUTO_CHECKOUT_MINUTES * 60 * 1000;
-    const timeUntilAutoCheckout = autoCheckoutTime - Date.now();
-
-    if (timeUntilAutoCheckout <= 0) {
-      // Already past auto checkout time
-      markSessionCheckedOut(session.id);
-      setIsCheckedOut(true);
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      markSessionCheckedOut(session.id);
-      setIsCheckedOut(true);
-    }, timeUntilAutoCheckout);
-
-    return () => clearTimeout(timer);
-  }, [session.id, session.status, isCheckedOut, endTimeMs]);
-
-  // Listen for checkout events from other components
-  useEffect(() => {
-    const handleCheckoutEvent = () => {
-      setIsCheckedOut(isSessionCheckedOut(session.id));
-    };
-
-    window.addEventListener("session-checked-out", handleCheckoutEvent);
-    window.addEventListener("storage", handleCheckoutEvent);
-
-    return () => {
-      window.removeEventListener("session-checked-out", handleCheckoutEvent);
-      window.removeEventListener("storage", handleCheckoutEvent);
-    };
-  }, [session.id]);
-
-  // Handle checkout
-  const handleCheckout = () => {
-    markSessionCheckedOut(session.id);
-    setIsCheckedOut(true);
-    onCheckout?.(session);
-  };
-
-  // Check if user can checkout (REP or LECTURER)
   const isRep = user?.role === Role.REP;
   const isLecturer = user?.role === Role.LECTURER;
-  const canCheckout = isRep || isLecturer;
-
-  // Check if session mode can be toggled (only CHECK_IN -> CHECK_OUT allowed by backend)
-  // Backend allows toggle only within 15 mins after end time
-  const canToggleMode = () => {
-    if (session.status !== "active") return false;
-    if (session.attendanceType === "checkout") return false; // Already in CHECK_OUT
-
-    const GRACE_MINUTES = 15;
-    const now = Date.now();
-    const endTime = new Date(session.endTime).getTime();
-    const graceDeadline = endTime + GRACE_MINUTES * 60 * 1000;
-
-    return now <= graceDeadline;
-  };
 
   // Calculate progress safely to avoid NaN
   const progress =
@@ -200,11 +104,13 @@ export const SessionCard = ({
   const canManageSession =
     isCreator && (user?.role === Role.LECTURER || user?.role === Role.REP);
 
-  // Handle show live (navigate to kiosk with session)
+  // Handle show live (navigate to kiosk or meeting)
   const handleShowLive = () => {
-    // Navigate to kiosk mode with session ID in URL
-    // Session data will be fetched from API in Kiosk component
-    navigate(`/kiosk/${session.id}`);
+    if (session.isOnline) {
+      navigate(`/meeting/${session.id}`);
+    } else {
+      navigate(`/kiosk/${session.id}`);
+    }
   };
 
   return (
@@ -269,7 +175,7 @@ export const SessionCard = ({
               hour: "2-digit",
               minute: "2-digit",
             })}{" "}
-            -
+            -{" "}
             {session.endTime.toLocaleTimeString([], {
               hour: "2-digit",
               minute: "2-digit",
@@ -315,24 +221,8 @@ export const SessionCard = ({
           </Button>
         )}
 
-        {/* Active session past end time - show Checkout for REP/LECTURER */}
-        {session.status === "active" &&
-          isPastEndTime &&
-          canCheckout &&
-          !isCheckedOut && (
-            <Button
-              className="flex-1"
-              variant="destructive"
-              size="sm"
-              onClick={handleCheckout}
-            >
-              <LogOut className="w-4 h-4 mr-2" />
-              Checkout
-            </Button>
-          )}
-
-        {/* Active session past end time and checked out - show View Report */}
-        {session.status === "active" && isPastEndTime && isCheckedOut && (
+        {/* Active session past end time - show View Report */}
+        {session.status === "active" && isPastEndTime && (
           <Button
             className="flex-1"
             variant="outline"
@@ -353,8 +243,17 @@ export const SessionCard = ({
               size="sm"
               onClick={handleShowLive}
             >
-              <Eye className="w-4 h-4 mr-2" />
-              Show Live
+              {session.isOnline ? (
+                <>
+                  <Video className="w-4 h-4 mr-2" />
+                  Join Class
+                </>
+              ) : (
+                <>
+                  <Eye className="w-4 h-4 mr-2" />
+                  Show Live
+                </>
+              )}
             </Button>
             <Button
               className="flex-1"
@@ -384,8 +283,17 @@ export const SessionCard = ({
               size="sm"
               onClick={handleShowLive}
             >
-              <Eye className="w-4 h-4 mr-2" />
-              Show Live
+              {session.isOnline ? (
+                <>
+                  <Video className="w-4 h-4 mr-2" />
+                  Join Class
+                </>
+              ) : (
+                <>
+                  <Eye className="w-4 h-4 mr-2" />
+                  Show Live
+                </>
+              )}
             </Button>
           )}
 
@@ -401,7 +309,7 @@ export const SessionCard = ({
         )}
       </div>
 
-      {/* Secondary Actions - Toggle Mode, QR Code & Delete (only for session creator) */}
+      {/* Secondary Actions - QR Code & Delete (only for session creator) */}
       {canManageSession && session.status === "active" && (
         <div className="flex gap-2 mt-3 pt-3 border-t border-border">
           {/* Generate QR Code Button */}
@@ -427,50 +335,16 @@ export const SessionCard = ({
             </Tooltip>
           </TooltipProvider>
 
-          {/* Toggle Mode Button */}
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => onToggleMode?.(session)}
-                  disabled={!canToggleMode() || isTogglingMode}
-                >
-                  {isTogglingMode ? (
-                    <RefreshCw className="w-4 h-4 sm:mr-2 animate-spin" />
-                  ) : session.attendanceType === "checkin" ? (
-                    <LogOut className="w-4 h-4 sm:mr-2" />
-                  ) : (
-                    <LogIn className="w-4 h-4 sm:mr-2" />
-                  )}
-                  <span className="hidden sm:inline">
-                    {session.attendanceType === "checkin"
-                      ? "Switch to Check-Out"
-                      : "Check-Out Mode"}
-                  </span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {!canToggleMode()
-                  ? session.attendanceType === "checkout"
-                    ? "Session is already in Check-Out mode"
-                    : "Can only switch to Check-Out within 15 mins after session end time"
-                  : "Switch session to Check-Out mode for students to mark their departure"}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
           {/* Delete Button with Confirmation */}
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="destructive" size="sm" disabled={isDeleting}>
+              <Button variant="destructive" size="sm" disabled={isDeleting} className="flex-1">
                 {isDeleting ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
                 ) : (
-                  <Trash2 className="w-4 h-4" />
+                  <Trash2 className="w-4 h-4 mr-2" />
                 )}
+                Delete Session
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>

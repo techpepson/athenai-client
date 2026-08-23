@@ -70,7 +70,6 @@ export const EditMemberModal = ({
     studentId: "",
     lecturerId: "",
     staffId: "",
-    hourlyRate: "",
     creditHours: "",
     isMinor: false,
     status: "active" as "active" | "inactive",
@@ -168,7 +167,6 @@ export const EditMemberModal = ({
             : "",
         lecturerId: member.role === Role.LECTURER ? member.studentId || "" : "",
         staffId: member.role === Role.STAFF ? member.studentId || "" : "",
-        hourlyRate: member.hourlyRate?.toString() || "",
         creditHours: member.creditHours?.toString() || "",
         isMinor: member.isMinor,
         status: member.status,
@@ -201,7 +199,6 @@ export const EditMemberModal = ({
             : "",
         lecturerId: member.role === Role.LECTURER ? member.studentId || "" : "",
         staffId: member.role === Role.STAFF ? member.studentId || "" : "",
-        hourlyRate: member.hourlyRate?.toString() || "",
         creditHours: member.creditHours?.toString() || "",
         isMinor: member.isMinor,
         status: member.status,
@@ -231,12 +228,11 @@ export const EditMemberModal = ({
         formData.status !== originalData.status ||
         formData.email !== originalData.email;
 
-      // Determine which fields changed for records (studentId, lecturerId, staffId, courses, hourlyRate, creditHours)
+      // Determine which fields changed for records (studentId, lecturerId, staffId, courses, creditHours)
       const recordsChanged =
         formData.studentId !== originalData.studentId ||
         formData.lecturerId !== originalData.lecturerId ||
         formData.staffId !== originalData.staffId ||
-        formData.hourlyRate !== originalData.hourlyRate ||
         formData.creditHours !== originalData.creditHours ||
         JSON.stringify(formData.coursesTaken) !==
           JSON.stringify(originalData.coursesTaken) ||
@@ -301,10 +297,6 @@ export const EditMemberModal = ({
         } else if (member.role === Role.LECTURER) {
           if (formData.lecturerId !== originalData.lecturerId) {
             recordsPayload.lecturerId = formData.lecturerId;
-          }
-          if (formData.hourlyRate !== originalData.hourlyRate) {
-            recordsPayload.lecturerHourlyRate =
-              parseFloat(formData.hourlyRate) || 0;
           }
           if (formData.creditHours !== originalData.creditHours) {
             recordsPayload.lecturerCreditHours =
@@ -467,7 +459,7 @@ export const EditMemberModal = ({
                   {member.role === Role.STUDENT || member.role === Role.REP ? (
                     <>
                       <SelectItem value={Role.STUDENT}>Student</SelectItem>
-                      <SelectItem value={Role.REP}>Level Rep</SelectItem>
+                      <SelectItem value={Role.REP}>Level Assistant</SelectItem>
                     </>
                   ) : (
                     <>
@@ -511,19 +503,7 @@ export const EditMemberModal = ({
                     placeholder="e.g., LEC2024001"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="hourlyRate">Hourly Rate (GHS)</Label>
-                  <Input
-                    id="hourlyRate"
-                    type="number"
-                    step="0.01"
-                    value={formData.hourlyRate}
-                    onChange={(e) =>
-                      setFormData({ ...formData, hourlyRate: e.target.value })
-                    }
-                    placeholder="e.g., 50.00"
-                  />
-                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="creditHours">Credit Hours</Label>
                   <Input

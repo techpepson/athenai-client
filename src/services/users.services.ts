@@ -336,6 +336,7 @@ class UsersServices {
    */
   async assignRep(
     studentId: string,
+    courseId: string,
     token: string,
   ): Promise<ApiResponse<AssignRepResponse>> {
     try {
@@ -343,7 +344,7 @@ class UsersServices {
         `${this.basePath}/assign-rep`,
         {},
         token,
-        { params: { studentId } },
+        { params: { studentId, courseId } },
       );
       return response;
     } catch (error) {
@@ -363,13 +364,14 @@ class UsersServices {
    */
   async removeRep(
     studentId: string,
+    courseId: string,
     token: string,
   ): Promise<ApiResponse<RemoveRepResponse>> {
     try {
       const response = await api.delete<RemoveRepResponse>(
         `${this.basePath}/remove/rep`,
         token,
-        { params: { studentId } },
+        { params: { studentId, courseId } },
       );
       return response;
     } catch (error) {
