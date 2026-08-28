@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // API Configuration
-const PROD_URL = "https://api.comas.edu.gh/api"; // Replace with your production URL
+const PROD_URL = "https://edu-server.bluvelhq.com/api"; // Replace with your production URL
 const DEV_URL = "http://localhost:4000/api";
 
 const getBaseUrl = (): string => {
