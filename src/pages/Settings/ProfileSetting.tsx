@@ -880,7 +880,7 @@ const ProfileSetting = () => {
                   <span>Semester {currentSemester}</span>
                 </div>
                 <Badge variant="outline" className="bg-background text-primary border-primary/20">
-                  UG EduTrack
+                  UG TRACE
                 </Badge>
               </div>
 

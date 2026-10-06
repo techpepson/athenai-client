@@ -157,7 +157,7 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
             {!collapsed && (
               <div className="animate-fade-in">
                 <h1 className="font-bold text-lg text-sidebar-foreground">
-                  EduTrack
+                  TRACE
                 </h1>
                 <p className="text-xs text-sidebar-foreground/50">
                   Attendance System
@@ -331,7 +331,7 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
             </div>
             <div>
               <h1 className="font-bold text-lg text-sidebar-foreground">
-                EduTrack
+                TRACE
               </h1>
               <p className="text-xs text-sidebar-foreground/50">
                 Attendance System

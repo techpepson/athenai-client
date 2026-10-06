@@ -91,13 +91,13 @@ const Auth = () => {
                   <div className="w-20 h-20 rounded-2xl bg-white dark:bg-slate-950 flex items-center justify-center border border-slate-100 dark:border-slate-800 shadow-[0_8px_30px_rgb(0,0,0,0.06)] hover:scale-105 transition-all duration-300 p-3.5">
                     <img
                       src="/ug_logo.png"
-                      alt="EduTrack"
+                      alt="TRACE"
                       className="w-full h-full object-contain rounded-xl filter drop-shadow-[0_2px_8px_rgba(0,0,0,0.05)]"
                     />
                   </div>
                 </div>
                 <h1 className="text-3xl font-bold tracking-tight text-foreground">
-                  EduTrack
+                  TRACE
                 </h1>
                 <p className="text-muted-foreground">Sign into your account</p>
               </div>
@@ -194,7 +194,7 @@ const Auth = () => {
                   <div className="w-20 h-20 rounded-2xl bg-white dark:bg-slate-950 flex items-center justify-center border border-slate-100 dark:border-slate-800 shadow-[0_8px_30px_rgb(0,0,0,0.06)] hover:scale-105 transition-all duration-300 p-3.5">
                     <img
                       src="/ug_logo.png"
-                      alt="EduTrack"
+                      alt="TRACE"
                       className="w-full h-full object-contain rounded-xl filter drop-shadow-[0_2px_8px_rgba(0,0,0,0.05)]"
                     />
                   </div>
@@ -638,7 +638,7 @@ const Auth = () => {
                 <div className="w-16 h-1 bg-gradient-to-r from-transparent via-primary to-transparent rounded-full opacity-60" />
                 
                 <p className="text-slate-400 text-xs sm:text-sm font-normal max-w-xs leading-relaxed">
-                  Welcome to EduTrack. Access your courses, mark attendance via face check-in, and manage academic activities.
+                  Welcome to TRACE. Access your courses, mark attendance via face check-in, and manage academic activities.
                 </p>
               </div>
             </div>
@@ -651,13 +651,13 @@ const Auth = () => {
                     <div className="w-full h-full rounded-2xl bg-white flex items-center justify-center p-2.5">
                       <img
                         src="/ug_logo.png"
-                        alt="EduTrack"
+                        alt="TRACE"
                         className="w-full h-full object-contain rounded-xl"
                       />
                     </div>
                   </div>
                   <h1 className="text-5xl font-bold tracking-tight text-white drop-shadow-lg">
-                    EduTrack
+                    TRACE
                   </h1>
                   <p className="text-base text-slate-300 mt-3 font-medium tracking-wide">
                     Identity Verification System

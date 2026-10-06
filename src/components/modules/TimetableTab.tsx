@@ -260,7 +260,7 @@ const TimetableTab = () => {
     ];
 
     const rows: string[][] = [];
-    rows.push(["EduTrack Consolidated Teaching Timetable"]);
+    rows.push(["TRACE Consolidated Teaching Timetable"]);
     rows.push([
       `Level Filter: ${levelFilter} | Semester Filter: ${semesterFilter}`,
     ]);
@@ -345,7 +345,7 @@ const TimetableTab = () => {
     ];
 
     XLSX.utils.book_append_sheet(wb, ws, "Consolidated Timetable");
-    XLSX.writeFile(wb, "EduTrack_Timetable.xlsx");
+    XLSX.writeFile(wb, "TRACE_Timetable.xlsx");
     toast.success("Consolidated Timetable downloaded successfully");
   };
 

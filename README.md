@@ -1,6 +1,6 @@
-# FaceTrack Client
+# TRACE Client
 
-Frontend application for the FaceTrack facial-recognition attendance platform.
+Frontend application for the TRACE facial-recognition attendance platform.
 
 ## Overview
 
@@ -82,7 +82,7 @@ Default dev server runs on:
 
 ## Backend Integration
 
-The frontend expects the FaceTrack backend API to be running and reachable via:
+The frontend expects the TRACE backend API to be running and reachable via:
 
 - VITE_API_DEV_URL for development
 - VITE_API_PROD_URL for production

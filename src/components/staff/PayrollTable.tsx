@@ -280,7 +280,7 @@ const StaffRowWithExpansion = ({
                 {staff.staffName}
               </div>
               <div className="text-sm text-muted-foreground truncate">
-                {staff.staffName.toLowerCase().replace(" ", "")}@facetrack.com
+                {staff.staffName.toLowerCase().replace(" ", "")}@trace.com
               </div>
             </div>
           </div>

@@ -305,7 +305,7 @@ const AdminManagement = () => {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="admin@facetrack.com"
+                  placeholder="admin@trace.com"
                   value={newStaffEmail}
                   onChange={(e) => setNewStaffEmail(e.target.value)}
                 />
