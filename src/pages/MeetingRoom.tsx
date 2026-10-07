@@ -34,6 +34,7 @@ import {
 } from "@/services/sessions.service";
 import { markBulkManualAttendance } from "@/services/attendance.services";
 import { coursesService } from "@/services/courses.services";
+import { usersServices } from "@/services/users.services";
 
 interface PeerConnection {
   peerId: string;
@@ -60,7 +61,7 @@ interface EnrolledStudent {
 export default function MeetingRoom() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, token: authToken } = useAuth();
 
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -85,7 +86,7 @@ export default function MeetingRoom() {
   const pollingIntervalRef = useRef<number | null>(null);
   const peersIntervalRef = useRef<number | null>(null);
 
-  const token = localStorage.getItem("accessToken") || "";
+  const token = authToken || localStorage.getItem("accessToken") || localStorage.getItem("token") || "";
   const isRep = user?.role === Role.REP;
   const isLecturer = user?.role === Role.LECTURER;
   const isAdmin = user?.role === Role.ADMIN || user?.role === Role.SYSTEM_ADMIN;
@@ -115,28 +116,67 @@ export default function MeetingRoom() {
           const sessionData = rawData.data || rawData;
           setSession(sessionData);
 
-          // If there's a courseId, load enrolled students
-          if (sessionData.courseId) {
-            // We can load expected attendees using the course's enrollments from session
-            if (sessionData.course?.enrollments) {
-              const students = sessionData.course.enrollments.map((e: any) => ({
-                userId: e.student?.user?.id || "",
-                name: e.student?.user?.name || "Unknown Student",
-                email: e.student?.user?.email || "",
-                studentId: e.student?.studentId || e.student?.matricNo || undefined,
-              }));
-              setEnrolledStudents(students);
-            }
+          let students: EnrolledStudent[] = [];
 
-            // Sync already marked present students
-            if (sessionData.attendances) {
-              const presentSet = new Set<string>(
-                sessionData.attendances
-                  .filter((a: any) => a.status === "PRESENT" || a.status === "LATE" || a.status === "CHECKED_IN")
-                  .map((a: any) => a.userId)
-              );
-              setMarkedPresent(presentSet);
+          // 1. Try loading enrollments from course if available
+          if (sessionData.course?.enrollments && Array.isArray(sessionData.course.enrollments) && sessionData.course.enrollments.length > 0) {
+            students = sessionData.course.enrollments
+              .map((e: any) => ({
+                userId: e.student?.user?.id || e.student?.userId || e.studentId || e.userId || "",
+                name: e.student?.user?.name || e.name || "Student",
+                email: e.student?.user?.email || e.email || "",
+                studentId: e.student?.studentId || e.student?.matricNo || undefined,
+              }))
+              .filter((s: EnrolledStudent) => Boolean(s.userId));
+          }
+
+          // 2. Fallback: query all users if course enrollments list is empty
+          if (students.length === 0) {
+            try {
+              const usersRes = await usersServices.getAllUsers();
+              if (usersRes.success && usersRes.data) {
+                const rawUsers =
+                  (usersRes.data as any).users ||
+                  (usersRes.data as any).data ||
+                  usersRes.data;
+                if (Array.isArray(rawUsers)) {
+                  const courseLevel = sessionData.course?.level || sessionData.level;
+                  const filtered = rawUsers
+                    .filter((u: any) => {
+                      if (!u.student) return false;
+                      if (courseLevel && u.student.level !== courseLevel) return false;
+                      return true;
+                    })
+                    .map((u: any) => ({
+                      userId: u.id,
+                      name: u.name,
+                      email: u.email,
+                      studentId: u.student?.studentId || u.student?.matricNo || undefined,
+                    }));
+                  if (filtered.length > 0) {
+                    students = filtered;
+                  }
+                }
+              }
+            } catch (userFetchErr) {
+              console.error("Failed to load students list fallback:", userFetchErr);
             }
+          }
+
+          setEnrolledStudents(students);
+
+          // Sync already marked present students
+          if (sessionData.attendances && Array.isArray(sessionData.attendances)) {
+            const presentSet = new Set<string>(
+              sessionData.attendances
+                .filter((a: any) =>
+                  a.status === "PRESENT" ||
+                  a.status === "LATE" ||
+                  a.status === "CHECKED_IN"
+                )
+                .map((a: any) => a.userId)
+            );
+            setMarkedPresent(presentSet);
           }
         } else {
           toast.error("Failed to retrieve class session details");
@@ -415,25 +455,94 @@ export default function MeetingRoom() {
 
   // Submit checked present students to backend in bulk
   const submitCheckedAttendance = async () => {
-    if (!sessionId || !token) return;
+    if (!sessionId) {
+      toast.error("Session identifier is missing.");
+      return;
+    }
+    if (!token) {
+      toast.error("Authentication required to submit attendance.");
+      return;
+    }
 
-    setSubmittingAttendance(true);
-    try {
-      const records = enrolledStudents.map((student) => ({
+    // Build the bulk records array
+    let records: { userId: string; status: string; remarks?: string }[] = [];
+
+    if (enrolledStudents.length > 0) {
+      records = enrolledStudents.map((student) => ({
         userId: student.userId,
         status: markedPresent.has(student.userId) ? "PRESENT" : "ABSENT",
         remarks: "Verified via online video meeting classroom",
       }));
+    } else if (markedPresent.size > 0) {
+      // Fallback: If no pre-populated course roster, record all selected attendees as PRESENT
+      records = Array.from(markedPresent).map((userId) => ({
+        userId,
+        status: "PRESENT",
+        remarks: "Verified via online video meeting classroom",
+      }));
+    } else {
+      toast.warning("No students available or selected to save attendance.");
+      return;
+    }
 
+    setSubmittingAttendance(true);
+    try {
       const res = await markBulkManualAttendance(sessionId, records, token);
-      if (res.success) {
-        toast.success("Attendance submitted successfully!");
+      if (res.success && res.data) {
+        const data = res.data as {
+          results?: { userId: string; success: boolean; attendance?: any }[];
+          errors?: { userId: string; success: boolean; error?: string }[];
+          totalProcessed?: number;
+        };
+
+        const successCount = data.results?.filter((r) => r.success).length ?? 0;
+        const errorCount = data.errors?.length ?? 0;
+
+        if (successCount > 0) {
+          toast.success(`Successfully saved attendance for ${successCount} student${successCount !== 1 ? "s" : ""}!`);
+        } else if (errorCount === 0) {
+          toast.success("Attendance records saved successfully!");
+        }
+
+        if (errorCount > 0) {
+          const firstErr = data.errors?.[0]?.error || "Some records could not be saved";
+          toast.error(`${errorCount} record(s) failed: ${firstErr}`);
+        }
+
+        // Update local session state to immediately reflect the newly saved attendances
+        const successUserIds = new Set(
+          data.results?.filter((r) => r.success).map((r) => r.userId) || []
+        );
+
+        if (session) {
+          const currentAttendances = [...(session.attendances || [])];
+          records.forEach((rec) => {
+            if (successUserIds.has(rec.userId)) {
+              const idx = currentAttendances.findIndex((a) => a.userId === rec.userId);
+              if (idx >= 0) {
+                currentAttendances[idx] = {
+                  ...currentAttendances[idx],
+                  status: rec.status as any,
+                };
+              } else {
+                currentAttendances.push({
+                  id: `temp-${Date.now()}-${rec.userId}`,
+                  sessionId,
+                  userId: rec.userId,
+                  status: rec.status as any,
+                  timestamp: new Date(),
+                } as any);
+              }
+            }
+          });
+          setSession({ ...session, attendances: currentAttendances });
+        }
       } else {
         toast.error(res.error || "Failed to submit attendance");
       }
-    } catch (err) {
-      console.error("Error submitting manual attendance:", err);
-      toast.error("An error occurred during submission");
+    } catch (err: any) {
+      console.error("Error submitting bulk manual attendance:", err);
+      toast.error(err?.message || "An error occurred during submission");
     } finally {
       setSubmittingAttendance(false);
     }
@@ -441,22 +550,35 @@ export default function MeetingRoom() {
 
   // Auto-mark present any students currently connected to WebRTC room
   const autoMarkConnectedStudents = () => {
-    const connectedUserIds = peers.map((p) => {
-      // peerId prefix structure: `peer-${userId}-...`
+    const connectedUserIds: string[] = [];
+
+    peers.forEach((p) => {
+      // peerId structure: `peer-${userId}-...`
       const parts = p.peerId.split("-");
-      return parts[1] || "";
-    }).filter(Boolean);
+      if (parts[1]) connectedUserIds.push(parts[1]);
+    });
+
+    // Also include current user if student
+    if (user?.id && user.role === Role.STUDENT) {
+      connectedUserIds.push(user.id);
+    }
 
     const newMarked = new Set(markedPresent);
+    let newlyMarked = 0;
+
     connectedUserIds.forEach((uid) => {
-      // Find matching enrolled student
-      if (enrolledStudents.some((s) => s.userId === uid)) {
+      if (!newMarked.has(uid)) {
         newMarked.add(uid);
+        newlyMarked++;
       }
     });
 
     setMarkedPresent(newMarked);
-    toast.success("Connected students checked automatically. Click 'Save Attendance' to submit.");
+    if (connectedUserIds.length > 0) {
+      toast.success(`${connectedUserIds.length} connected attendee(s) checked. Click 'Save Attendance' to save.`);
+    } else {
+      toast.info("No remote participants detected yet in this meeting room.");
+    }
   };
 
   const toggleFullscreen = () => {
@@ -482,6 +604,7 @@ export default function MeetingRoom() {
 
   // Check if a student is active in meeting
   const isStudentInMeeting = (userId: string) => {
+    if (user?.id === userId) return true;
     return peers.some((p) => p.peerId.includes(userId));
   };
 
@@ -844,7 +967,7 @@ export default function MeetingRoom() {
                           ) : (
                             <>
                               <ShieldCheck className="w-3.5 h-3.5 mr-1" />
-                              Save Roll
+                              Save Attendance
                             </>
                           )}
                         </Button>
