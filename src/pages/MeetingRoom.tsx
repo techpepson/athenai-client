@@ -18,6 +18,10 @@ import {
   ShieldCheck,
   UserCheck,
   ClipboardList,
+  Maximize2,
+  Minimize2,
+  X,
+  Radio,
 } from "lucide-react";
 import {
   joinMeeting,
@@ -66,6 +70,8 @@ export default function MeetingRoom() {
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [activeTab, setActiveTab] = useState<"participants" | "attendance">("participants");
+  const [showSidebar, setShowSidebar] = useState<boolean>(false);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   
   // Attendance and enrollment state
   const [enrolledStudents, setEnrolledStudents] = useState<EnrolledStudent[]>([]);
@@ -453,11 +459,23 @@ export default function MeetingRoom() {
     toast.success("Connected students checked automatically. Click 'Save Attendance' to submit.");
   };
 
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+      setIsFullscreen(true);
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+        setIsFullscreen(false);
+      }
+    }
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white">
+      <div className="h-screen w-screen bg-slate-950 flex flex-col items-center justify-center text-white">
         <Loader2 className="w-12 h-12 text-amber-500 animate-spin mb-4" />
-        <p className="text-slate-400 text-lg">Entering video classroom...</p>
+        <p className="text-slate-400 text-base font-medium">Entering video classroom...</p>
       </div>
     );
   }
@@ -467,348 +485,446 @@ export default function MeetingRoom() {
     return peers.some((p) => p.peerId.includes(userId));
   };
 
+  const participantCount = peers.length + 1;
+
+  // Responsive dynamic grid layout class based on participant count
+  let videoGridClass = "w-full max-w-4xl mx-auto flex items-center justify-center";
+  if (participantCount === 2) {
+    videoGridClass = "grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 max-w-5xl w-full mx-auto";
+  } else if (participantCount <= 4) {
+    videoGridClass = "grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 max-w-5xl w-full mx-auto";
+  } else if (participantCount <= 6) {
+    videoGridClass = "grid grid-cols-2 lg:grid-cols-3 gap-3 w-full max-w-6xl mx-auto";
+  } else {
+    videoGridClass = "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3 w-full mx-auto";
+  }
+
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col font-sans text-slate-100">
+    <div className="h-screen max-h-screen w-screen bg-slate-950 flex flex-col font-sans text-slate-100 overflow-hidden select-none">
       {/* Top Header Bar */}
-      <div className="bg-slate-900/80 backdrop-blur border-b border-slate-800 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-500">
-            <Video className="w-6 h-6" />
+      <header className="h-14 sm:h-16 flex-shrink-0 bg-slate-900/90 backdrop-blur border-b border-slate-800 px-3 sm:px-6 flex items-center justify-between z-30">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-500 flex-shrink-0">
+            <Video className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
-          <div>
-            <h1 className="text-lg font-bold text-white tracking-wide">
+          <div className="min-w-0">
+            <h1 className="text-xs sm:text-sm font-bold text-white tracking-wide truncate">
               {session?.name || "Online Class"}
             </h1>
-            <p className="text-xs text-amber-500 font-medium tracking-wider uppercase">
+            <p className="text-[10px] sm:text-xs text-amber-500 font-semibold tracking-wider uppercase truncate">
               {session?.course?.code || "COURSE"} &mdash; {session?.course?.title || "Online Session"}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="bg-slate-800/80 text-xs text-slate-300 font-mono px-3 py-1.5 rounded-full border border-slate-700/50 flex items-center gap-1.5">
+
+        <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+          <div className="hidden sm:flex bg-slate-800/80 text-[11px] text-slate-300 font-mono px-2.5 py-1 rounded-full border border-slate-700/50 items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            LIVE MEETING ROOM
+            LIVE MEETING
           </div>
+
+          <Button
+            variant={showSidebar ? "gradient" : "outline"}
+            size="sm"
+            onClick={() => setShowSidebar(!showSidebar)}
+            className="h-8 sm:h-9 px-2.5 sm:px-3 text-xs font-semibold gap-1.5 border-slate-700"
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span className="hidden xs:inline">Participants</span>
+            <span className="bg-slate-950/80 text-[10px] px-1.5 py-0.2 rounded-full text-amber-400 font-mono">
+              {participantCount}
+            </span>
+          </Button>
         </div>
-      </div>
+      </header>
 
-      {/* Main Classroom Workspace Grid */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left Video Feeds Grid */}
-        <div className="flex-1 p-6 overflow-y-auto flex flex-col justify-between">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 flex-1 items-center justify-center max-w-5xl mx-auto w-full">
-            {/* Local Video Card */}
-            <div className="relative aspect-video bg-slate-900 rounded-2xl overflow-hidden border-2 border-amber-500/40 shadow-xl group">
-              {localStream && !isVideoOff ? (
-                <video
-                  autoPlay
-                  playsInline
-                  muted
-                  ref={(video) => {
-                    if (video && video.srcObject !== localStream) {
-                      video.srcObject = localStream;
-                    }
-                  }}
-                  className="w-full h-full object-cover transform -scale-x-100"
-                />
-              ) : (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/90 gap-3">
-                  <div className="w-14 h-14 rounded-full bg-slate-800 flex items-center justify-center text-slate-500 border border-slate-700">
-                    <VideoOff className="w-6 h-6" />
-                  </div>
-                  <span className="text-sm text-slate-400 font-medium">Camera Off</span>
-                </div>
-              )}
-              <div className="absolute bottom-3 left-3 bg-slate-950/80 backdrop-blur px-3 py-1.5 rounded-lg border border-slate-800 text-xs font-semibold flex items-center gap-1.5">
-                <span className="text-amber-400 font-medium">You</span>
-                <span className="text-slate-400 text-[10px] uppercase bg-slate-900 px-1 py-0.5 rounded">
-                  {user?.role}
-                </span>
-              </div>
-            </div>
-
-            {/* Remote Video Cards */}
-            {peers.map((peer) => {
-              const stream = remoteStreams[peer.peerId];
-              return (
-                <div
-                  key={peer.peerId}
-                  className="relative aspect-video bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 shadow-xl group hover:border-amber-500/30 transition-all duration-300"
-                >
-                  {stream && stream.getVideoTracks().some(track => track.enabled) ? (
-                    <video
-                      autoPlay
-                      playsInline
-                      ref={(video) => {
-                        if (video && video.srcObject !== stream) {
-                          video.srcObject = stream;
-                        }
-                      }}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/95 gap-3">
-                      <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center text-slate-600 border border-slate-700/50">
-                        <VideoOff className="w-5 h-5" />
-                      </div>
-                      <span className="text-xs text-slate-500">Video Off</span>
+      {/* Main Workspace */}
+      <div className="flex-1 flex overflow-hidden relative min-h-0">
+        {/* Video Canvas Container */}
+        <main className="flex-1 flex flex-col min-h-0 overflow-hidden relative bg-slate-950">
+          {/* Scrollable Video Feeds Canvas */}
+          <div className="flex-1 overflow-y-auto min-h-0 p-2 sm:p-4 md:p-6 flex items-center justify-center">
+            <div className={videoGridClass}>
+              {/* Local Video Card */}
+              <div className="relative aspect-video bg-slate-900 rounded-xl sm:rounded-2xl overflow-hidden border-2 border-amber-500/50 shadow-2xl group flex items-center justify-center">
+                {localStream && !isVideoOff ? (
+                  <video
+                    autoPlay
+                    playsInline
+                    muted
+                    ref={(video) => {
+                      if (video && video.srcObject !== localStream) {
+                        video.srcObject = localStream;
+                      }
+                    }}
+                    className="w-full h-full object-cover transform -scale-x-100"
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/95 gap-2 sm:gap-3 p-4 text-center">
+                    <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-slate-800 flex items-center justify-center text-slate-500 border border-slate-700">
+                      <VideoOff className="w-6 h-6 sm:w-8 sm:h-8" />
                     </div>
-                  )}
-                  <div className="absolute bottom-3 left-3 bg-slate-950/80 backdrop-blur px-3 py-1.5 rounded-lg border border-slate-800 text-xs font-semibold flex items-center gap-1.5">
-                    <span className="text-white">{peer.name}</span>
-                    <span className="text-slate-400 text-[10px] uppercase bg-slate-900 px-1 py-0.5 rounded">
-                      {peer.role}
-                    </span>
+                    <span className="text-xs sm:text-sm text-slate-400 font-medium">Camera Off</span>
                   </div>
-                </div>
-              );
-            })}
-
-            {/* Empty grid state placeholder */}
-            {peers.length === 0 && (
-              <div className="col-span-full py-16 flex flex-col items-center justify-center text-center max-w-md mx-auto">
-                <div className="w-16 h-16 rounded-full bg-slate-900 flex items-center justify-center text-slate-600 border border-slate-800/80 mb-4 animate-pulse">
-                  <Users className="w-8 h-8" />
-                </div>
-                <h3 className="text-base font-bold text-white">Waiting for other participants</h3>
-                <p className="text-sm text-slate-500 mt-1">
-                  Share the session link or attendance QR code so other students can join the online video conference class.
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* Bottom Call Controls Toolbar */}
-          <div className="bg-slate-900/90 border border-slate-850 p-4 rounded-2xl flex items-center justify-center gap-4 max-w-md mx-auto w-full shadow-2xl mt-6">
-            <Button
-              variant={isMuted ? "destructive" : "secondary"}
-              size="icon"
-              className="w-12 h-12 rounded-full flex items-center justify-center"
-              onClick={toggleMute}
-            >
-              {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-            </Button>
-            
-            <Button
-              variant={isVideoOff ? "destructive" : "secondary"}
-              size="icon"
-              className="w-12 h-12 rounded-full flex items-center justify-center"
-              onClick={toggleVideo}
-            >
-              {isVideoOff ? <VideoOff className="w-5 h-5" /> : <VideoIcon className="w-5 h-5" />}
-            </Button>
-
-            <div className="w-px h-6 bg-slate-800" />
-
-            <Button
-              variant="destructive"
-              className="h-12 px-6 rounded-full font-bold flex items-center gap-2"
-              onClick={handleLeave}
-            >
-              <PhoneOff className="w-5 h-5" />
-              Disconnect
-            </Button>
-          </div>
-        </div>
-
-        {/* Right Collapsible Panel */}
-        <div className="w-80 bg-slate-900 border-l border-slate-850 flex flex-col">
-          {/* Panel Tab Triggers */}
-          <div className="grid grid-cols-2 border-b border-slate-800 bg-slate-950/20">
-            <button
-              onClick={() => setActiveTab("participants")}
-              className={`py-3.5 text-xs font-semibold tracking-wider uppercase flex items-center justify-center gap-1.5 border-b-2 transition-all ${
-                activeTab === "participants"
-                  ? "border-amber-500 text-amber-500 bg-slate-900/40"
-                  : "border-transparent text-slate-400 hover:text-white"
-              }`}
-            >
-              <Users className="w-4 h-4" />
-              Peers ({peers.length + 1})
-            </button>
-            <button
-              onClick={() => setActiveTab("attendance")}
-              className={`py-3.5 text-xs font-semibold tracking-wider uppercase flex items-center justify-center gap-1.5 border-b-2 transition-all ${
-                activeTab === "attendance"
-                  ? "border-amber-500 text-amber-500 bg-slate-900/40"
-                  : "border-transparent text-slate-400 hover:text-white"
-              }`}
-            >
-              <ClipboardList className="w-4 h-4" />
-              Roll Call
-            </button>
-          </div>
-
-          {/* Panel Body Content */}
-          <div className="flex-1 overflow-y-auto p-4">
-            {activeTab === "participants" ? (
-              <div className="space-y-4">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-                  Connected Users
-                </h3>
+                )}
                 
-                {/* Local User Listing */}
-                <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-850/50 border border-slate-800/80">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center font-bold text-amber-500 text-sm">
-                      {user?.name?.charAt(0).toUpperCase() || "Y"}
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-white leading-tight">
-                        {user?.name} (You)
-                      </p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">{user?.email}</p>
-                    </div>
-                  </div>
-                  <span className="text-[9px] font-bold text-amber-500 uppercase px-1.5 py-0.5 bg-amber-500/10 border border-amber-500/20 rounded">
+                {/* Local User Badge */}
+                <div className="absolute bottom-2.5 left-2.5 sm:bottom-3 sm:left-3 bg-slate-950/85 backdrop-blur-md px-2.5 py-1 rounded-lg border border-slate-800 text-xs font-semibold flex items-center gap-1.5 shadow-lg">
+                  <span className="text-amber-400 font-medium">You</span>
+                  <span className="text-slate-400 text-[9px] uppercase bg-slate-900 px-1 py-0.2 rounded font-mono">
                     {user?.role}
                   </span>
+                  {isMuted && <MicOff className="w-3 h-3 text-rose-400 ml-0.5" />}
                 </div>
+              </div>
 
-                {/* Remote Users Listing */}
-                {peers.map((peer) => (
+              {/* Remote Video Cards */}
+              {peers.map((peer) => {
+                const stream = remoteStreams[peer.peerId];
+                const hasVideo = stream && stream.getVideoTracks().some((track) => track.enabled);
+                return (
                   <div
                     key={peer.peerId}
-                    className="flex items-center justify-between p-2.5 rounded-lg bg-slate-850/30 border border-slate-800/50 hover:bg-slate-850/50 transition-colors"
+                    className="relative aspect-video bg-slate-900 rounded-xl sm:rounded-2xl overflow-hidden border border-slate-800 shadow-2xl group hover:border-amber-500/30 transition-all duration-300 flex items-center justify-center"
                   >
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700/80 flex items-center justify-center font-bold text-slate-300 text-sm">
-                        {peer.name.charAt(0).toUpperCase()}
+                    {hasVideo ? (
+                      <video
+                        autoPlay
+                        playsInline
+                        ref={(video) => {
+                          if (video && video.srcObject !== stream) {
+                            video.srcObject = stream;
+                          }
+                        }}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/95 gap-2 sm:gap-3 p-4 text-center">
+                        <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 border border-slate-700/80 font-bold text-lg">
+                          {peer.name.charAt(0).toUpperCase()}
+                        </div>
+                        <span className="text-xs text-slate-500">{peer.name} (Video Off)</span>
                       </div>
-                      <div>
-                        <p className="text-sm font-semibold text-white leading-tight">
-                          {peer.name}
+                    )}
+                    
+                    {/* Remote User Badge */}
+                    <div className="absolute bottom-2.5 left-2.5 sm:bottom-3 sm:left-3 bg-slate-950/85 backdrop-blur-md px-2.5 py-1 rounded-lg border border-slate-800 text-xs font-semibold flex items-center gap-1.5 shadow-lg">
+                      <span className="text-white truncate max-w-[100px] sm:max-w-[140px]">
+                        {peer.name}
+                      </span>
+                      <span className="text-slate-400 text-[9px] uppercase bg-slate-900 px-1 py-0.2 rounded font-mono">
+                        {peer.role}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Empty placeholder */}
+              {peers.length === 0 && (
+                <div className="col-span-full py-8 sm:py-12 flex flex-col items-center justify-center text-center max-w-md mx-auto px-4">
+                  <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-slate-900/80 flex items-center justify-center text-slate-500 border border-slate-800/80 mb-3 animate-pulse">
+                    <Users className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-sm sm:text-base font-bold text-white">Waiting for other participants</h3>
+                  <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                    Other students and faculty joining this session will appear here in real-time.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ALWAYS PINNED BOTTOM CONTROLS TOOLBAR */}
+          <footer className="h-16 sm:h-20 flex-shrink-0 bg-slate-900/95 border-t border-slate-800/90 px-3 sm:px-6 flex items-center justify-between sm:justify-center gap-2 sm:gap-4 z-30 shadow-2xl backdrop-blur-md">
+            {/* Left Controls Group (Mic & Camera) */}
+            <div className="flex items-center gap-2 sm:gap-3">
+              <Button
+                variant={isMuted ? "destructive" : "secondary"}
+                size="icon"
+                className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center shadow-lg transition-transform active:scale-95 ${
+                  !isMuted ? "bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700" : ""
+                }`}
+                onClick={toggleMute}
+                title={isMuted ? "Unmute Microphone" : "Mute Microphone"}
+              >
+                {isMuted ? <MicOff className="w-4 h-4 sm:w-5 sm:h-5" /> : <Mic className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />}
+              </Button>
+
+              <Button
+                variant={isVideoOff ? "destructive" : "secondary"}
+                size="icon"
+                className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center shadow-lg transition-transform active:scale-95 ${
+                  !isVideoOff ? "bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700" : ""
+                }`}
+                onClick={toggleVideo}
+                title={isVideoOff ? "Turn On Camera" : "Turn Off Camera"}
+              >
+                {isVideoOff ? <VideoOff className="w-4 h-4 sm:w-5 sm:h-5" /> : <VideoIcon className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400" />}
+              </Button>
+            </div>
+
+            <div className="w-px h-6 sm:h-8 bg-slate-800 mx-1 hidden sm:block" />
+
+            {/* Center Controls Group (Screen / View & Sidebar Toggles) */}
+            <div className="flex items-center gap-2 sm:gap-3">
+              <Button
+                variant="outline"
+                size="icon"
+                className="w-10 h-10 sm:w-12 sm:h-12 rounded-full border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-slate-300 hidden xs:flex items-center justify-center"
+                onClick={toggleFullscreen}
+                title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+              >
+                {isFullscreen ? <Minimize2 className="w-4 h-4 sm:w-5 sm:h-5" /> : <Maximize2 className="w-4 h-4 sm:w-5 sm:h-5" />}
+              </Button>
+
+              <Button
+                variant={showSidebar ? "gradient" : "outline"}
+                size="icon"
+                className="w-10 h-10 sm:w-12 sm:h-12 rounded-full border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-slate-300 flex items-center justify-center relative"
+                onClick={() => setShowSidebar(!showSidebar)}
+                title="Toggle Participants / Roll Call Panel"
+              >
+                <Users className="w-4 h-4 sm:w-5 sm:h-5" />
+                <span className="absolute -top-1 -right-1 bg-amber-500 text-slate-950 font-bold text-[9px] w-4 h-4 rounded-full flex items-center justify-center">
+                  {participantCount}
+                </span>
+              </Button>
+            </div>
+
+            <div className="w-px h-6 sm:h-8 bg-slate-800 mx-1 hidden sm:block" />
+
+            {/* Leave Meeting Button */}
+            <Button
+              variant="destructive"
+              className="h-10 sm:h-12 px-3 sm:px-6 rounded-full font-bold flex items-center gap-1.5 sm:gap-2 shadow-lg shadow-rose-900/30 text-xs sm:text-sm active:scale-95"
+              onClick={handleLeave}
+            >
+              <PhoneOff className="w-4 h-4 sm:w-5 sm:h-5" />
+              <span>Leave</span>
+            </Button>
+          </footer>
+        </main>
+
+        {/* Right Collapsible Panel (Side Drawer) */}
+        {showSidebar && (
+          <aside className="fixed inset-0 sm:inset-y-0 sm:right-0 sm:left-auto sm:w-80 md:w-96 z-50 flex flex-col bg-slate-900/98 backdrop-blur-xl border-l border-slate-800 shadow-2xl animate-in slide-in-from-right duration-200">
+            {/* Panel Header & Close Button */}
+            <div className="h-14 sm:h-16 flex-shrink-0 border-b border-slate-800 px-4 flex items-center justify-between bg-slate-950/40">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-amber-500" />
+                <h2 className="text-sm font-bold text-white tracking-wide">Classroom Panel</h2>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowSidebar(false)}
+                className="w-8 h-8 rounded-full text-slate-400 hover:text-white hover:bg-slate-800"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+
+            {/* Tab Triggers */}
+            <div className="grid grid-cols-2 border-b border-slate-800 bg-slate-950/20 flex-shrink-0">
+              <button
+                onClick={() => setActiveTab("participants")}
+                className={`py-3 text-xs font-semibold tracking-wider uppercase flex items-center justify-center gap-1.5 border-b-2 transition-all ${
+                  activeTab === "participants"
+                    ? "border-amber-500 text-amber-500 bg-slate-900/50"
+                    : "border-transparent text-slate-400 hover:text-white"
+                }`}
+              >
+                <Users className="w-3.5 h-3.5" />
+                Peers ({participantCount})
+              </button>
+              <button
+                onClick={() => setActiveTab("attendance")}
+                className={`py-3 text-xs font-semibold tracking-wider uppercase flex items-center justify-center gap-1.5 border-b-2 transition-all ${
+                  activeTab === "attendance"
+                    ? "border-amber-500 text-amber-500 bg-slate-900/50"
+                    : "border-transparent text-slate-400 hover:text-white"
+                }`}
+              >
+                <ClipboardList className="w-3.5 h-3.5" />
+                Roll Call
+              </button>
+            </div>
+
+            {/* Panel Body Content */}
+            <div className="flex-1 overflow-y-auto p-4 min-h-0">
+              {activeTab === "participants" ? (
+                <div className="space-y-4">
+                  <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                    Connected in Meeting ({participantCount})
+                  </h3>
+
+                  {/* Local User Card */}
+                  <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-850/60 border border-slate-800/80">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center font-bold text-amber-500 text-xs flex-shrink-0">
+                        {user?.name?.charAt(0).toUpperCase() || "Y"}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-white truncate">
+                          {user?.name} (You)
                         </p>
-                        <p className="text-[10px] text-slate-400 mt-0.5">
-                          {peer.role.toLowerCase()}
-                        </p>
+                        <p className="text-[10px] text-slate-400 truncate">{user?.email}</p>
                       </div>
                     </div>
-                    <span className="text-[9px] font-bold text-slate-400 uppercase px-1.5 py-0.5 bg-slate-800 border border-slate-700/50 rounded">
-                      {peer.role}
+                    <span className="text-[9px] font-bold text-amber-500 uppercase px-1.5 py-0.5 bg-amber-500/10 border border-amber-500/20 rounded font-mono flex-shrink-0">
+                      {user?.role}
                     </span>
                   </div>
-                ))}
 
-                {peers.length === 0 && (
-                  <div className="text-center py-8 text-slate-500 text-xs">
-                    No remote peers connected yet.
-                  </div>
-                )}
-              </div>
-            ) : (
-              /* Attendance Roll Call Tab */
-              <div className="space-y-4 h-full flex flex-col">
-                {canMarkAttendance ? (
-                  <>
-                    <div className="flex flex-col gap-2">
-                      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                        Take Course Attendance
-                      </h3>
-                      <p className="text-[11px] text-slate-500 leading-normal">
-                        Reps can verify connected students and save final attendance sheets directly to records.
-                      </p>
+                  {/* Remote Users List */}
+                  {peers.map((peer) => (
+                    <div
+                      key={peer.peerId}
+                      className="flex items-center justify-between p-2.5 rounded-lg bg-slate-850/40 border border-slate-800/50 hover:bg-slate-850/60 transition-colors"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700/80 flex items-center justify-center font-bold text-slate-300 text-xs flex-shrink-0">
+                          {peer.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-white truncate">
+                            {peer.name}
+                          </p>
+                          <p className="text-[10px] text-slate-400 truncate">
+                            {peer.role.toLowerCase()}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-[9px] font-bold text-slate-400 uppercase px-1.5 py-0.5 bg-slate-800 border border-slate-700/50 rounded font-mono flex-shrink-0">
+                        {peer.role}
+                      </span>
                     </div>
+                  ))}
 
-                    <div className="grid grid-cols-2 gap-2 mt-1">
-                      <Button
-                        variant="outline"
-                        size="xs"
-                        onClick={autoMarkConnectedStudents}
-                        className="text-[10px] h-8 font-semibold border-amber-500/30 hover:bg-amber-500/10 hover:text-amber-400 text-amber-500"
-                      >
-                        <UserCheck className="w-3.5 h-3.5 mr-1" />
-                        Check Connected
-                      </Button>
-                      <Button
-                        variant="gradient"
-                        size="xs"
-                        onClick={submitCheckedAttendance}
-                        disabled={submittingAttendance}
-                        className="text-[10px] h-8 font-bold"
-                      >
-                        {submittingAttendance ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <>
-                            <ShieldCheck className="w-3.5 h-3.5 mr-1" />
-                            Save Roll
-                          </>
-                        )}
-                      </Button>
+                  {peers.length === 0 && (
+                    <div className="text-center py-8 text-slate-500 text-xs">
+                      No other participants connected yet.
                     </div>
+                  )}
+                </div>
+              ) : (
+                /* Roll Call Tab */
+                <div className="space-y-4 h-full flex flex-col">
+                  {canMarkAttendance ? (
+                    <>
+                      <div className="flex flex-col gap-1.5 flex-shrink-0">
+                        <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                          Take Course Attendance
+                        </h3>
+                        <p className="text-[11px] text-slate-500 leading-normal">
+                          Auto-check connected students and save the roll call directly to attendance records.
+                        </p>
+                      </div>
 
-                    <div className="w-full h-px bg-slate-800 my-2" />
+                      <div className="grid grid-cols-2 gap-2 mt-1 flex-shrink-0">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={autoMarkConnectedStudents}
+                          className="text-[11px] h-8 font-semibold border-amber-500/30 hover:bg-amber-500/10 hover:text-amber-400 text-amber-500 px-2"
+                        >
+                          <UserCheck className="w-3.5 h-3.5 mr-1" />
+                          Check Connected
+                        </Button>
+                        <Button
+                          variant="gradient"
+                          size="sm"
+                          onClick={submitCheckedAttendance}
+                          disabled={submittingAttendance}
+                          className="text-[11px] h-8 font-bold px-2"
+                        >
+                          {submittingAttendance ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <>
+                              <ShieldCheck className="w-3.5 h-3.5 mr-1" />
+                              Save Roll
+                            </>
+                          )}
+                        </Button>
+                      </div>
 
-                    {/* Student List */}
-                    <div className="space-y-2 flex-1 overflow-y-auto pr-1">
-                      {enrolledStudents.map((student) => {
-                        const inMeeting = isStudentInMeeting(student.userId);
-                        const isChecked = markedPresent.has(student.userId);
-                        return (
-                          <div
-                            key={student.userId}
-                            className={`p-2.5 rounded-lg border transition-all flex items-center justify-between ${
-                              isChecked
-                                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                                : "bg-slate-850/50 border-slate-800 text-slate-300"
-                            }`}
-                          >
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-1.5">
-                                <span className="font-semibold text-xs text-white truncate max-w-[120px]">
-                                  {student.name}
-                                </span>
-                                {inMeeting && (
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" title="Active in call" />
-                                )}
-                              </div>
-                              <p className="text-[10px] text-slate-400 mt-0.5 font-mono truncate">
-                                {student.studentId || "No Matric"}
-                              </p>
-                            </div>
-                            <button
-                              onClick={() => toggleStudentAttendance(student.userId)}
-                              className={`p-1 rounded border transition-colors ${
+                      <div className="w-full h-px bg-slate-800 my-1 flex-shrink-0" />
+
+                      {/* Enrolled Students List */}
+                      <div className="space-y-2 flex-1 overflow-y-auto pr-1 min-h-0">
+                        {enrolledStudents.map((student) => {
+                          const inMeeting = isStudentInMeeting(student.userId);
+                          const isChecked = markedPresent.has(student.userId);
+                          return (
+                            <div
+                              key={student.userId}
+                              className={`p-2.5 rounded-lg border transition-all flex items-center justify-between ${
                                 isChecked
-                                  ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400"
-                                  : "bg-slate-800 border-slate-700 text-slate-500 hover:text-white"
+                                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                                  : "bg-slate-850/50 border-slate-800 text-slate-300"
                               }`}
                             >
-                              <CheckSquare className="w-4 h-4" />
-                            </button>
-                          </div>
-                        );
-                      })}
+                              <div className="min-w-0 flex-1 pr-2">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-semibold text-xs text-white truncate max-w-[130px]">
+                                    {student.name}
+                                  </span>
+                                  {inMeeting && (
+                                    <span
+                                      className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse flex-shrink-0"
+                                      title="Active in call"
+                                    />
+                                  )}
+                                </div>
+                                <p className="text-[10px] text-slate-400 mt-0.5 font-mono truncate">
+                                  {student.studentId || "No Matric"}
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => toggleStudentAttendance(student.userId)}
+                                className={`p-1 rounded border transition-colors flex-shrink-0 ${
+                                  isChecked
+                                    ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400"
+                                    : "bg-slate-800 border-slate-700 text-slate-500 hover:text-white"
+                                }`}
+                              >
+                                <CheckSquare className="w-4 h-4" />
+                              </button>
+                            </div>
+                          );
+                        })}
 
-                      {enrolledStudents.length === 0 && (
-                        <div className="text-center py-12 text-slate-500 text-xs">
-                          No enrolled students found for this course.
-                        </div>
-                      )}
-                    </div>
-                  </>
-                ) : (
-                  /* View Student Info for non-reps */
-                  <div className="space-y-4">
-                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                      Your Attendance
-                    </h3>
-                    <div className="p-4 rounded-xl bg-slate-850/30 border border-slate-800 text-center">
-                      <div className="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mx-auto mb-3">
-                        <CheckSquare className="w-5 h-5" />
+                        {enrolledStudents.length === 0 && (
+                          <div className="text-center py-12 text-slate-500 text-xs">
+                            No enrolled students found for this course.
+                          </div>
+                        )}
                       </div>
-                      <p className="text-sm font-semibold text-white">Joined Online Class</p>
-                      <p className="text-xs text-slate-400 mt-1">
-                        Your presence has been recorded in the meeting. The course representative will verify and sync this session's roll call list.
-                      </p>
+                    </>
+                  ) : (
+                    /* Non-rep attendance info */
+                    <div className="space-y-4">
+                      <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                        Your Attendance
+                      </h3>
+                      <div className="p-4 rounded-xl bg-slate-850/30 border border-slate-800 text-center">
+                        <div className="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mx-auto mb-3">
+                          <CheckSquare className="w-5 h-5" />
+                        </div>
+                        <p className="text-sm font-semibold text-white">Joined Online Class</p>
+                        <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                          Your presence has been recorded in the meeting. The course representative will verify and sync this session's roll call.
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </aside>
+        )}
       </div>
     </div>
   );
