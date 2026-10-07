@@ -33,6 +33,7 @@ import {
   SessionMode,
   AttendanceStatus,
   getCreatorSessions,
+  getAllSessionsAdmin,
   Attendance,
 } from "@/services/sessions.service";
 import { usersServices } from "@/services/users.services";
@@ -42,6 +43,7 @@ import {
   AttendanceRecord,
 } from "@/services/attendance.services";
 import { modulesService, Module, SubTopic } from "@/services/modules.service";
+import { coursesService, Course } from "@/services/courses.services";
 
 // Interface for weekly attendance data
 interface WeeklyAttendanceData {
@@ -67,7 +69,7 @@ const StudentDashboard = () => {
   // Check if user is a course rep based on role
   const isCourseRep = user?.role === Role.REP;
 
-  // Load student data, modules (by level), and sessions
+  // Load student data, courses/modules (by level), and sessions
   useEffect(() => {
     const loadDashboardData = async () => {
       if (!token) {
@@ -87,40 +89,70 @@ const StudentDashboard = () => {
           studentLevel = userData.student?.level;
         }
 
-        // Fetch modules for student's level
-        if (studentLevel) {
+        // Fetch modules / courses for student's level
+        let loadedModules: Module[] = [];
+        try {
           const modulesResponse = await modulesService.getModules(studentLevel);
-          if (modulesResponse.success && modulesResponse.data?.data) {
-            setStudentModules(modulesResponse.data.data);
-          } else {
-            setStudentModules([]);
+          if (modulesResponse.success && modulesResponse.data?.data && modulesResponse.data.data.length > 0) {
+            loadedModules = modulesResponse.data.data;
           }
-        } else {
-          // If no level, fetch all modules as fallback
-          const modulesResponse = await modulesService.getModules();
-          if (modulesResponse.success && modulesResponse.data?.data) {
-            setStudentModules(modulesResponse.data.data);
-          } else {
-            setStudentModules([]);
-          }
+        } catch {
+          // fallback to courses
         }
 
-        // Fetch sessions based on role
-        if (isCourseRep) {
-          // Reps can see sessions they created (includes all students' attendance)
-          const sessionsResponse = await getCreatorSessions(token);
-          if (sessionsResponse.success && sessionsResponse.data) {
-            const data = sessionsResponse.data as Record<string, unknown>;
-            const list =
-              (data.sessions as Session[]) ||
-              (data.data as Session[]) ||
-              (Array.isArray(sessionsResponse.data)
-                ? (sessionsResponse.data as unknown as Session[])
-                : []);
-            setAllSessions(list);
-          } else {
-            setAllSessions([]);
+        if (loadedModules.length === 0) {
+          // Fetch from coursesService as primary / fallback
+          const coursesResponse = await coursesService.getAllCourses();
+          if (coursesResponse.success && coursesResponse.data?.data) {
+            const courses = coursesResponse.data.data;
+            const filtered = studentLevel
+              ? courses.filter((c: any) => c.level === studentLevel)
+              : courses;
+            loadedModules = filtered.map((c) => ({
+              id: c.id,
+              name: c.title,
+              title: c.title,
+              code: c.code,
+              level: (c as any).level || 100,
+              semester: (c as any).semester || 1,
+              subtopics: [],
+            })) as Module[];
           }
+        }
+        setStudentModules(loadedModules);
+
+        // Fetch sessions based on role
+        let sessionsResponse = isCourseRep
+          ? await getCreatorSessions(token)
+          : await getAllSessionsAdmin(token);
+
+        if (!sessionsResponse.success || !sessionsResponse.data) {
+          sessionsResponse = isCourseRep
+            ? await getAllSessionsAdmin(token)
+            : await getCreatorSessions(token);
+        }
+
+        if (sessionsResponse.success && sessionsResponse.data) {
+          const data = sessionsResponse.data as Record<string, unknown>;
+          let list =
+            (data.sessions as Session[]) ||
+            (data.data as Session[]) ||
+            (Array.isArray(sessionsResponse.data)
+              ? (sessionsResponse.data as unknown as Session[])
+              : []);
+
+          if (studentLevel) {
+            const levelModuleIds = loadedModules.map((m) => m.id);
+            list = list.filter((s) => {
+              if (s.course?.level && s.course.level === studentLevel) return true;
+              if (s.courseId && levelModuleIds.includes(s.courseId)) return true;
+              if (s.module?.level && s.module.level === studentLevel) return true;
+              if (s.moduleId && levelModuleIds.includes(s.moduleId)) return true;
+              if (!s.course?.level && !s.module?.level && !s.courseId && !s.moduleId) return true;
+              return false;
+            });
+          }
+          setAllSessions(list);
         } else {
           setAllSessions([]);
         }

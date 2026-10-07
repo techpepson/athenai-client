@@ -71,6 +71,8 @@ import {
   AttendanceRecord,
 } from "@/services/attendance.services";
 
+import { coursesService, Course } from "@/services/courses.services";
+
 // Helper function to map API Session to AttendanceSession
 const mapSessionToAttendanceSession = (
   session: Session,
@@ -79,6 +81,7 @@ const mapSessionToAttendanceSession = (
     lecturer?: ILecturer | null;
   })[],
   allModules: Module[],
+  allCourses: Course[] = [],
 ): AttendanceSession => {
   // Map session type
   const typeMap: Record<SessionType, AttendanceSession["type"]> = {
@@ -122,19 +125,23 @@ const mapSessionToAttendanceSession = (
     ).length || 0;
 
   // ── Compute expected attendees ──
-  // For module-based sessions: students at the module's level + assigned lecturer(s)
-  // For course-based sessions: fall back to course enrollments
+  // For course-based / module-based sessions: students at the course's level + assigned lecturer(s)
   let mappedExpectedAttendees: ExpectedAttendee[] = [];
   let expectedCount = 0;
 
-  const moduleLevel =
+  const matchedCourse =
+    session.course ||
+    allCourses.find((c) => c.id === session.courseId) as any;
+
+  const resolvedLevel =
+    matchedCourse?.level ||
     session.module?.level ||
     allModules.find((m) => m.id === session.moduleId)?.level;
 
-  if (moduleLevel && allUsers.length > 0) {
-    // Students at this module's level
+  if (resolvedLevel && allUsers.length > 0) {
+    // Students at this course/module level
     const levelStudents = allUsers.filter(
-      (u) => u.student && u.student.level === moduleLevel,
+      (u) => u.student && u.student.level === resolvedLevel,
     );
     mappedExpectedAttendees = levelStudents.map((u) => ({
       id: u.student!.id,
@@ -146,7 +153,6 @@ const mapSessionToAttendanceSession = (
 
     // Add the assigned lecturer(s)
     if (session.lecturerId) {
-      // session.lecturer is the Lecturer record; find the User
       const lecturerUser = session.lecturer?.user
         ? {
             id: session.lecturer.user.id,
@@ -189,6 +195,16 @@ const mapSessionToAttendanceSession = (
       0;
   }
 
+  const courseDisplayName = session.course?.title
+    ? `${session.course.title}${session.course.code ? ` (${session.course.code})` : ""}`
+    : matchedCourse?.title
+      ? `${matchedCourse.title}${matchedCourse.code ? ` (${matchedCourse.code})` : ""}`
+      : session.module?.title
+        ? `${session.module.title}${session.module.code ? ` (${session.module.code})` : ""}`
+        : session.module?.name
+          ? `${session.module.name}${session.module.code ? ` (${session.module.code})` : ""}`
+          : undefined;
+
   return {
     id: session.id,
     name: session.name,
@@ -202,14 +218,8 @@ const mapSessionToAttendanceSession = (
     expectedCount: expectedCount,
     presentCount: presentCount,
     courseId: session.courseId || session.moduleId || undefined,
-    courseName: session.course?.title
-      ? `${session.course.title}${session.course.code ? ` (${session.course.code})` : ""}`
-      : session.module?.title
-        ? `${session.module.title}${session.module.code ? ` (${session.module.code})` : ""}`
-        : session.module?.name
-          ? `${session.module.name}${session.module.code ? ` (${session.module.code})` : ""}`
-          : undefined,
-    department: session.course?.code || session.module?.code || undefined,
+    courseName: courseDisplayName,
+    department: session.course?.code || matchedCourse?.code || session.module?.code || undefined,
     createdBy: session.userId,
     createdByRole: session.createdBy?.name ? Role.LECTURER : undefined,
     isOnline: session.isOnline,
@@ -219,16 +229,17 @@ const mapSessionToAttendanceSession = (
   };
 };
 
-// Wrapper that binds allUsers/allModules for use in .map()
+// Wrapper that binds allUsers/allModules/allCourses for use in .map()
 const createSessionMapper = (
   allUsers: (IUser & {
     student?: IStudent | null;
     lecturer?: ILecturer | null;
   })[],
   allModules: Module[],
+  allCourses: Course[] = [],
 ) => {
   return (session: Session): AttendanceSession =>
-    mapSessionToAttendanceSession(session, allUsers, allModules);
+    mapSessionToAttendanceSession(session, allUsers, allModules, allCourses);
 };
 
 const Sessions = () => {
@@ -246,6 +257,7 @@ const Sessions = () => {
     useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [allModules, setAllModules] = useState<Module[]>([]);
+  const [allCourses, setAllCourses] = useState<Course[]>([]);
   const [allTimetables, setAllTimetables] = useState<ModuleTimetable[]>([]);
   const [allUsers, setAllUsers] = useState<
     (IUser & {
@@ -262,11 +274,18 @@ const Sessions = () => {
   // Get auth context early (needed by useEffects below)
   const { user, token } = useAuth();
 
-  // Load modules, timetables, and students from API
+  // Load courses, modules, timetables, and students from API
   useEffect(() => {
-    const loadModuleData = async () => {
+    const loadAcademicData = async () => {
       try {
-        const modRes = await modulesService.getModules();
+        // 1. Fetch courses
+        const coursesRes = await coursesService.getAllCourses();
+        if (coursesRes.success && coursesRes.data?.data) {
+          setAllCourses(coursesRes.data.data);
+        }
+
+        // 2. Fetch modules (for backward compatibility if backend provides it)
+        const modRes = await modulesService.getModules().catch(() => ({ success: false, data: null }));
         if (modRes.success && modRes.data?.data) {
           const modules = modRes.data.data;
           setAllModules(modules);
@@ -283,12 +302,32 @@ const Sessions = () => {
             }
           });
           setAllTimetables(timetables);
+        } else {
+          // If modules endpoint is unavailable, fetch timetable via courses
+          const ttRes = await coursesService.getMyTimetable().catch(() => ({ success: false, data: null }));
+          if (ttRes.success && ttRes.data?.data) {
+            const rawSlots = ttRes.data.data;
+            if (Array.isArray(rawSlots)) {
+              // Wrap slots in a synthetic timetable
+              setAllTimetables([
+                {
+                  id: "my-timetable",
+                  moduleId: "",
+                  courseId: "",
+                  academicYear: "",
+                  semester: 1,
+                  totalWeeks: 12,
+                  slots: rawSlots,
+                },
+              ]);
+            }
+          }
         }
       } catch (e) {
-        console.error("Failed to load module data for sessions:", e);
+        console.error("Failed to load academic data for sessions:", e);
       }
     };
-    loadModuleData();
+    loadAcademicData();
   }, []);
 
   // Fetch all users (students + lecturers) for attendee counts
@@ -443,8 +482,6 @@ const Sessions = () => {
   }, []);
 
   // Build weekly lecture cards from timetable activities
-  // Reps: show ALL subtopic sessions for today (startable)
-  // Others: show this week's remaining lectures
   const weeklyLectureSessions = useMemo((): AttendanceSession[] => {
     if (allTimetables.length === 0) return [];
 
@@ -482,47 +519,27 @@ const Sessions = () => {
     const lectureCards: AttendanceSession[] = [];
 
     allTimetables.forEach((timetable) => {
-      const mod = allModules.find((m) => m.id === timetable.moduleId);
-      if (!mod) return;
+      const course =
+        allCourses.find((c) => c.id === timetable.courseId) ||
+        allModules.find((m) => m.id === timetable.moduleId);
 
-      // Determine current week number within the timetable
-      let currentWeek = 1;
-      if (isRep) {
-        // Reps manually select the week
-        currentWeek = selectedWeek;
-      } else if (timetable.startDate) {
-        const start = new Date(timetable.startDate);
-        const diffMs = now.getTime() - start.getTime();
-        currentWeek = Math.max(
-          1,
-          Math.ceil(diffMs / (7 * 24 * 60 * 60 * 1000)),
-        );
-      }
-      if (currentWeek > timetable.totalWeeks) return; // past this module
+      const courseLevel =
+        (course as any)?.level || (timetable as any).level;
 
       // Filter slots for the current week
-      // Reps: ALL activity types; others: only LECTURE
-      const weekSlots = timetable.slots.filter((slot) => {
+      const currentWeek = selectedWeek;
+
+      const weekSlots = (timetable.slots || []).filter((slot) => {
         const weekMatch = !slot.week || slot.week === currentWeek;
-        if (!weekMatch) return false;
-        if (!isRep) return slot.activityType === "LECTURE";
-        return true; // Reps see all activity types
+        return weekMatch;
       });
 
       weekSlots.forEach((slot) => {
-        const dayOffset = dayIndexMap[slot.day.toUpperCase()];
+        const dayOffset = dayIndexMap[slot.day?.toUpperCase()];
         if (dayOffset === undefined) return;
 
         const slotDate = new Date(monday);
         slotDate.setDate(monday.getDate() + dayOffset);
-
-        // Reps: show ONLY today's sessions
-        if (isRep) {
-          if (slotDate < todayStart || slotDate > todayEnd) return;
-        } else {
-          // Non-reps: skip past days (only show today and upcoming)
-          if (slotDate < todayStart) return;
-        }
 
         const start = parseTime(slot.startTime);
         const end = parseTime(slot.endTime);
@@ -541,14 +558,14 @@ const Sessions = () => {
           status = "completed";
         }
 
-        const subtopic = mod.subtopics.find((s) => s.id === slot.subtopicId);
+        const subtopic = (course as any)?.subtopics?.find((s: any) => s.id === slot.subtopicId);
 
-        // Filter students at the same level as this module
+        // Filter students at the same level as this course/module
         const levelStudents = allUsers.filter(
-          (u) => u.student && u.student.level === mod.level,
+          (u) => u.student && (!courseLevel || u.student.level === courseLevel),
         );
 
-        // Build expected attendees: students at this level
+        // Build expected attendees
         const expectedAttendees: ExpectedAttendee[] = levelStudents.map(
           (u) => ({
             id: u.student!.id,
@@ -562,10 +579,10 @@ const Sessions = () => {
         // Add lecturer(s) assigned to this subtopic or slot
         const lecturerId = slot.lecturerId || subtopic?.lecturerId;
         if (lecturerId) {
-          const lecturerUser = allUsers.find((u) => u.id === lecturerId);
+          const lecturerUser = allUsers.find((u) => u.id === lecturerId || u.lecturer?.id === lecturerId);
           expectedAttendees.push({
             id: lecturerId,
-            userId: lecturerId,
+            userId: lecturerUser?.id || lecturerId,
             name:
               lecturerUser?.name ||
               slot.lecturerName ||
@@ -575,21 +592,36 @@ const Sessions = () => {
           });
         }
 
+        const activityLabel = slot.activityType
+          ? slot.activityType.replace(/_/g, " ")
+          : "Lecture";
+
+        const titleText =
+          subtopic?.name ||
+          (course?.title
+            ? `${course.title} - ${activityLabel}`
+            : (course as any)?.name
+              ? `${(course as any).name} - ${activityLabel}`
+              : `Class - ${activityLabel}`);
+
         lectureCards.push({
           id: `timetable-${slot.id}`,
-          name:
-            subtopic?.name || `${mod.name} - ${slot.activityType || "Lecture"}`,
+          name: titleText,
           type: "class",
           attendanceType: "checkin",
-          department: mod.code,
+          department: course?.code || (course as any)?.code || undefined,
           startTime,
           endTime,
           status,
           location: slot.venue || undefined,
           expectedCount: expectedAttendees.length,
           presentCount: 0,
-          courseId: undefined,
-          courseName: `${mod.name} (${mod.code})`,
+          courseId: course?.id || undefined,
+          courseName: course?.title
+            ? `${course.title} (${course.code})`
+            : (course as any)?.name
+              ? `${(course as any).name} (${(course as any).code})`
+              : undefined,
           createdBy: undefined,
           expectedAttendees,
         });
@@ -600,7 +632,7 @@ const Sessions = () => {
     lectureCards.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
 
     return lectureCards;
-  }, [allModules, allTimetables, allUsers, isRep, selectedWeek, clockTick]);
+  }, [allModules, allCourses, allTimetables, allUsers, isRep, selectedWeek, clockTick]);
 
   // Group lectures by day for display
   const lecturesByDay = useMemo(() => {
@@ -614,7 +646,7 @@ const Sessions = () => {
       grouped[dayName].push(session);
     });
 
-    // Sort days in order (Monday to Friday)
+    // Sort days in order (Monday to Sunday)
     const orderedDays = [
       "Monday",
       "Tuesday",
@@ -653,49 +685,59 @@ const Sessions = () => {
           // Admins can see all sessions
           response = await getAllSessionsAdmin(token);
         } else if (isLecturer) {
-          // Lecturers: use getLecturerSessions as primary source (subtopic-based)
+          // Lecturers: fetch lecturer sessions with fallback
           response = await getLecturerSessions(token);
+          if (!response.success || !response.data) {
+            response = await getCreatorSessions(token);
+          }
         } else if (isRep) {
           // Reps see sessions they created
           response = await getCreatorSessions(token);
+          if (!response.success || !response.data) {
+            response = await getAllSessionsAdmin(token);
+          }
         } else {
-          // Students: fetch all sessions, then filter to their level
+          // Students: Try getAllSessionsAdmin first, if 403 or error, try getCreatorSessions
           response = await getAllSessionsAdmin(token);
+          if (!response.success || !response.data) {
+            response = await getCreatorSessions(token);
+          }
         }
 
         if (response.success && response.data) {
           // Handle different response structures
           let sessionsData = Array.isArray(response.data)
             ? response.data
-            : "data" in response.data
-              ? response.data.data
-              : "sessions" in response.data
-                ? response.data.sessions
+            : "data" in response.data && Array.isArray((response.data as any).data)
+              ? (response.data as any).data
+              : "sessions" in response.data && Array.isArray((response.data as any).sessions)
+                ? (response.data as any).sessions
                 : [];
 
-          // For students (non-rep): filter to sessions matching their level modules
+          // For students (non-rep): filter to sessions matching their level courses/modules
           if (isStudent && studentLevel) {
+            const levelCourseIds = allCourses
+              .filter((c: any) => c.level === studentLevel)
+              .map((c) => c.id);
             const levelModuleIds = allModules
               .filter((m) => m.level === studentLevel)
               .map((m) => m.id);
-            const levelSubtopicIds = allModules
-              .filter((m) => m.level === studentLevel)
-              .flatMap((m) => (m.subtopics || []).map((st) => st.id));
 
             sessionsData = (sessionsData as Session[]).filter((s) => {
+              // Match by course level
+              if (s.course?.level && s.course.level === studentLevel) return true;
+              if (s.courseId && levelCourseIds.includes(s.courseId)) return true;
               // Match by module level
-              if (s.moduleId && levelModuleIds.includes(s.moduleId))
-                return true;
-              if (s.module?.level === studentLevel) return true;
-              // Match by subtopic belonging to a level module
-              if (s.subtopicId && levelSubtopicIds.includes(s.subtopicId))
-                return true;
+              if (s.module?.level && s.module.level === studentLevel) return true;
+              if (s.moduleId && levelModuleIds.includes(s.moduleId)) return true;
+              // If session doesn't specify a restrictive level, don't drop it
+              if (!s.course?.level && !s.module?.level && !s.courseId && !s.moduleId) return true;
               return false;
             });
           }
 
           const mappedSessions = (sessionsData as Session[]).map(
-            createSessionMapper(allUsers, allModules),
+            createSessionMapper(allUsers, allModules, allCourses),
           );
           setSessions(mappedSessions);
 
@@ -712,14 +754,10 @@ const Sessions = () => {
             setLecturerActiveSessions(activeLecSessions);
           }
         } else {
-          console.error("Failed to fetch sessions:", response.error);
-          if (!showRefreshToast) {
-            toast.error("Failed to load sessions");
-          }
+          console.warn("Sessions endpoint warning:", response.error);
         }
       } catch (error) {
         console.error("Error fetching sessions:", error);
-        toast.error("Failed to load sessions");
       } finally {
         setIsLoading(false);
         setIsRefreshing(false);
@@ -734,6 +772,7 @@ const Sessions = () => {
       studentLevel,
       allUsers,
       allModules,
+      allCourses,
     ],
   );
 
@@ -758,27 +797,27 @@ const Sessions = () => {
       // Extract slot ID from the session ID (e.g., "timetable-slotId" -> "slotId")
       const slotId = session.id.replace("timetable-", "");
 
-      // Find the timetable slot to get subtopicId, lecturerId, moduleId
+      // Find the timetable slot to get subtopicId, lecturerId, courseId/moduleId
       let timetableSlot: TimetableSlot | undefined;
       let moduleForSlot: Module | undefined;
+      let courseForSlot: Course | undefined;
       for (const tt of allTimetables) {
         const slot = tt.slots.find((s) => s.id === slotId);
         if (slot) {
           timetableSlot = slot;
           moduleForSlot = allModules.find((m) => m.id === tt.moduleId);
+          courseForSlot = allCourses.find((c) => c.id === tt.courseId || c.id === (slot as any).courseId);
           break;
         }
       }
 
-      if (!timetableSlot || !moduleForSlot) {
+      if (!timetableSlot) {
         toast.error("Could not find timetable slot data");
         return;
       }
 
       // Resolve lecturer ID — slot may have lecturerId directly, or via subtopic
-      // Note: subtopic.lecturerId and slot.lecturerId are User IDs,
-      // but the backend Session.lecturerId expects the Lecturer record ID.
-      const subtopic = moduleForSlot.subtopics.find(
+      const subtopic = moduleForSlot?.subtopics?.find(
         (s) => s.id === timetableSlot!.subtopicId,
       );
       const lecturerUserId = timetableSlot.lecturerId || subtopic?.lecturerId;
@@ -791,15 +830,8 @@ const Sessions = () => {
       }
 
       // Resolve the Lecturer record ID from the User ID
-      const lecturerUser = allUsers.find((u) => u.id === lecturerUserId);
-      const lecturerId = lecturerUser?.lecturer?.id;
-
-      if (!lecturerId) {
-        toast.error(
-          "Could not find lecturer record. The assigned user may not have a lecturer profile.",
-        );
-        return;
-      }
+      const lecturerUser = allUsers.find((u) => u.id === lecturerUserId || u.lecturer?.id === lecturerUserId);
+      const lecturerId = lecturerUser?.lecturer?.id || lecturerUserId;
 
       // Get geolocation
       setIsCreatingSession(true);
@@ -821,21 +853,32 @@ const Sessions = () => {
         latitude = pos.coords.latitude;
         longitude = pos.coords.longitude;
       } catch {
-        // Geolocation failed — proceed without it (backend will allow if lat/long not required)
+        // Geolocation failed — proceed without it
         toast.warning(
           "Could not get your location. Session will be created without geofencing.",
         );
       }
 
       try {
+        const activityLabel = timetableSlot.activityType
+          ? timetableSlot.activityType.replace(/_/g, " ")
+          : "Lecture";
+
+        const sessionName =
+          subtopic?.name ||
+          (courseForSlot?.title
+            ? `${courseForSlot.title} - ${activityLabel}`
+            : moduleForSlot
+              ? `${moduleForSlot.name} - ${activityLabel}`
+              : `Class - ${activityLabel}`);
+
         const response = await createSession(
           {
-            name:
-              subtopic?.name ||
-              `${moduleForSlot.name} - ${timetableSlot.activityType || "Lecture"}`,
+            name: sessionName,
             type: SessionType.CLASS,
             mode: SessionMode.CHECK_IN,
-            moduleId: moduleForSlot.id,
+            courseId: courseForSlot?.id || (timetableSlot as any).courseId || undefined,
+            moduleId: moduleForSlot?.id || undefined,
             lecturerId,
             subtopicId: timetableSlot.subtopicId || undefined,
             timetableSlotId: timetableSlot.id,
